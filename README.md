@@ -13,7 +13,7 @@ mk0 intentionally contains **no production implementation** yet. Its job is to f
 ```text
 1. CTA / OMNICHANNEL ENTRY
    Postman / CLI now
-   Form / MCP / WhatsApp / Telegram / API / Webhook later
+   Form / WhatsApp / Telegram / API / Webhook later
                  ↓
              CTA Adapter
                  ↓ canonical command
@@ -32,8 +32,8 @@ mk0 intentionally contains **no production implementation** yet. Its job is to f
       RegisterNewCustomer first workflow
 
 3. PERSISTENCE / STORAGE
-   PostgreSQL     → canonical Customer + registration/idempotency truth
-   MongoDB        → execution/audit/workflow context
+   PostgreSQL      → canonical Customer + registration/idempotency truth
+   MongoDB         → execution/audit/workflow context
    AttachmentStore → binary/document objects when present
 ```
 
@@ -52,7 +52,7 @@ CTA channel
 
 The CTA Adapter is a contract boundary, not a chosen framework.
 
-It converts channel-specific input into the same canonical command. Today the sender can be Postman or CLI. Later the sender can be a form, MCP client/server, WhatsApp message, Telegram message, mobile app, voice channel, API/webhook or another future channel.
+It converts channel-specific input into the same canonical command. Today the sender can be Postman or CLI. Later the sender can be a form, WhatsApp message, Telegram message, mobile app, voice channel, API/webhook or another future channel explicitly admitted by a later design decision.
 
 All channels must converge on the same orchestration contract instead of creating channel-specific business workflows.
 
@@ -60,6 +60,7 @@ All channels must converge on the same orchestration contract instead of creatin
 
 - controlled input can enter from the CTA boundary;
 - structurally invalid input is rejected before business side effects;
+- a structurally valid registration intent may start with incomplete Customer business data and wait durably for policy-required fields;
 - the accepted command starts the full Temporal-managed workflow;
 - Temporal durably owns state, retries, worker recovery and workflow progress;
 - the first Workflow is `RegisterNewCustomer`;
