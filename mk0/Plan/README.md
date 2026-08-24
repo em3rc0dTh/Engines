@@ -2,121 +2,114 @@
 
 ## Objective
 
-Reach a first stable implementation only after the first three architecture zones are frozen:
+Certify the first three architecture zones without selecting an application framework:
 
 ```text
-CTA/API → Orchestration → Persistence
+CTA / controlled input
+→ Temporal orchestration
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
-No coding is authorized by this plan yet.
+No coding is authorized yet.
 
 ## M0 — Reality / source lock
 
 Deliverables:
 
-- TimeSlots/DataModel source frozen;
-- NestJS boundary evidence frozen;
+- TimeSlots/DataModel Customer source frozen;
 - Temporal Workflow/Activity constraints frozen;
-- user architecture decision frozen;
-- persistence technology correction frozen: PostgreSQL + MongoDB, no SQLite.
-
-Pass when no Services/Scheduler/Agent concern is accidentally pulled into the first workflow.
+- project decision frozen: no required framework in mk0;
+- persistence authority frozen: PostgreSQL Customer truth + MongoDB audit/context;
+- attachment persistence kept as a separate technology-neutral capability.
 
 ## M1 — Architecture lock
 
-Pass when this exact path is unambiguous:
+Pass when this is unambiguous:
 
 ```text
-Postman
-→ NestJS
+Postman | CLI | minimal harness
 → Temporal RegisterNewCustomer
-→ PostgreSQL + MongoDB
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
-Authorities must be explicit:
+Authorities:
 
-- PostgreSQL = Customer/registration/idempotency business truth;
-- MongoDB = execution/audit/context + optional documents/attachments;
-- Temporal = durable sequencing;
-- NestJS = API/application edge.
+- CTA = controlled command entry and observation;
+- Temporal = durable sequencing/retry/restart authority;
+- PostgreSQL = canonical Customer + registration/idempotency truth;
+- MongoDB = execution/audit/workflow context;
+- AttachmentStore = optional binary/document authority.
 
-## M2 — RegisterNewCustomer API contract lock
+## M2 — RegisterNewCustomer command contract lock
 
 Deliverables:
 
-- registration endpoint;
-- optional attachment ingress endpoint;
-- request/response envelope;
-- required Customer fields;
-- `Idempotency-Key`;
-- correlation contract;
-- `202 Accepted` semantics;
-- workflow status query;
-- Customer verification query;
-- typed error taxonomy.
+- framework-agnostic command envelope;
+- required/optional TimeSlots Customer fields;
+- pre-start structural validation;
+- normalization;
+- idempotency/fingerprint semantics;
+- Temporal start acceptance projection;
+- workflow status/result query projection;
+- typed failure taxonomy;
+- optional attachment ingress/reference contract.
 
-Pass when a Postman collection could be written from documentation alone.
+Pass when both a CLI test client and a Postman-compatible adapter could be produced from documentation without changing business semantics.
 
 ## M3 — Temporal workflow lock
 
 Deliverables:
 
 - workflow type/ID;
-- phases;
+- workflow phases;
 - PostgreSQL Activities;
 - MongoDB Activities;
+- AttachmentStore Activities when needed;
 - retry taxonomy;
-- idempotency rules;
-- worker-restart semantics;
-- cross-store consistency policy;
-- status projection;
-- workflow versioning rules.
-
-Pass when every side effect is outside Workflow code and every retryable Activity has a duplication-prevention strategy.
+- idempotent side-effect rules;
+- worker restart behavior;
+- cross-store consistency;
+- query/status projection;
+- workflow versioning.
 
 ## M4 — Persistence contract lock
 
-Deliverables:
-
 ### PostgreSQL
 
-- Customer relational projection;
+- Customer projection from DataModel v3 / TimeSlots;
 - registration/idempotency relation;
 - attachment-reference relation;
-- indexes/uniqueness/invariants;
-- finalization semantics.
+- finalization invariants.
 
 ### MongoDB
 
-- execution audit collection contract;
+- execution audit contract;
 - workflow context contract;
-- optional attachment ingress/commit contract;
-- retention/reconciliation rules;
-- PII/logging policy.
+- PII/logging rules;
+- query/index requirements.
 
-### Cross-store
+### AttachmentStore
 
-- failure windows;
-- recovery semantics;
-- distinction from Temporal internal persistence.
-
-Pass when every write has exactly one authority.
+- stage/commit/read/integrity contract;
+- stable opaque IDs;
+- retry safety;
+- TTL/reconciliation/orphan behavior;
+- physical technology intentionally deferred.
 
 ## M5 — Test contract lock
 
-Deliverables:
+Must cover:
 
-- pure contract tests;
-- NestJS boundary tests;
+- command/normalization tests;
+- CTA pre-start validation tests;
 - Temporal workflow tests;
 - PostgreSQL integration tests;
 - MongoDB integration tests;
-- cross-store failure/retry tests;
-- worker restart tests;
-- Postman runtime tests;
+- AttachmentStore integration tests when enabled;
+- cross-store retry/failure tests;
+- CTA disconnect/reconnect observation;
+- Temporal worker restart;
 - Golden Dataset mapping.
-
-Pass when every architecture invariant has at least one test that would fail if violated.
 
 ## M6 — Golden Dataset v0
 
@@ -125,52 +118,49 @@ Minimum cases:
 - GD-001 minimal valid Customer;
 - GD-002 full Customer;
 - GD-003 Customer with one attachment;
-- GD-004 Customer with multiple attachments;
-- GD-005 same key/same command replay;
-- GD-006 same key/different command conflict;
-- GD-007 invalid command/no workflow;
-- GD-008 transient PostgreSQL Customer-write failure/recovery;
-- GD-009 transient MongoDB attachment failure/recovery;
+- GD-004 multiple attachments;
+- GD-005 exact idempotent replay;
+- GD-006 idempotency conflict;
+- GD-007 invalid structural input/no workflow;
+- GD-008 transient PostgreSQL failure/recovery;
+- GD-009 transient attachment persistence failure/recovery;
 - GD-010 permanent attachment integrity mismatch;
 - GD-011 Temporal worker restart;
-- GD-012 proof of zero scheduling side effects.
-
-Pass when expected outcomes are fixed before implementation.
+- GD-012 zero scheduling side effects;
+- GD-013 CTA disconnect after workflow acceptance then reconnect/query same outcome.
 
 ## BUILD AUTHORIZATION GATE
 
 Build may begin only after M0–M6 are approved.
 
-Future build sequence, not authorization today:
+Future first build sequence:
 
 ```text
-B0  repository/runtime skeleton
-B1  NestJS CTA/API boundary
-B2  Temporal client + worker boundary
-B3  PostgreSQL Customer + registration/idempotency persistence
-B4  MongoDB execution/audit/context persistence
-B5  MongoDB optional attachment/document persistence
-B6  RegisterNewCustomer workflow + Activities
-B7  Postman collection
-B8  end-to-end runtime verification
-B9  retry/failure/restart certification
-B10 mk0 stable candidate
+B0  runtime/repository skeleton with no web framework
+B1  framework-free command contract + validation library
+B2  minimal CTA client/harness (CLI first is acceptable)
+B3  Temporal client + worker
+B4  PostgreSQL Customer + registration/idempotency persistence
+B5  MongoDB execution/audit/context persistence
+B6  AttachmentStore implementation selected only if attachment cases are enabled
+B7  RegisterNewCustomer Workflow + Activities
+B8  optional Postman-compatible thin adapter, only if useful for test ergonomics
+B9  full end-to-end runtime verification
+B10 failure/retry/restart/CTA reconnect certification
+B11 mk0 stable candidate
 ```
+
+A framework is not a prerequisite for B0–B11.
 
 ## mk0 stable definition
 
-mk0 stable means this chain is certified:
-
 ```text
-Postman
-→ NestJS
-→ Temporal RegisterNewCustomer
-→ PostgreSQL canonical Customer
-→ MongoDB audit/context
-→ optional MongoDB attachment + PostgreSQL reference
-→ queryable durable outcome
+controlled CTA command
+→ Temporal durable workflow
+→ TimeSlots-aligned Customer persistence in PostgreSQL
+→ required MongoDB audit/context
+→ optional attachment persistence + PostgreSQL reference
+→ same durable outcome remains observable after CTA reconnect
 ```
 
-and remains correct under duplicate submission, transient PostgreSQL failure, transient MongoDB failure, Activity retry after side effect and Temporal worker restart.
-
-Only after that should we bring Services Engine, Scheduler Engine or Agent into another slice/version.
+Only after this is certified should another engine slice or application framework be selected.
