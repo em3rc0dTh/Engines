@@ -2,192 +2,175 @@
 
 ## Objective
 
-Reach a first stable implementation only after the architecture and executable contracts are frozen.
-
-No coding is authorized by this document yet. It defines the sequence and gates that will authorize Build later.
-
----
-
-## Phase M0 — Reality and source lock
-
-Deliverables:
-
-- identify authoritative TimeSlots/DataModel source;
-- identify Temporal design constraints;
-- identify NestJS boundary responsibilities;
-- capture unresolved assumptions in quarries;
-- freeze vocabulary used by mk0.
-
-Gate M0 passes when:
-
-- every important design statement has a source or is explicitly labeled a new design decision;
-- no legacy `AvailabilitySlot` semantics are mistaken for future scheduling truth;
-- RegisterNewCustomer scope is separated from scheduling.
-
----
-
-## Phase M1 — Architecture lock
-
-Deliverables:
-
-- system context;
-- component responsibilities;
-- forbidden couplings;
-- authority matrix;
-- future extension boundary.
-
-Gate M1 passes when:
-
-- there is exactly one business command path;
-- NestJS is boundary, not durable orchestrator;
-- Temporal is orchestration authority;
-- Persistence has three explicit authorities;
-- future Agent/Services/Scheduler can attach without bypassing the API contract.
-
----
-
-## Phase M2 — RegisterNewCustomer contract lock
-
-Deliverables:
-
-- API routes;
-- request/response envelope;
-- customer required/optional fields;
-- attachment ingress reference model;
-- `202 Accepted` semantics;
-- workflow status query;
-- customer verification query;
-- idempotency behavior;
-- error taxonomy.
-
-Gate M2 passes when Postman collections/tests could be authored from documentation alone.
-
----
-
-## Phase M3 — Temporal workflow lock
-
-Deliverables:
-
-- workflow type/ID strategy;
-- workflow phases;
-- Activity list;
-- retry taxonomy;
-- idempotent side-effect rules;
-- cross-store consistency policy;
-- workflow status projection;
-- versioning rules.
-
-Gate M3 passes when:
-
-- no side effect remains in Workflow code conceptually;
-- every retryable Activity has an idempotency strategy;
-- attachment/customer failure windows have explicit outcomes.
-
----
-
-## Phase M4 — Persistence contract lock
-
-Deliverables:
-
-- Customer MongoDB document contract;
-- command receipt contract;
-- audit event contract;
-- attachment-store contract;
-- customer attachment reference contract;
-- staging/commit/reference lifecycle;
-- index/invariant proposal;
-- failure taxonomy;
-- PII/logging policy.
-
-Gate M4 passes when each write has exactly one authority and failure behavior is deterministic.
-
----
-
-## Phase M5 — Test contract lock
-
-Deliverables:
-
-- unit test matrix;
-- Temporal workflow tests;
-- persistence integration tests;
-- restart/retry/failure injection tests;
-- Postman contract tests;
-- golden dataset mapping.
-
-Gate M5 passes when every invariant has at least one test that would fail if the invariant were violated.
-
----
-
-## Phase M6 — Golden Dataset v0
-
-Deliverables:
-
-At minimum:
-
-- GD-001 minimal valid customer;
-- GD-002 full customer;
-- GD-003 customer with one attachment;
-- GD-004 customer with multiple attachments;
-- GD-005 same idempotency key/same command replay;
-- GD-006 same idempotency key/different command conflict;
-- GD-007 invalid command/no workflow started;
-- GD-008 transient Mongo failure/recovery;
-- GD-009 transient attachment failure/recovery;
-- GD-010 permanent attachment hash mismatch;
-- GD-011 worker restart during workflow;
-- GD-012 proof that no Appointment/ResourceReservation is created.
-
-Gate M6 passes when expected outcomes are fixed before implementation.
-
----
-
-## BUILD AUTHORIZATION GATE
-
-Build can begin only if M0–M6 are closed.
-
-The first build sequence will then be:
+Reach a first stable implementation only after the first three architecture zones are frozen:
 
 ```text
-B0 repository/runtime skeleton
-B1 NestJS API boundary
-B2 Temporal client/worker boundary
-B3 Mongo customer + command receipt persistence
-B4 Mongo audit projection
-B5 local attachment store implementation
-B6 RegisterNewCustomer workflow
-B7 Postman collection
-B8 integration/runtime verification
-B9 failure/restart verification
-B10 mk0 stable candidate
+CTA/API → Orchestration → Persistence
 ```
 
-This is a future sequence, not authorization to code today.
+No coding is authorized by this plan yet.
 
----
+## M0 — Reality / source lock
 
-## Release definition for mk0 stable
+Deliverables:
 
-mk0 stable does not mean the whole agentic architecture is complete.
+- TimeSlots/DataModel source frozen;
+- NestJS boundary evidence frozen;
+- Temporal Workflow/Activity constraints frozen;
+- user architecture decision frozen;
+- persistence technology correction frozen: PostgreSQL + MongoDB, no SQLite.
 
-It means this exact chain is certified:
+Pass when no Services/Scheduler/Agent concern is accidentally pulled into the first workflow.
+
+## M1 — Architecture lock
+
+Pass when this exact path is unambiguous:
 
 ```text
 Postman
 → NestJS
 → Temporal RegisterNewCustomer
-→ MongoDB customer persistence
-→ MongoDB audit persistence
-→ optional local attachment persistence
+→ PostgreSQL + MongoDB
+```
+
+Authorities must be explicit:
+
+- PostgreSQL = Customer/registration/idempotency business truth;
+- MongoDB = execution/audit/context + optional documents/attachments;
+- Temporal = durable sequencing;
+- NestJS = API/application edge.
+
+## M2 — RegisterNewCustomer API contract lock
+
+Deliverables:
+
+- registration endpoint;
+- optional attachment ingress endpoint;
+- request/response envelope;
+- required Customer fields;
+- `Idempotency-Key`;
+- correlation contract;
+- `202 Accepted` semantics;
+- workflow status query;
+- Customer verification query;
+- typed error taxonomy.
+
+Pass when a Postman collection could be written from documentation alone.
+
+## M3 — Temporal workflow lock
+
+Deliverables:
+
+- workflow type/ID;
+- phases;
+- PostgreSQL Activities;
+- MongoDB Activities;
+- retry taxonomy;
+- idempotency rules;
+- worker-restart semantics;
+- cross-store consistency policy;
+- status projection;
+- workflow versioning rules.
+
+Pass when every side effect is outside Workflow code and every retryable Activity has a duplication-prevention strategy.
+
+## M4 — Persistence contract lock
+
+Deliverables:
+
+### PostgreSQL
+
+- Customer relational projection;
+- registration/idempotency relation;
+- attachment-reference relation;
+- indexes/uniqueness/invariants;
+- finalization semantics.
+
+### MongoDB
+
+- execution audit collection contract;
+- workflow context contract;
+- optional attachment ingress/commit contract;
+- retention/reconciliation rules;
+- PII/logging policy.
+
+### Cross-store
+
+- failure windows;
+- recovery semantics;
+- distinction from Temporal internal persistence.
+
+Pass when every write has exactly one authority.
+
+## M5 — Test contract lock
+
+Deliverables:
+
+- pure contract tests;
+- NestJS boundary tests;
+- Temporal workflow tests;
+- PostgreSQL integration tests;
+- MongoDB integration tests;
+- cross-store failure/retry tests;
+- worker restart tests;
+- Postman runtime tests;
+- Golden Dataset mapping.
+
+Pass when every architecture invariant has at least one test that would fail if violated.
+
+## M6 — Golden Dataset v0
+
+Minimum cases:
+
+- GD-001 minimal valid Customer;
+- GD-002 full Customer;
+- GD-003 Customer with one attachment;
+- GD-004 Customer with multiple attachments;
+- GD-005 same key/same command replay;
+- GD-006 same key/different command conflict;
+- GD-007 invalid command/no workflow;
+- GD-008 transient PostgreSQL Customer-write failure/recovery;
+- GD-009 transient MongoDB attachment failure/recovery;
+- GD-010 permanent attachment integrity mismatch;
+- GD-011 Temporal worker restart;
+- GD-012 proof of zero scheduling side effects.
+
+Pass when expected outcomes are fixed before implementation.
+
+## BUILD AUTHORIZATION GATE
+
+Build may begin only after M0–M6 are approved.
+
+Future build sequence, not authorization today:
+
+```text
+B0  repository/runtime skeleton
+B1  NestJS CTA/API boundary
+B2  Temporal client + worker boundary
+B3  PostgreSQL Customer + registration/idempotency persistence
+B4  MongoDB execution/audit/context persistence
+B5  MongoDB optional attachment/document persistence
+B6  RegisterNewCustomer workflow + Activities
+B7  Postman collection
+B8  end-to-end runtime verification
+B9  retry/failure/restart certification
+B10 mk0 stable candidate
+```
+
+## mk0 stable definition
+
+mk0 stable means this chain is certified:
+
+```text
+Postman
+→ NestJS
+→ Temporal RegisterNewCustomer
+→ PostgreSQL canonical Customer
+→ MongoDB audit/context
+→ optional MongoDB attachment + PostgreSQL reference
 → queryable durable outcome
 ```
 
-And it remains correct under:
+and remains correct under duplicate submission, transient PostgreSQL failure, transient MongoDB failure, Activity retry after side effect and Temporal worker restart.
 
-- duplicate client submission;
-- worker restart;
-- transient Mongo failure;
-- transient attachment-store failure;
-- Activity retry after side effect;
-- permanent attachment integrity failure.
-
-Only after that should the next engine slice be selected.
+Only after that should we bring Services Engine, Scheduler Engine or Agent into another slice/version.
