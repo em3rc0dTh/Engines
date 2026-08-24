@@ -1,0 +1,282 @@
+{
+  "datasetVersion": "mk0.golden.register-customer.v0",
+  "workflowType": "RegisterNewCustomer",
+  "syntheticDataOnly": true,
+  "cases": [
+    {
+      "id": "GD-001",
+      "name": "minimal-valid-customer",
+      "headers": {
+        "Idempotency-Key": "gd-001-register-ana"
+      },
+      "command": {
+        "businessSlug": "golden-business",
+        "customer": {
+          "type": "person",
+          "name": "Ana Torres",
+          "contact": {
+            "phones": [],
+            "email": "ana.torres@example.test"
+          }
+        },
+        "attachments": []
+      },
+      "expected": {
+        "httpStartStatus": 202,
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "committedAttachmentDelta": 0,
+        "customerAttachmentReferenceCount": 0,
+        "appointmentDelta": 0,
+        "resourceReservationDelta": 0,
+        "availabilitySlotMutationDelta": 0
+      }
+    },
+    {
+      "id": "GD-002",
+      "name": "full-valid-customer",
+      "headers": {
+        "Idempotency-Key": "gd-002-register-luis"
+      },
+      "command": {
+        "businessSlug": "golden-business",
+        "customer": {
+          "type": "person",
+          "name": "Luis Vega",
+          "document": {
+            "type": "DNI",
+            "value": "00000002",
+            "country": "PE"
+          },
+          "contact": {
+            "phones": [
+              {
+                "label": "principal",
+                "countryCode": "+51",
+                "number": "900000002",
+                "normalized": "51900000002",
+                "isWhatsapp": true,
+                "primary": true
+              }
+            ],
+            "email": "luis.vega@example.test"
+          },
+          "notes": "Synthetic golden customer"
+        },
+        "attachments": []
+      },
+      "expected": {
+        "httpStartStatus": 202,
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "committedAttachmentDelta": 0,
+        "appointmentDelta": 0,
+        "resourceReservationDelta": 0
+      }
+    },
+    {
+      "id": "GD-003",
+      "name": "one-attachment",
+      "headers": {
+        "Idempotency-Key": "gd-003-one-attachment"
+      },
+      "preconditions": {
+        "stagedAttachments": [
+          {
+            "fixture": "synthetic-id-front-v1",
+            "ingressRef": "ing_gd003_a",
+            "mediaType": "image/png",
+            "sha256": "TO_BE_FROZEN_WITH_BINARY_FIXTURE"
+          }
+        ]
+      },
+      "command": {
+        "businessSlug": "golden-business",
+        "customer": {
+          "type": "person",
+          "name": "Mara Rios",
+          "contact": {
+            "phones": [],
+            "email": "mara.rios@example.test"
+          }
+        },
+        "attachments": [
+          {
+            "ingressRef": "ing_gd003_a",
+            "kind": "identity_document",
+            "displayName": "Synthetic ID front"
+          }
+        ]
+      },
+      "expected": {
+        "httpStartStatus": 202,
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "committedAttachmentDelta": 1,
+        "customerAttachmentReferenceCount": 1,
+        "binaryEmbeddedInCustomer": false,
+        "appointmentDelta": 0,
+        "resourceReservationDelta": 0
+      }
+    },
+    {
+      "id": "GD-004",
+      "name": "multiple-attachments",
+      "headers": {
+        "Idempotency-Key": "gd-004-multiple-attachments"
+      },
+      "preconditions": {
+        "stagedAttachments": [
+          {"fixture": "synthetic-a", "ingressRef": "ing_gd004_a", "sha256": "TO_BE_FROZEN"},
+          {"fixture": "synthetic-b", "ingressRef": "ing_gd004_b", "sha256": "TO_BE_FROZEN"}
+        ]
+      },
+      "command": {
+        "businessSlug": "golden-business",
+        "customer": {
+          "type": "person",
+          "name": "Noa Diaz",
+          "contact": {
+            "phones": [],
+            "email": "noa.diaz@example.test"
+          }
+        },
+        "attachments": [
+          {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A"},
+          {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B"}
+        ]
+      },
+      "expected": {
+        "httpStartStatus": 202,
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "committedAttachmentDelta": 2,
+        "customerAttachmentReferenceCount": 2,
+        "finalizeOnlyAfterAllAttachments": true
+      }
+    },
+    {
+      "id": "GD-005",
+      "name": "exact-idempotent-replay",
+      "replayCase": "GD-001",
+      "repetitions": 2,
+      "expected": {
+        "customerDeltaAcrossAllRepetitions": 1,
+        "logicalRegistrationOutcomeCount": 1,
+        "duplicateAttachmentSideEffects": 0
+      }
+    },
+    {
+      "id": "GD-006",
+      "name": "idempotency-key-different-command-conflict",
+      "firstCase": "GD-001",
+      "secondCommandMutation": {
+        "path": "customer.name",
+        "value": "Different Person"
+      },
+      "reuseFirstIdempotencyKey": true,
+      "expected": {
+        "secondHttpStatus": 409,
+        "secondErrorCode": "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND",
+        "additionalCustomerDelta": 0
+      }
+    },
+    {
+      "id": "GD-007",
+      "name": "invalid-request-no-name",
+      "headers": {
+        "Idempotency-Key": "gd-007-invalid"
+      },
+      "command": {
+        "businessSlug": "golden-business",
+        "customer": {
+          "type": "person",
+          "contact": {
+            "phones": [],
+            "email": "invalid@example.test"
+          }
+        },
+        "attachments": []
+      },
+      "expected": {
+        "httpStartStatus": 400,
+        "workflowStarted": false,
+        "customerDelta": 0,
+        "committedAttachmentDelta": 0
+      }
+    },
+    {
+      "id": "GD-008",
+      "name": "transient-mongo-customer-write-failure",
+      "baseCase": "GD-001",
+      "failureInjection": {
+        "target": "createCustomerRegistrationBase",
+        "classification": "CUSTOMER_STORE_UNAVAILABLE",
+        "attemptsToFail": 1
+      },
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "activityRetryObserved": true
+      }
+    },
+    {
+      "id": "GD-009",
+      "name": "transient-attachment-store-failure",
+      "baseCase": "GD-003",
+      "failureInjection": {
+        "target": "commitAttachment",
+        "classification": "ATTACHMENT_STORE_UNAVAILABLE",
+        "attemptsToFail": 1
+      },
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "committedAttachmentDelta": 1,
+        "customerFinalizedBeforeRecovery": false
+      }
+    },
+    {
+      "id": "GD-010",
+      "name": "permanent-attachment-hash-mismatch",
+      "baseCase": "GD-003",
+      "failureInjection": {
+        "target": "commitAttachment",
+        "classification": "ATTACHMENT_INTEGRITY_MISMATCH",
+        "permanent": true
+      },
+      "expected": {
+        "workflowTerminalStatus": "FAILED",
+        "failureCode": "ATTACHMENT_INTEGRITY_MISMATCH",
+        "customerReportedAsSuccessful": false,
+        "validCustomerAttachmentReferenceCount": 0
+      }
+    },
+    {
+      "id": "GD-011",
+      "name": "worker-restart-after-customer-base",
+      "baseCase": "GD-001",
+      "failureInjection": {
+        "target": "temporal-worker",
+        "action": "restart",
+        "afterPhase": "PERSISTING_CUSTOMER_BASE"
+      },
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "customerDelta": 1,
+        "acceptedCommandLost": false
+      }
+    },
+    {
+      "id": "GD-012",
+      "name": "scheduling-isolation",
+      "baseCase": "GD-002",
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "appointmentDelta": 0,
+        "resourceReservationDelta": 0,
+        "availabilitySlotMutationDelta": 0
+      }
+    }
+  ]
+}
