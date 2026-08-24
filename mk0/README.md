@@ -9,79 +9,129 @@ It exists to prove one continuous operational chain before choosing a web framew
 ## Scope lock — first three architecture zones only
 
 ```text
-1. CTA / ENTRY
-   Postman or CLI/test harness
-      ↓ controlled input
+1. CTA / OMNICHANNEL ENTRY
+   Postman / CLI now
+   Form / MCP / WhatsApp / Telegram / API / Webhook later
+                 ↓
+             CTA Adapter
+                 ↓ canonical command
 
 2. ORCHESTRATION ENGINE
-   Temporal
-      ↓ RegisterNewCustomer
+   Full Temporal platform
+                 ↓
+          RegisterNewCustomer
+                 ↓
+   Workflows / Activities / Workers / Task Queues
+   retries / recovery / Queries / Signals / Updates
+   visibility / durable Event History
 
-3. PERSISTENCE
+3. PERSISTENCE / STORAGE
    PostgreSQL
    MongoDB
-   Optional attachment persistence capability
+   AttachmentStore when attachments exist
 ```
 
 Canonical path:
 
 ```text
-CTA/Postman or CLI
-        ↓
-Temporal RegisterNewCustomer
-        ↓
-Activities / persistence ports
-        ├── PostgreSQL: Customer + registration/idempotency truth
-        ├── MongoDB: execution/audit/workflow context
-        └── Attachment store: binary/document objects when present
+CTA channel
+    ↓
+CTA Adapter
+    ↓ RegisterNewCustomer command
+Temporal Orchestration Engine
+    ↓ Activities / persistence ports
+    ├── PostgreSQL: Customer + registration/idempotency truth
+    ├── MongoDB: execution/audit/workflow context
+    └── AttachmentStore: binary/document objects when present
 ```
 
-There is **no mandatory application framework in mk0**. A future HTTP adapter may be added later, but it cannot become orchestration authority or bypass Temporal.
+There is **no mandatory application framework in mk0**.
+
+## CTA Adapter — the stable entry boundary
+
+The diagram's `CTA Adapter` is important. It prevents every channel from understanding Temporal internals or creating a different business path.
+
+The adapter contract must:
+
+- receive channel-specific input;
+- authenticate/identify the caller when that capability exists;
+- validate structural input;
+- normalize channel payload into one canonical command;
+- assign/propagate correlation identity;
+- require/derive explicit idempotency identity;
+- stage or reference attachments safely when present;
+- submit the canonical command to the Temporal Orchestration Engine;
+- return a durable workflow identity/status projection to the caller.
+
+It must not:
+
+- write PostgreSQL or MongoDB directly;
+- execute Customer registration steps;
+- implement durable retries;
+- become Customer truth;
+- bypass Temporal.
+
+### First CTA
+
+For mk0 the sender can be Postman or CLI.
+
+A CLI can use the official Temporal client/SDK directly behind the CTA Adapter contract.
+
+If Postman is used, a transport adapter is required so Postman sends the **business command**, not Temporal-internal protocol/payload details. That adapter may be extremely thin and framework-free; it is still only transport.
+
+Later the exact same canonical command can be produced by:
+
+```text
+Form
+MCP
+WhatsApp
+Telegram
+Web Chat
+Mobile App
+Voice / IVR
+API / Webhook
+Email
+Future channel
+```
 
 ## What “continuous connection” means in mk0
 
-mk0 does not require one permanently open socket. It must prove a continuous operational contract:
+mk0 must prove continuous **durable execution**, not dependence on a permanently open client socket:
 
 ```text
 CTA submits valid command
-→ command is accepted exactly once
-→ Temporal owns durable progress
-→ CTA can query/observe the workflow
+→ Temporal durably accepts workflow
+→ CTA may disconnect
+→ Temporal continues through Workers/Activities
 → persistence effects complete
-→ final Customer outcome is queryable
+→ CTA reconnects or another channel queries status
+→ same workflow/result is returned
 ```
 
-The CTA may disconnect and reconnect without losing the accepted workflow. Temporal durability is the continuity mechanism.
+Temporal's durable execution is the continuity mechanism. Official Temporal documentation describes the platform as resuming applications after crashes, network failures and infrastructure outages. The architecture must use that potency rather than emulate it with a local state machine.
 
-## 1. CTA / controlled entry
+## Orchestration Engine — full Temporal authority
 
-The first CTA can be:
+`Temporal` in mk0 means the real Temporal orchestration platform, not a lightweight imitation.
 
-- Postman;
-- a CLI command;
-- a tiny test harness/client using the Temporal client contract.
+The Orchestration Engine owns:
 
-Its responsibilities are intentionally narrow:
+- Workflow identity and durable Event History;
+- Workflow Library;
+- Task Queues;
+- Workers;
+- Activities;
+- retries/backoff/timeouts;
+- restart/crash recovery;
+- Queries for read-only workflow state;
+- Signals/Updates when a workflow later needs external interaction;
+- cancellation/compensation policy when explicitly designed;
+- workflow versioning/replay compatibility;
+- visibility/operational execution state.
 
-- construct `RegisterNewCustomer` input;
-- validate the transport/input envelope before submission;
-- provide an idempotency key;
-- optionally provide correlation metadata;
-- stage/identify attachments when required;
-- start the Temporal workflow;
-- query the workflow/result.
+Not every Temporal feature must be exercised by `RegisterNewCustomer`, but mk0 must be built **inside the full platform model** so later workflows do not require an architectural rewrite.
 
-The CTA does **not**:
-
-- write PostgreSQL directly;
-- write MongoDB directly;
-- execute registration steps itself;
-- retry business side effects itself;
-- infer scheduling or services.
-
-## 2. Orchestration Engine — Temporal
-
-Temporal owns the durable state machine:
+### mk0 workflow state machine
 
 ```text
 ACCEPTED
@@ -90,16 +140,14 @@ ACCEPTED
 → PERSISTING_CUSTOMER_BASE
 → PERSISTING_ATTACHMENTS      optional
 → LINKING_ATTACHMENTS         optional
-→ PERSISTING_AUDIT/CONTEXT
+→ PERSISTING_AUDIT_CONTEXT
 → FINALIZING_CUSTOMER
 → COMPLETED
 ```
 
-Workflow code coordinates only. Database/network/file side effects belong to Activities/adapters.
+Workflow code coordinates. Database/network/file side effects occur through Activities/adapters.
 
-The workflow must survive worker/process restart and Activity acknowledgement loss without duplicating the logical registration.
-
-## 3. Persistence
+## Persistence
 
 ### PostgreSQL — canonical Customer authority
 
@@ -126,31 +174,30 @@ It owns conceptually:
 
 - `execution_audit` events;
 - workflow/application context documents;
-- sanitized failure classifications;
-- optional document metadata if that belongs to the chosen attachment design.
+- sanitized failure classifications.
 
 MongoDB is not a shadow Customer database and does not replace Temporal Event History.
 
-### Attachment persistence — separate capability
+### AttachmentStore — separate capability
 
-Attachments are optional and must remain separate from the canonical Customer relational data.
-
-Design rule:
+Attachments are optional and remain separate from canonical Customer relational data and routine audit/context data.
 
 ```text
-binary/document object → AttachmentStore capability
-opaque attachmentId + integrity metadata → PostgreSQL business reference
+binary/document object
+→ AttachmentStore
+→ opaque attachmentId + integrity metadata
+→ PostgreSQL Customer/registration reference
 ```
 
-The physical technology is intentionally **not selected yet**. It may later be MongoDB/GridFS, PostgreSQL-backed object metadata plus local/object storage, or another local persistence mechanism, provided the contract remains stable.
+The physical technology is intentionally open. The target architecture diagram points toward object storage such as MinIO/S3; mk0 may also evaluate another database/storage mechanism appropriate for local proof, provided the contract remains stable.
 
-Large binary objects must not be placed directly into ordinary Temporal Workflow history payloads.
+Large binaries must not be treated as ordinary Temporal Workflow history payloads.
 
 ## First workflow — RegisterNewCustomer
 
-The workflow must transform the accepted command into explicit persistence inputs that follow the approved Customer semantics from `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
+The Workflow receives the canonical command and orchestrates the inputs required to persist a Customer following `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
 
-At minimum the design recognizes:
+At minimum the semantic model recognizes:
 
 ```text
 Customer
@@ -182,10 +229,10 @@ ResourceReservation = real operational capacity lock
 
 ## Core invariants
 
-1. CTA submits one controlled command contract.
+1. Every channel enters through the same CTA Adapter contract.
 2. Invalid structural input creates no workflow/business side effect.
-3. No CTA writes databases directly.
-4. Temporal owns durable sequencing.
+3. CTA/adapter writes no business persistence directly.
+4. The full Temporal platform owns durable orchestration.
 5. Workflow code performs no direct persistence/network/file side effects.
 6. Activities/adapters are retry-safe and idempotent.
 7. PostgreSQL is canonical Customer + registration/idempotency truth.
@@ -197,16 +244,16 @@ ResourceReservation = real operational capacity lock
 13. Failure remains observable; no silent fallback converts failure into success.
 14. PII/secrets are not copied indiscriminately into audit/context logs.
 15. RegisterNewCustomer creates zero scheduling side effects.
-16. Future CTA adapters reuse this contract instead of creating alternate business paths.
+16. Future channels reuse this contract instead of creating alternate business paths.
 
 ## Non-goals for mk0
 
-- NestJS or any other web framework;
+- NestJS or another web framework;
 - frontend;
-- Agent;
+- Agent reasoning;
 - Services Engine;
 - Scheduler Engine;
-- Integration Engine;
+- Integration Engine implementation;
 - appointment booking;
 - service execution;
 - production authentication architecture.
