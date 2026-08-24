@@ -19,6 +19,14 @@ No framework or HTTP status is part of the canonical expected behavior.
 
 The Temporal requirement is explicit: **mk0 must prove a real Temporal Service + Workflow + Task Queue + Worker + Activity + Query/Update execution path.** A custom in-process state machine does not satisfy the golden contract.
 
+The dataset also freezes the closure decisions in `Design/06-mk0-closure-decisions.md`:
+
+- a structurally legal registration session may start with incomplete Customer data;
+- session idempotency is scoped by `(operation, businessSlug, idempotencyKeyHash)`;
+- the normalized initial start snapshot is fingerprinted, while later `ProvideCustomerData` Updates do not rewrite that fingerprint;
+- success-gating MongoDB audit milestones must exist before a registration may be reported successful;
+- the current mk0 CTA proof surfaces are Postman and CLI.
+
 ## Case inventory
 
 ### GD-001 — Minimal valid Customer
@@ -39,11 +47,21 @@ Every requested attachment commits once logically and finalization waits for man
 
 ### GD-005 — Exact start/session replay
 
-Same registration-session idempotency identity resolves the same logical Workflow/session rather than creating a second registration attempt.
+Same business-scoped registration-session identity and same initial-start fingerprint resolve the same logical Workflow/session rather than creating a second registration attempt.
 
-### GD-006 — Start/session identity conflict
+### GD-006 — Same-session immutable start conflict
 
-Reuse that violates the frozen session contract creates no second business effect.
+Reuse the same `RegisterNewCustomer` + `businessSlug` + idempotency key with a materially different normalized **initial start snapshot**.
+
+Expected:
+
+```text
+secondStartAccepted = false
+secondErrorCode = SESSION_IDEMPOTENCY_CONFLICT
+additionalPostgresCustomerDelta = 0
+```
+
+This case is intentionally same-business. Reusing the same opaque key value under a different `businessSlug` is a different business-scoped idempotency identity and is not this conflict.
 
 ### GD-007 — Invalid start envelope
 
@@ -112,6 +130,7 @@ Provide required Customer data in at least two separate `ProvideCustomerData` Up
 Expected:
 
 - same Workflow identity throughout;
+- the original start fingerprint remains unchanged;
 - state survives between Updates;
 - missing fields shrink deterministically;
 - accepted interactions are represented in MongoDB audit according to policy;
@@ -136,6 +155,25 @@ Completed draft matches only a `SOFT_MATCH` attribute such as a fixture phone/em
 
 Expected: Workflow exposes the configured possible-duplicate state/outcome and does not silently convert it into a hard uniqueness rule.
 
+## Mandatory audit success rule
+
+A successful Golden Dataset case must prove the applicable logical MongoDB audit milestones defined by the closure design, including:
+
+```text
+REGISTRATION_SESSION_STARTED
+REGISTRATION_POLICY_LOADED
+REQUIRED_DATA_REQUESTED          when applicable
+CUSTOMER_DATA_ACCEPTED           per logical accepted input
+DUPLICATE_CHECK_COMPLETED
+EXISTING_CUSTOMER_RESOLVED       or CUSTOMER_CREATED
+ATTACHMENT_COMMITTED             when applicable
+REGISTRATION_COMPLETED
+```
+
+Retry-safe representation is required; duplicate physical audit events caused solely by retry are not acceptable.
+
+If required audit cannot be persisted after the frozen retry policy is exhausted, the registration cannot be reported as successful. Temporal Event History remains the durable orchestration evidence for a failure caused by the unavailable audit store.
+
 ## Data rules
 
 Use synthetic people/identifiers only. Do not place real Customer PII in the dataset.
@@ -159,7 +197,9 @@ completion behavior
 - every case is machine-readable;
 - interactive state expectations are explicit;
 - policy fixtures are versioned;
+- business-scoped idempotency and initial-start fingerprint behavior are explicit;
 - expected PostgreSQL/MongoDB/AttachmentStore effects are explicit;
+- mandatory audit-before-success behavior is explicit;
 - unresolved attachment fixture hashes are frozen or explicitly marked;
 - Design and Golden Dataset agree;
 - real Temporal runtime/message-passing evidence is required;
