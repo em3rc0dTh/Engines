@@ -15,6 +15,8 @@ The first proof is not just one-shot persistence. It is a durable interactive re
 
 No coding is authorized yet.
 
+Current gate interpretation and approval status are tracked in [`mk0-gate-status.md`](mk0-gate-status.md). That ledger does not authorize Build; it separates material specification from formal approval and Build-time implementation choices.
+
 ## M0 — Reality / source lock
 
 Deliverables:
@@ -86,14 +88,17 @@ Deliverables:
 - PostgreSQL duplicate-check/create Activities;
 - MongoDB interaction/audit Activity;
 - AttachmentStore Activities when needed;
-- retry/backoff/timeout taxonomy;
+- retry/backoff/timeout taxonomy at the semantic/failure-classification level;
 - Worker restart behavior while waiting and after side effects;
 - CTA disconnect/reconnect behavior;
 - cross-store consistency;
-- Workflow versioning/replay strategy;
+- Workflow deterministic replay/version-compatibility invariant;
+- Build-time decision criteria for the exact SDK-specific versioning mechanism;
 - Temporal Web UI/visibility evidence requirements.
 
-Pass when missing-information collection, duplicate detection and persistence are visibly controlled by the same durable Temporal Workflow.
+Pass when missing-information collection, duplicate detection and persistence are visibly controlled by the same durable Temporal Workflow and the Design makes clear that deployed Workflow changes must preserve replay compatibility.
+
+Exact SDK version, versioning API/mechanism, retry numbers, heartbeat values, namespace topology and visibility configuration are **Build-time choices**. They are not permission to weaken the pre-Build invariants above.
 
 ## M4 — Persistence contract lock
 
@@ -115,8 +120,10 @@ Pass when missing-information collection, duplicate detection and persistence ar
 - explicit success-gating audit milestones;
 - rule that missing required audit cannot be reported as successful registration;
 - typed failure behavior when the audit store is unavailable beyond retry policy;
-- PII/logging/retention rules;
+- mk0 PII/logging constraints using synthetic data and no unrestricted payload dumps;
 - query/index requirements.
+
+Complete production retention/encryption/backup policy is a later production gate. Its deferral does not permit real Customer PII in mk0 fixtures.
 
 ### AttachmentStore
 
