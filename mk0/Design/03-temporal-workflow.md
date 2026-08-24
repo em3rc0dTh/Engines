@@ -34,13 +34,13 @@ CTA starts RegisterNewCustomer
 → Workflow revalidates
 → repeats until complete
 → duplicate check
-→ persistence
+→ persistence/audit/finalization
 → terminal result
 ```
 
 A CTA can disappear for minutes, hours or longer while the Workflow remains the authority for that registration session.
 
-## 3. Workflow identity
+## 3. Workflow identity and start replay
 
 Recommended Workflow ID:
 
@@ -48,16 +48,46 @@ Recommended Workflow ID:
 register-customer:{businessSlug}:{hash(startIdempotencyKey)}
 ```
 
-The initial idempotency key identifies the **registration session/intent**, not a frozen complete Customer payload. This matters because the Customer draft evolves through later Updates.
+The authoritative registration identity is business-scoped:
+
+```text
+(operation, businessSlug, idempotencyKeyHash)
+```
+
+The initial idempotency key identifies the registration session/intent. The normalized material **initial start snapshot** is fingerprinted so an exact transport retry can be distinguished from an attempt to reuse the same business-scoped session identity with materially different initial input.
+
+Conceptual initial fingerprint material:
+
+```text
+operation
+businessSlug
+schemaVersion
+normalized initial Customer draft
+normalized initial attachment ingress identities / expected integrity metadata
+```
+
+Rules:
+
+```text
+same business-scoped identity + same initial fingerprint
+→ same logical Workflow/session
+
+same business-scoped identity + materially different initial fingerprint
+→ SESSION_IDEMPOTENCY_CONFLICT
+→ no second business effect
+```
+
+The durable Customer draft may evolve through later Updates. Those Updates have their own stable input identities and do **not** rewrite the original start fingerprint.
 
 Goals:
 
 - duplicate-start resistance;
 - stable identity across CTA reconnects;
+- deterministic conflicting-start detection;
 - no raw idempotency key in ordinary logs;
 - tenant/business scoping through `businessSlug`.
 
-Each later external input also carries a stable `inputId`/Update identity so repeated channel delivery does not produce duplicate logical interactions.
+Each later external input carries a stable `inputId`/Update identity so repeated channel delivery does not produce duplicate logical interactions.
 
 ## 4. CTA to Temporal boundary
 
@@ -118,6 +148,8 @@ Because the Activity result becomes part of the Workflow execution history, an a
 
 ## 7. Workflow state machine
 
+Both successful business outcomes — `CREATED` and `ALREADY_EXISTS` — must pass through required application audit and authoritative registration finalization before terminal success.
+
 ```text
 STARTED
    ↓
@@ -135,34 +167,49 @@ VALIDATING_DRAFT
    └──────────────────────────────┘
    ↓ complete
 CHECKING_EXISTING_CUSTOMER        → PostgreSQL Activity
-   ├── hard duplicate ───────────→ ALREADY_EXISTS → COMPLETED
-   ├── soft duplicate requiring decision
-   │                              ↓
-   │                    WAITING_FOR_DUPLICATE_DECISION
-   │                              ↓ Update
-   └──────────────────────────────┐
+   ├── hard duplicate
+   │       ↓
+   │  OUTCOME_ALREADY_EXISTS
+   │       └──────────────────────────────┐
+   │                                      │
+   ├── soft duplicate requiring decision │
+   │       ↓                              │
+   │  WAITING_FOR_DUPLICATE_DECISION     │
+   │       ↓ Update                       │
+   │       └───────────────┐              │
+   │                       │              │
+   └── new                 │              │
+           ↓               │              │
+   RESERVING_REGISTRATION  → PostgreSQL   │
+           ↓                              │
+   PERSISTING_CUSTOMER     → PostgreSQL   │
+           ↓                              │
+   attachments requested?                 │
+      ├─ no ───────────────────┐          │
+      └─ yes                   │          │
+           ↓                   │          │
+     PERSISTING_ATTACHMENTS    → AttachmentStore
+           ↓                   │          │
+     LINKING_ATTACHMENTS       → PostgreSQL
+           └───────────────────┘          │
+                   ↓                      │
+            OUTCOME_CREATED               │
+                   └──────────────┬───────┘
                                   ↓
-RESERVING_REGISTRATION            → PostgreSQL Activity
-   ↓
-PERSISTING_CUSTOMER               → PostgreSQL Activity
-   ↓
-attachments requested?
-   ├─ no ───────────────────────────────┐
-   └─ yes                              │
-        ↓                              │
-      PERSISTING_ATTACHMENTS            → AttachmentStore Activity
-        ↓                              │
-      LINKING_ATTACHMENTS               → PostgreSQL Activity
-        └───────────────────────────────┘
-                     ↓
-             PERSISTING_AUDIT_CONTEXT   → MongoDB Activity
-                     ↓
-             FINALIZING_CUSTOMER        → PostgreSQL Activity
-                     ↓
-             COMPLETED / CREATED
+                       PERSISTING_AUDIT_CONTEXT
+                                  → MongoDB
+                                  ↓
+                       FINALIZING_REGISTRATION
+                                  → PostgreSQL
+                                  ↓
+                    COMPLETED / CREATED
+                         or
+                    COMPLETED / ALREADY_EXISTS
 ```
 
-The exact placement/frequency of audit Activities may be refined in Build, but accepted external interactions and major business milestones must be auditable.
+The exact physical placement/frequency of audit Activities may be refined in Build, but the applicable logical success-gating milestones must be durably represented before either successful terminal outcome is exposed.
+
+A MongoDB failure that prevents required audit persistence after the frozen retry policy is exhausted must not transition to successful `COMPLETED`.
 
 ## 8. Query contract
 
@@ -218,6 +265,8 @@ CancelRegistration
 
 Only explicitly designed Updates are accepted.
 
+Update identity is independent of start replay identity. A repeated `inputId` must not create another logical interaction, and an accepted Update does not mutate the frozen initial-start fingerprint.
+
 ## 10. Activity boundaries
 
 ### `loadRegistrationPolicy` — application configuration/profile source
@@ -240,9 +289,10 @@ The Workflow does not query PostgreSQL directly.
 
 Purpose:
 
-- bind the Workflow/session identity to one logical registration outcome;
+- bind the Workflow/session identity and initial-start fingerprint to one logical registration outcome;
 - make creation retry-safe;
-- tolerate Activity retry.
+- tolerate Activity retry;
+- reject materially conflicting reuse of the same business-scoped registration identity.
 
 ### `createCustomer` — PostgreSQL
 
@@ -262,27 +312,29 @@ Links opaque attachment references to the business record idempotently.
 
 ### `appendInteractionAudit` — MongoDB
 
-Records accepted CTA/Workflow interaction milestones with safe metadata.
+Records accepted CTA/Workflow interaction milestones with safe metadata and stable logical event identity.
 
-Examples:
+Success-gating examples:
 
 ```text
 REGISTRATION_SESSION_STARTED
 REGISTRATION_POLICY_LOADED
-REQUIRED_DATA_REQUESTED
-CUSTOMER_DATA_ACCEPTED
-CUSTOMER_DATA_REJECTED_CLASSIFIED
+REQUIRED_DATA_REQUESTED              when applicable
+CUSTOMER_DATA_ACCEPTED               per accepted logical input
 DUPLICATE_CHECK_COMPLETED
-EXISTING_CUSTOMER_RESOLVED
-CUSTOMER_CREATED
-ATTACHMENT_COMMITTED
+EXISTING_CUSTOMER_RESOLVED           for ALREADY_EXISTS
+CUSTOMER_CREATED                     for CREATED
+ATTACHMENT_COMMITTED                 when applicable
 REGISTRATION_COMPLETED
-REGISTRATION_FAILED
 ```
+
+Other diagnostic events may be recorded without becoming independent success authority.
 
 ### `finalizeCustomerRegistration` — PostgreSQL
 
-Verifies mandatory effects and marks the authoritative registration result final.
+Despite the historical Activity name, its mk0 responsibility is to verify the mandatory effects and persist/finalize the authoritative **registration outcome**, whether that outcome is `CREATED` or `ALREADY_EXISTS`.
+
+It must not claim successful finalization while applicable success-gating audit evidence is missing.
 
 ## 11. Duplicate semantics
 
@@ -304,7 +356,7 @@ Typical generic guidance:
 - phone/email may be soft matches because families/organizations can share them;
 - name alone is never a hard uniqueness key.
 
-Hard duplicate terminal result:
+Hard duplicate business result:
 
 ```text
 created = false
@@ -312,7 +364,7 @@ phase = ALREADY_EXISTS
 customerId = existing customer
 ```
 
-No second Customer is persisted.
+No second Customer is persisted, but the Workflow still must persist the required duplicate/outcome audit evidence and finalize the registration command before exposing successful completion.
 
 ## 12. Interaction audit vs Temporal Event History
 
@@ -320,7 +372,9 @@ Temporal Event History is the orchestration truth.
 
 MongoDB contains a separate application audit/interaction projection useful for business troubleshooting and future channel analytics.
 
-MongoDB should not blindly duplicate full Temporal history or unrestricted PII. Exact PII retention/encryption policy must be frozen before production; mk0 tests use synthetic data.
+MongoDB should not blindly duplicate full Temporal history or unrestricted PII. Exact production PII retention/encryption policy is a later production gate; mk0 tests use synthetic data and must not contain unrestricted real Customer PII.
+
+Mandatory application audit is a success precondition, not a replacement for Temporal history. If MongoDB itself is unavailable beyond the frozen retry policy, Temporal remains the durable evidence of that failure and the Workflow cannot report successful registration.
 
 ## 13. Task Queues and Workers
 
@@ -356,17 +410,19 @@ Temporal owns durable recovery and retry execution.
 
 CTA retries must use stable start/input identities so duplicate starts or messages resolve safely.
 
+Retry after a side effect must recover the same logical registration, Customer, audit milestone or attachment rather than create another one.
+
 ## 15. Cross-store consistency
 
 PostgreSQL, MongoDB and AttachmentStore do not share one atomic transaction.
 
 Temporal coordinates the process.
 
-A new Customer is reported `CREATED` only after mandatory persistence/finalization succeeds.
+A new Customer is reported `CREATED` only after mandatory persistence, audit and finalization succeeds.
 
-An `ALREADY_EXISTS` result creates no second Customer.
+An existing Customer is reported successful `ALREADY_EXISTS` only after required duplicate/outcome audit and registration finalization succeeds.
 
-Permanent attachment/persistence failure cannot be converted to success.
+Permanent attachment/persistence/audit failure cannot be converted to success.
 
 Partial effects remain diagnosable/reconcilable rather than being hidden by ad-hoc destructive rollback.
 
@@ -382,7 +438,7 @@ PostgreSQL
 → canonical Customer and registration result
 
 MongoDB
-→ application interaction/audit projection
+→ required application interaction/audit projection
 ```
 
 A later Engines control-room UI may combine these views, but mk0 does not need to build that UI to prove the architecture.
@@ -401,7 +457,17 @@ Engines application PostgreSQL
 
 Never read/write Temporal internal tables as Customer business storage.
 
-## 18. Temporal gate
+## 18. Workflow replay/version compatibility
+
+Pre-Build invariant:
+
+> A deployed Workflow change must preserve deterministic replay/version compatibility for executions whose Event History was produced by an older implementation.
+
+The exact Temporal SDK language/version and SDK-specific versioning mechanism are Build-time decisions. Build must record the selected mechanism before introducing a change that would otherwise make existing histories non-replay-compatible.
+
+A Build-time mechanism is acceptable only if it preserves the invariant above; implementation choice cannot redefine the invariant.
+
+## 19. Temporal gate
 
 The design passes only when runtime tests can prove:
 
@@ -409,12 +475,16 @@ The design passes only when runtime tests can prove:
 - intent-only/partial registration can start and wait durably;
 - Query exposes missing fields/current phase;
 - Update adds Customer data to the same Workflow;
+- accepted Updates do not rewrite the initial-start fingerprint;
+- exact start replay resolves the same business-scoped Workflow/session;
+- same-business/same-key conflicting initial start is rejected without a second business effect;
 - CTA disconnect/reconnect preserves the same Workflow state;
 - required fields are driven by a versioned policy;
 - duplicate lookup is performed through a PostgreSQL Activity;
 - hard duplicate yields existing Customer with no second insert;
 - new Customer creates exactly one PostgreSQL record;
-- accepted interactions are represented in MongoDB audit according to policy;
+- applicable success-gating interactions/outcomes are represented in MongoDB audit before successful completion;
+- exhausted required-audit failure cannot produce `CREATED` or successful `ALREADY_EXISTS`;
 - Worker restart resumes the same execution;
 - Activity retry after side effect does not duplicate business state;
 - optional attachments remain retry-safe;
