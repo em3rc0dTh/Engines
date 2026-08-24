@@ -1,5 +1,23 @@
 # Brainstorming — mk0
 
+## Historical status
+
+This file preserves the early reasoning that led to mk0. It is **not the current normative contract**.
+
+Several early one-shot phase examples below predate the later durable interactive registration decision.
+
+When this file conflicts with current material, use:
+
+```text
+Design/06-mk0-closure-decisions.md
+→ current Design contracts
+→ Plan
+→ Test
+→ Golden Dataset
+```
+
+In particular, the current contract allows a structurally legal registration session to start with incomplete Customer data, wait durably in Temporal, and receive later `ProvideCustomerData` Updates. Current idempotency and mandatory-audit semantics are also defined in the Design closure package rather than by the early phase sketch below.
+
 ## Problem statement
 
 We want the smallest first slice that proves the operational spine without choosing an application framework.
@@ -21,7 +39,9 @@ The first CTA may be Postman, CLI, or a tiny test harness. The first workflow is
    AttachmentStore → optional binary/document persistence
 ```
 
-## Working sequence
+## Early working sequence — historical
+
+The following was an early simplified side-effect sequence used during brainstorming:
 
 ```text
 CTA
@@ -35,6 +55,8 @@ Temporal RegisterNewCustomer
    └→ PostgreSQL: finalize registration
 ```
 
+Current Design is more precise: a legal session may first wait for missing policy-required data, duplicate resolution may produce `ALREADY_EXISTS`, and both successful outcomes must satisfy required audit/finalization gates.
+
 ## Hypotheses to prove
 
 ### H1 — CTA is replaceable
@@ -47,7 +69,7 @@ No framework is needed to own business sequencing. Once a valid command is accep
 
 ### H3 — entry input must be controlled
 
-Structurally invalid input must be rejected before business persistence. Business/state-dependent validation can occur durably in the workflow. The split must be explicit and testable.
+Structurally invalid session/transport input must be rejected before business persistence. Customer completeness and business/state-dependent validation can occur durably in the workflow. The split must be explicit and testable.
 
 ### H4 — PostgreSQL owns Customer truth
 
@@ -63,9 +85,9 @@ Attachment bytes/documents have their own lifecycle and must not be forced into 
 
 ### H7 — retries must be designed first
 
-Client retries and Temporal Activity retries are normal. A retry after a side effect must resolve existing logical state rather than create another Customer or attachment.
+Client retries and Temporal Activity retries are normal. A retry after a side effect must resolve existing logical state rather than create another Customer, audit milestone or attachment.
 
-## Proposed workflow phases
+## Early proposed workflow phases — superseded by current Design state machine
 
 ```text
 RECEIVED
@@ -85,6 +107,8 @@ Terminal permanent failure:
 
 Workflow phases are not automatically Customer business statuses.
 
+For the current normative interactive phases, see `Design/03-temporal-workflow.md`.
+
 ## Decisions closed for mk0
 
 - Repository/version: `Engines/mk0`.
@@ -97,7 +121,7 @@ Workflow phases are not automatically Customer business statuses.
 - Attachments: separate `AttachmentStore` capability; physical technology remains open until Build.
 - Data model baseline: DataModel v3 / TimeSlots.
 - No Services, Scheduler, Integration or Agent implementation yet.
-- No production code until documentation gates close.
+- No production code until documentation gates close and Build is explicitly authorized.
 
 ## Explicit non-goals
 
