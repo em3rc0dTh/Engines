@@ -2,146 +2,116 @@
 
 ## Decision
 
-For the first stable mk0 build, use:
+For the first stable mk0 application persistence profile:
 
 ```text
+PostgreSQL
+├── Customer business data
+├── registration/idempotency state
+└── attachment/document references
+
 MongoDB
-├── customers
-├── command_receipts
-└── execution_audit
-
-SQLite (local)
-├── attachment_ingress
-└── attachments
+├── execution_audit
+├── workflow_context
+├── attachment_ingress     optional
+└── attachments            optional
 ```
 
-This is the **mk0 physical profile**.
+**SQLite is removed from mk0.**
 
-The architecture still depends on persistence contracts (`CustomerRepository`, `ExecutionAuditRepository`, `AttachmentStore`) rather than MongoDB/SQLite-specific APIs outside infrastructure.
+This profile realizes the third architecture zone using only PostgreSQL + MongoDB.
 
----
+## 1. PostgreSQL role
 
-## 1. Why MongoDB for customer + audit
+PostgreSQL is the primary business database for `RegisterNewCustomer`.
 
-The existing TimeSlots/DataModel ecosystem is document-oriented and already models Customer as a nested document with contact/document metadata.
+It preserves transactional authority for:
 
-MongoDB is therefore a natural first authority for:
+- one canonical Customer registration;
+- Customer business/contact/document fields from the approved contract;
+- registration state/version;
+- idempotency command receipt;
+- final opaque references to optional attachment/document objects.
 
-- canonical Customer documents;
-- command/idempotency receipts;
-- application audit events.
-
-These remain separate collections because they have different invariants and retention/query patterns.
-
----
-
-## 2. Why SQLite for attachments in mk0
-
-mk0 requires attachments in another **local database**.
-
-SQLite is selected because the first stable slice benefits from:
-
-- local embedded operation;
-- no separate attachment-service process;
-- transactional row state changes;
-- BLOB support;
-- deterministic metadata alongside content;
-- easy integrity checks;
-- straightforward backup/export for a small mk0 runtime;
-- a clean migration boundary behind `AttachmentStore` later.
-
-This is not a declaration that SQLite is the final production media store for every deployment scale.
-
----
-
-## 3. Two-plane attachment flow
-
-Large binary content should not be carried through Temporal Workflow history.
-
-Therefore attachment ingress has a data plane that is separate from the durable business control plane.
-
-### Control plane
+A future relational mapping may use tables such as:
 
 ```text
-Postman
-→ NestJS
-→ Temporal RegisterNewCustomer
-→ Activities
-→ Persistence
+customers
+customer_contacts
+customer_phones
+customer_documents
+registration_commands
+customer_attachment_refs
 ```
 
-### Binary data plane
+These are conceptual names only. No schema/DDL is authorized yet.
+
+## 2. MongoDB role
+
+MongoDB is the document-oriented persistence side of mk0.
+
+It preserves:
+
+- application execution audit;
+- workflow/application context documents;
+- optional attachment ingress objects;
+- optional committed attachment/document objects;
+- document integrity/lifecycle metadata.
+
+MongoDB must not become a shadow copy of the canonical PostgreSQL Customer record.
+
+## 3. Attachment data plane
+
+When attachments exist, large binary content should not be carried as normal Temporal Workflow history payloads.
+
+Conceptual flow:
 
 ```text
 Postman binary upload
-→ NestJS attachment-ingress endpoint
-→ SQLite attachment_ingress (STAGED)
-→ opaque ingressRef
+→ NestJS attachment ingress
+→ MongoDB attachment_ingress / STAGED
+→ ingressRef
+→ RegisterNewCustomer command
+→ Temporal
+→ commitAttachment Activity
+→ MongoDB attachment / COMMITTED
+→ attachmentId + hash
+→ PostgreSQL customer_attachment_ref
 ```
 
-The registration command then contains only `ingressRef` values.
+The staging write is technical ingress persistence only. It does not finalize a Customer attachment.
 
-Temporal Activities convert those staged rows into committed attachments.
+## 4. PostgreSQL registration identity
 
-This does not make NestJS the business orchestrator. NestJS only accepts/stages transport data; it cannot mark an attachment as a committed Customer attachment.
-
----
-
-## 4. MongoDB logical collections
-
-### `customers`
-
-Authority: Customer business state.
-
-Conceptual technical metadata in addition to canonical model fields:
-
-```text
-registration
-  workflowId
-  commandFingerprint
-  schemaVersion
-
-attachments[]
-  attachmentId
-  kind
-  displayName
-  mediaType
-  byteLength
-  sha256
-  committedAt
-```
-
-No attachment bytes.
-
-### `command_receipts`
-
-Authority: API/business-command idempotency receipt.
-
-Conceptual shape:
+The authoritative idempotency relation conceptually contains:
 
 ```text
 operation
-businessSlug
-idempotencyKeyHash
-commandFingerprint
-workflowId
-customerId?
+business_slug
+idempotency_key_hash
+command_fingerprint
+workflow_id
+customer_id
 status
-createdAt
-updatedAt
+created_at
+updated_at
 ```
 
-Unique logical key:
+Logical unique key:
 
 ```text
-(operation, businessSlug, idempotencyKeyHash)
+(operation, business_slug, idempotency_key_hash)
 ```
 
-### `execution_audit`
+This identity must remain stable across client and Temporal Activity retries.
 
-Authority: application-level audit projection.
+## 5. MongoDB audit profile
 
-Conceptual shape:
+Conceptual collection:
+
+`execution_audit`
+
+Event identity and correlation fields include:
 
 ```text
 eventId
@@ -158,166 +128,87 @@ metadata
 failure?
 ```
 
----
+The collection is optimized for execution/audit queries. It is not Customer truth and does not replace Temporal Event History.
 
-## 5. SQLite `attachment_ingress`
+## 6. MongoDB attachment/document profile
 
-Purpose: short-lived staged binary objects accepted at the HTTP edge.
+Exact MongoDB binary implementation remains a Build-time decision. Design requires the capability to support:
 
-Conceptual columns:
+- STAGED ingress;
+- opaque ingress identity;
+- server-computed integrity metadata;
+- COMMITTED attachment/document identity;
+- idempotent retry;
+- content retrieval/streaming;
+- TTL/expiration for unclaimed staged objects;
+- orphan/reconciliation discovery.
+
+Possible physical choices such as GridFS must be evaluated later and are not frozen by this document.
+
+## 7. PostgreSQL attachment reference profile
+
+The canonical business record persists only a safe reference such as:
 
 ```text
-ingress_id            opaque ID, primary key
-state                 STAGED | CLAIMED | COMMITTED | EXPIRED | FAILED
-sha256                expected/staged content hash
-byte_length
+customer_id
+attachment_id
+kind
+display_name
 media_type
-original_file_name
-content_blob
-created_at
-expires_at
-claimed_by_workflow_id nullable
-committed_attachment_id nullable
-```
-
-### Invariants
-
-- an ingress row starts `STAGED`;
-- `ingress_id` is opaque;
-- hash is computed by the server, not trusted from caller alone;
-- expired ingress cannot be newly claimed;
-- one ingress object can be claimed by at most the intended registration semantics;
-- transition to `COMMITTED` records the resulting stable attachment ID.
-
----
-
-## 6. SQLite `attachments`
-
-Purpose: canonical local committed attachment content.
-
-Conceptual columns:
-
-```text
-attachment_id         opaque ID, primary key
+byte_length
 sha256
-byte_length
-media_type
-original_file_name
-content_blob
-storage_state         COMMITTED | CORRUPT | ORPHAN_CANDIDATE | DELETED
-created_at
-verified_at
+committed_at
 ```
 
-Optional later metadata may include encryption/key/version fields, but mk0 must not invent security metadata it does not actually enforce.
+This keeps business relation/integrity facts in PostgreSQL while the document object remains in MongoDB.
 
-### Invariants
+## 8. Cross-store crash windows
 
-- `COMMITTED` means content exists and hash verification passed;
-- attachment ID is stable across Activity retry;
-- public API never exposes the SQLite database path;
-- Customer stores only the opaque ID + integrity/display metadata;
-- an attachment that has been committed but not linked due to downstream failure remains discoverable.
+### PostgreSQL Customer persisted; Activity acknowledgement lost
 
----
+Retry resolves the existing Customer via registration identity.
 
-## 7. Attachment commit algorithm — semantic contract
+### MongoDB attachment committed; Activity acknowledgement lost
+
+Retry resolves the existing logical attachment via ingress/commit identity.
+
+### MongoDB attachment committed; PostgreSQL reference missing
+
+Temporal retries the PostgreSQL link using the existing opaque attachment ID.
+
+### PostgreSQL reference exists; final workflow acknowledgement lost
+
+Finalization is idempotent and returns the existing successful state when all preconditions are already satisfied.
+
+### MongoDB audit temporarily unavailable
+
+Retry behavior follows the explicit mandatory/diagnostic audit policy. Required milestones cannot silently disappear.
+
+## 9. Temporal infrastructure isolation
+
+A Temporal server may independently use PostgreSQL for its own persistence.
+
+The topology must distinguish:
 
 ```text
-1. Activity receives workflowId + customerId + ingressRef.
-2. Load staged ingress row.
-3. Validate not expired and allowed state.
-4. Verify stored content hash/length.
-5. Determine stable attachment identity.
-6. If already committed for this ingress, return existing attachment metadata.
-7. Otherwise commit attachment row transactionally in SQLite.
-8. Mark ingress row COMMITTED with attachment ID.
-9. Return attachment metadata to Workflow.
-10. Workflow invokes Mongo link Activity.
+postgres/application
+  Customer + registration authority
+
+postgres/temporal-internal
+  Temporal cluster metadata/history persistence
 ```
 
-No code is authorized yet; this sequence is the contract future code must satisfy.
+Separate logical schemas/databases/credentials are required by architecture even if both live on the same PostgreSQL instance during local development.
 
----
-
-## 8. Crash windows
-
-### Crash after ingress stage
-
-No workflow/customer yet.
-
-Recovery:
-
-- TTL cleanup later.
-
-### Crash after workflow start but before attachment claim
-
-Recovery:
-
-- Temporal resumes;
-- staged ingress still available.
-
-### Crash after attachment row commit but before Activity result recorded
-
-Recovery:
-
-- retry sees ingress already mapped to committed attachment ID;
-- returns same attachment;
-- no duplicate logical content created by retry.
-
-### Crash after attachment commit but before Mongo reference
-
-Recovery:
-
-- Temporal retries Mongo link;
-- committed attachment is not lost;
-- orphan reconciliation can detect if workflow becomes terminally failed.
-
-### Crash after Mongo link but before final Workflow completion
-
-Recovery:
-
-- finalization is idempotent;
-- existing attachment reference remains single.
-
----
-
-## 9. SQLite is not customer authority
-
-Do not put Customer data into `attachments.db` merely because it is convenient.
-
-Allowed linkage data is minimal:
-
-- workflow ID;
-- ingress ID;
-- attachment ID;
-- technical integrity metadata.
-
-Customer name, phone, document data, notes, business metrics, etc. remain in MongoDB.
-
----
-
-## 10. Future migration rule
-
-A future deployment may replace SQLite content storage with object storage or another database.
-
-The migration is acceptable only if:
-
-```text
-AttachmentStore contract remains stable
-opaque attachment IDs remain resolvable/migratable
-Customer documents do not need API-contract changes
-Workflow semantics do not depend on SQLite-specific SQL behavior
-```
-
----
-
-## 11. Decision status
+## 10. Decision status
 
 **FROZEN FOR mk0 DESIGN**
 
-- MongoDB: business + idempotency + audit collections.
-- SQLite: local staged + committed attachment BLOB storage.
-- abstraction boundary remains mandatory.
+- CTA: Postman through NestJS.
+- Orchestration: Temporal.
+- Business persistence: PostgreSQL.
+- Audit/context/documents: MongoDB.
+- SQLite: removed.
+- Services/Scheduler/Integration/Agent: outside first mk0 slice.
 
-Exact Node libraries, SQLite driver, Mongo driver/ODM, migrations, limits, and connection configuration are Build decisions and are not selected here.
+Exact libraries, drivers/ORM/ODM, MongoDB attachment mechanism, migrations, database names, credentials, limits and deployment configuration are Build decisions and are not selected yet.
