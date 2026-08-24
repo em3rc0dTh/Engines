@@ -9,7 +9,7 @@ The target architecture is:
 ```text
 ┌────────────────────────────────────────────────────────────┐
 │ INPUT / CTA CHANNELS                                       │
-│ Postman / CLI / Form / MCP / WhatsApp / Telegram / API /… │
+│ Postman / CLI / Form / WhatsApp / Telegram / API / Web /… │
 └───────────────────────┬────────────────────────────────────┘
                         │ source-specific input
                         ▼
@@ -40,7 +40,7 @@ The target architecture is:
                         ▼
 ┌────────────────────────────────────────────────────────────┐
 │ OUTPUT / NOTIFICATION ADAPTERS                             │
-│ Postman / CLI / Form / MCP / WhatsApp / Telegram / API /… │
+│ Postman / CLI / Form / WhatsApp / Telegram / API / Web /… │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -121,7 +121,6 @@ Examples:
 ```text
 canonical result → JSON for Postman/API
 canonical result → terminal output for CLI
-canonical result → structured MCP response
 canonical notification → WhatsApp
 canonical notification → Telegram
 canonical state → website/form UI
