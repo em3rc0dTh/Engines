@@ -2,261 +2,260 @@
 
 ## Purpose
 
-mk0 is the first architecture baseline of `Engines`.
+mk0 is the **first laboratory proof** of `Engines`, not the final scope of the Orchestration Engine.
 
-It exists to prove one continuous operational chain before choosing a web framework, UI, Agent, Services Engine or Scheduler.
+The long-term goal is a reusable orchestration core capable of receiving operations from many channels, routing them to many business Workflows, coordinating the required systems and databases, and returning/notifying outcomes through the appropriate channel.
 
-## Scope lock — first three architecture zones only
+`RegisterNewCustomer` is only the first specimen used to prove that architectural spine.
+
+## Target Engines shape
 
 ```text
-1. CTA / OMNICHANNEL ENTRY
-   Postman / CLI now
-   Form / MCP / WhatsApp / Telegram / API / Webhook later
-                 ↓
-             CTA Adapter
-                 ↓ canonical command
-
-2. ORCHESTRATION ENGINE
-   Full Temporal platform
-                 ↓
-          RegisterNewCustomer
-                 ↓
-   Workflows / Activities / Workers / Task Queues
-   retries / recovery / Queries / Signals / Updates
-   visibility / durable Event History
-
-3. PERSISTENCE / STORAGE
-   PostgreSQL
-   MongoDB
-   AttachmentStore when attachments exist
+INPUT CHANNELS
+Postman / CLI / Form / MCP / WhatsApp / Telegram / Web / Mobile / API / Webhook / ...
+                         ↓
+                 CHANNEL / CTA ADAPTER
+                         ↓
+                 canonical operation
+                         ↓
+┌──────────────────────────────────────────────────────┐
+│ ORCHESTRATION ENGINE — TEMPORAL                    │
+│                                                      │
+│ Workflow Router                                      │
+│ Workflow Library                                     │
+│ Orchestration Coordinator                            │
+│ Workflow state / Event History                       │
+│ Task Queues / Workers / Activities                   │
+│ Queries / Updates / Signals                          │
+│ retries / timeouts / recovery / visibility           │
+└───────────────────────┬──────────────────────────────┘
+                        ↓
+               ACTIVITIES / PORTS
+       ┌────────────────┼──────────────────┐
+       ↓                ↓                  ↓
+   PostgreSQL        MongoDB         AttachmentStore
+   business truth    audit/context   binary/documents
+       │                │                  │
+       └────────────────┼──────────────────┘
+                        ↓
+              OUTBOUND / NOTIFICATION PORTS
+                        ↓
+Postman / CLI / Form / MCP / WhatsApp / Telegram / Web / Mobile / API / ...
 ```
 
-Canonical path:
+The channel is replaceable. The Workflow is reusable. Temporal remains the durable orchestration authority.
+
+## mk0 proof slice
+
+mk0 deliberately tests only a small subset of the target architecture:
 
 ```text
-CTA channel
-    ↓
+INPUT
+Postman / CLI
+      ↓
 CTA Adapter
-    ↓ RegisterNewCustomer command
-Temporal Orchestration Engine
-    ↓ Activities / persistence ports
-    ├── PostgreSQL: Customer + registration/idempotency truth
-    ├── MongoDB: execution/audit/workflow context
-    └── AttachmentStore: binary/document objects when present
+      ↓
+TEMPORAL
+RegisterNewCustomer
+      ↓
+PostgreSQL + MongoDB + optional AttachmentStore
+      ↓
+RESULT / STATUS
+Postman / CLI
 ```
 
-There is **no mandatory application framework in mk0**.
+Passing mk0 does **not** mean Engines is finished. It means the first reusable orchestration pattern is physically proven.
 
-## CTA Adapter — the stable entry boundary
+## What mk0 must teach us
 
-The diagram's `CTA Adapter` is important. It prevents every channel from understanding Temporal internals or creating a different business path.
-
-The adapter contract must:
-
-- receive channel-specific input;
-- authenticate/identify the caller when that capability exists;
-- validate structural input;
-- normalize channel payload into one canonical command;
-- assign/propagate correlation identity;
-- require/derive explicit idempotency identity;
-- stage or reference attachments safely when present;
-- submit the canonical command to the Temporal Orchestration Engine;
-- return a durable workflow identity/status projection to the caller.
-
-It must not:
-
-- write PostgreSQL or MongoDB directly;
-- execute Customer registration steps;
-- implement durable retries;
-- become Customer truth;
-- bypass Temporal.
-
-### First CTA
-
-For mk0 the sender can be Postman or CLI.
-
-A CLI can use the official Temporal client/SDK directly behind the CTA Adapter contract.
-
-If Postman is used, a transport adapter is required so Postman sends the **business command**, not Temporal-internal protocol/payload details. That adapter may be extremely thin and framework-free; it is still only transport.
-
-Later the exact same canonical command can be produced by:
+The first experiment must answer whether the same orchestration model can later support workflows such as:
 
 ```text
-Form
-MCP
-WhatsApp
-Telegram
-Web Chat
-Mobile App
-Voice / IVR
-API / Webhook
-Email
-Future channel
+RegisterNewCustomer
+CreateAppointment
+RescheduleAppointment
+CancelAppointment
+OpenCase
+RegisterManagedEntity
+CreateAssessment
+CreateQuote
+ApproveQuote
+CreateWorkOrder
+NotifyCustomer
+...future workflows
 ```
 
-## What “continuous connection” means in mk0
+without rebuilding channel-specific business logic for every source.
 
-mk0 must prove continuous **durable execution**, not dependence on a permanently open client socket:
+## CTA / Channel Adapter
+
+The adapter is the stable boundary around external channels.
+
+### Inbound responsibility
+
+- receive source-specific input;
+- identify source/channel and correlation context;
+- validate transport structure;
+- normalize into a canonical operation/message;
+- start, query or update the appropriate Temporal Workflow;
+- stage/reference attachments safely when required.
+
+### Outbound responsibility
+
+- render a canonical Workflow result for the caller;
+- deliver a requested notification/result through the appropriate channel adapter;
+- preserve correlation to the originating interaction where required;
+- never invent business truth or Workflow state.
+
+Examples:
 
 ```text
-CTA submits valid command
-→ Temporal durably accepts workflow
-→ CTA may disconnect
-→ Temporal continues through Workers/Activities
-→ persistence effects complete
-→ CTA reconnects or another channel queries status
-→ same workflow/result is returned
+Temporal result → Postman JSON
+Temporal result → CLI terminal output
+Temporal result → website/API response
+Temporal notification → WhatsApp message
+Temporal notification → Telegram message
+Temporal result → MCP structured response
 ```
 
-Temporal's durable execution is the continuity mechanism. Official Temporal documentation describes the platform as resuming applications after crashes, network failures and infrastructure outages. The architecture must use that potency rather than emulate it with a local state machine.
+The source channel and output channel can be the same, but the architecture must not require that permanently. A Workflow may later receive from one source and notify another approved destination.
 
-## Orchestration Engine — full Temporal authority
+## Orchestration Engine — Temporal authority
 
-`Temporal` in mk0 means the real Temporal orchestration platform, not a lightweight imitation.
+`Temporal` in Engines means the real Temporal platform, not an in-process imitation.
 
-The Orchestration Engine owns:
+Temporal owns:
 
 - Workflow identity and durable Event History;
-- Workflow Library;
+- Workflow Router execution boundary;
+- Workflow Library execution;
 - Task Queues;
 - Workers;
 - Activities;
 - retries/backoff/timeouts;
 - restart/crash recovery;
-- Queries for read-only workflow state;
-- Signals/Updates when a workflow later needs external interaction;
-- cancellation/compensation policy when explicitly designed;
+- Queries;
+- Updates and Signals;
+- timers and durable waiting when required;
+- cancellation/compensation when designed;
 - workflow versioning/replay compatibility;
-- visibility/operational execution state.
+- visibility and execution state.
 
-Not every Temporal feature must be exercised by `RegisterNewCustomer`, but mk0 must be built **inside the full platform model** so later workflows do not require an architectural rewrite.
+Temporal does **not** directly become a database driver or WhatsApp/Telegram SDK. Side effects are executed through Activities and explicit ports/adapters.
 
-### mk0 workflow state machine
+## General reusable Workflow pattern
 
-```text
-ACCEPTED
-→ VALIDATING_COMMAND
-→ RESERVING_IDEMPOTENCY
-→ PERSISTING_CUSTOMER_BASE
-→ PERSISTING_ATTACHMENTS      optional
-→ LINKING_ATTACHMENTS         optional
-→ PERSISTING_AUDIT_CONTEXT
-→ FINALIZING_CUSTOMER
-→ COMPLETED
-```
-
-Workflow code coordinates. Database/network/file side effects occur through Activities/adapters.
-
-## Persistence
-
-### PostgreSQL — canonical Customer authority
-
-PostgreSQL answers:
-
-> What Customer was registered, under which registration command, and what is the authoritative transactional state?
-
-It owns conceptually:
-
-- Customer identity;
-- Customer fields projected from the approved TimeSlots data model;
-- normalized contact/document data required by the contract;
-- registration state/version;
-- idempotency receipt;
-- opaque attachment references when attachments exist.
-
-### MongoDB — execution/audit/context authority
-
-MongoDB answers:
-
-> What application execution evidence and workflow context must be retained around this registration?
-
-It owns conceptually:
-
-- `execution_audit` events;
-- workflow/application context documents;
-- sanitized failure classifications.
-
-MongoDB is not a shadow Customer database and does not replace Temporal Event History.
-
-### AttachmentStore — separate capability
-
-Attachments are optional and remain separate from canonical Customer relational data and routine audit/context data.
+The first experiment is intentionally designed to exercise a pattern that later Workflows can reuse:
 
 ```text
-binary/document object
-→ AttachmentStore
-→ opaque attachmentId + integrity metadata
-→ PostgreSQL Customer/registration reference
+RECEIVE OPERATION
+      ↓
+LOAD VERSIONED WORKFLOW/POLICY
+      ↓
+DO WE HAVE REQUIRED INPUT?
+  ├── no → WAIT / REQUEST DATA
+  │          ↑        ↓
+  │       Update ← external input
+  └── yes
+      ↓
+READ REQUIRED BUSINESS STATE
+      ↓
+APPLY RULES
+      ↓
+EXECUTE SIDE EFFECTS THROUGH ACTIVITIES
+      ↓
+VERIFY / PERSIST / AUDIT
+      ↓
+PRODUCE CANONICAL RESULT
+      ↓
+RETURN / NOTIFY THROUGH OUTPUT ADAPTER
 ```
 
-The physical technology is intentionally open. The target architecture diagram points toward object storage such as MinIO/S3; mk0 may also evaluate another database/storage mechanism appropriate for local proof, provided the contract remains stable.
+Not every Workflow will use every step. The important goal is that the orchestration core can support them without moving durable process authority into CTA code.
 
-Large binaries must not be treated as ordinary Temporal Workflow history payloads.
+## First Workflow — RegisterNewCustomer
 
-## First workflow — RegisterNewCustomer
+The first laboratory Workflow starts from a registration intent, can wait for missing Customer data, applies a versioned registration/duplicate policy, reads existing Customer truth through an Activity, persists a new Customer only when allowed, records application audit/context, and exposes the live/final result.
 
-The Workflow receives the canonical command and orchestrates the inputs required to persist a Customer following `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
+The Customer semantics follow `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
 
-At minimum the semantic model recognizes:
+`RegisterNewCustomer` is **not** the permanent definition of Engines.
+
+## Persistence authority
+
+### PostgreSQL
+
+Canonical transactional/business truth for the relevant domain entities and workflow effects.
+
+For the first Workflow:
+
+- Customer;
+- contacts/documents as approved by model;
+- registration/session identity;
+- duplicate/creation outcome required by business truth;
+- attachment references.
+
+### MongoDB
+
+Flexible application interaction/audit/context evidence:
+
+- accepted interactions;
+- requested information;
+- state/milestone projections;
+- safe execution context;
+- failures/classifications.
+
+MongoDB is not a replacement for Temporal Event History or PostgreSQL business truth.
+
+### AttachmentStore
+
+Separate binary/document persistence capability. Physical implementation remains open until Build.
+
+## Observability laboratory
+
+During mk0 we want to observe the architecture from all relevant planes:
 
 ```text
-Customer
-├── businessSlug
-├── type
-├── name
-├── document            optional
-├── contact
-│   ├── phones[]
-│   └── email
-├── whatsapp            model-supported / optional
-├── metrics             business-derived only
-├── notes               optional
-├── status
-├── createdAt
-└── updatedAt
+Postman / CLI
+→ what was sent and what result was returned
+
+Temporal Web UI / CLI
+→ Workflow, phase, Event History, Workers, Task Queue, Activities, retries
+
+PostgreSQL
+→ final canonical business data
+
+MongoDB
+→ application interaction/audit/context evidence
+
+AttachmentStore
+→ binary/document evidence when applicable
 ```
 
-mk0 must not invent unknown Customer facts just to fill the model.
-
-## TimeSlots boundary preserved
-
-```text
-Appointment = customer-facing scheduling record
-ResourceReservation = real operational capacity lock
-```
-
-`RegisterNewCustomer` creates neither and mutates no availability state.
+Later a dedicated Engines control plane may combine these views, but mk0 does not need one to prove the architecture.
 
 ## Core invariants
 
-1. Every channel enters through the same CTA Adapter contract.
-2. Invalid structural input creates no workflow/business side effect.
-3. CTA/adapter writes no business persistence directly.
-4. The full Temporal platform owns durable orchestration.
-5. Workflow code performs no direct persistence/network/file side effects.
-6. Activities/adapters are retry-safe and idempotent.
-7. PostgreSQL is canonical Customer + registration/idempotency truth.
-8. MongoDB is execution/audit/context authority, not Customer authority.
-9. Attachments use a separate persistence contract.
-10. Same key + same material command yields one registration outcome.
-11. Same key + different material command is rejected.
-12. A requested mandatory attachment cannot be skipped while reporting success.
-13. Failure remains observable; no silent fallback converts failure into success.
-14. PII/secrets are not copied indiscriminately into audit/context logs.
-15. RegisterNewCustomer creates zero scheduling side effects.
-16. Future channels reuse this contract instead of creating alternate business paths.
+1. External channels are replaceable adapters.
+2. All durable business orchestration belongs to Temporal.
+3. Workflow definitions are channel-independent.
+4. Workflow code performs no direct network/database/file side effects.
+5. Side effects happen through retry-safe Activities and ports/adapters.
+6. PostgreSQL/MongoDB/AttachmentStore have explicit authority boundaries.
+7. Workflow state is observable independently from the originating channel.
+8. A channel may disconnect without destroying an accepted Workflow.
+9. Outbound responses/notifications reuse channel adapters rather than embedding channel SDK logic in Workflow code.
+10. `RegisterNewCustomer` is the first proof workflow, not the final workflow catalog.
+11. Future workflows must be addable without redesigning the CTA → Temporal → Activities architecture.
 
 ## Non-goals for mk0
 
-- NestJS or another web framework;
-- frontend;
-- Agent reasoning;
-- Services Engine;
-- Scheduler Engine;
-- Integration Engine implementation;
-- appointment booking;
-- service execution;
-- production authentication architecture.
+- finishing the complete Engines Workflow Library;
+- implementing every CTA channel;
+- implementing an Agent/Hermes;
+- implementing all business engines at once;
+- selecting a permanent web framework;
+- building the final control-room UI.
 
 ## Gate order
 
