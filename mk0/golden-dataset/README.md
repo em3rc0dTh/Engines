@@ -6,177 +6,110 @@
 
 ## Purpose
 
-The golden dataset freezes expected behavior **before implementation**.
+The golden dataset freezes expected behavior **before implementation** for:
 
-Each case defines:
+```text
+Postman → NestJS → Temporal → PostgreSQL + MongoDB
+```
 
-- command intent;
-- relevant headers;
-- input data;
-- injected environment/failure condition when applicable;
-- expected HTTP acceptance behavior;
-- expected Temporal outcome;
-- expected MongoDB Customer effect;
-- expected MongoDB audit effect;
-- expected local attachment-store effect;
+Each case defines the expected:
+
+- HTTP/CTA behavior;
+- Temporal outcome;
+- PostgreSQL Customer/registration effect;
+- MongoDB audit/context effect;
+- optional MongoDB attachment/document effect;
+- PostgreSQL attachment-reference effect;
 - scheduling non-effect.
-
-Implementation is wrong when it disagrees with an approved golden case unless Design and Golden Dataset are intentionally revised first.
-
----
 
 ## Case inventory
 
-### GD-001 — Minimal valid customer
-
-Input:
-
-- businessSlug;
-- person name;
-- one email;
-- no document;
-- no attachments.
+### GD-001 — Minimal valid Customer
 
 Expected:
 
 - 202 accepted;
 - workflow completes;
-- exactly one customer;
+- exactly one PostgreSQL Customer;
+- MongoDB audit milestones exist;
 - zero attachment references;
-- audit milestones present;
-- zero Appointment/ResourceReservation side effects.
+- zero scheduling side effects.
 
-### GD-002 — Full customer
+### GD-002 — Full Customer
 
-Input includes:
-
-- document;
-- phone;
-- email;
-- notes.
-
-Expected canonical persisted normalization without inventing missing data.
+Document/contact/notes are persisted according to the approved PostgreSQL business projection without inventing missing facts.
 
 ### GD-003 — One attachment
 
-One valid staged `identity_document`.
-
 Expected:
 
-- one committed local attachment;
-- one MongoDB customer attachment reference;
-- matching SHA-256;
-- no binary embedded in Customer.
+- one committed MongoDB attachment/document;
+- one PostgreSQL Customer attachment reference;
+- matching integrity metadata;
+- no attachment binary in PostgreSQL Customer storage.
 
 ### GD-004 — Multiple attachments
 
 Expected:
 
-- every requested attachment committed;
-- every committed attachment referenced once;
-- customer finalized only after all required links exist.
+- every requested attachment commits once logically;
+- every committed attachment is referenced once in PostgreSQL;
+- Customer finalization occurs only after all mandatory effects.
 
 ### GD-005 — Exact idempotent replay
 
-Run GD-001 twice with same `Idempotency-Key` and identical material command.
+Same `Idempotency-Key` + same material command.
 
-Expected:
+Expected one logical workflow/Customer outcome and no duplicate attachments.
 
-- same logical workflow/outcome;
-- one customer only;
-- no duplicate logical audit milestones caused solely by the replay;
-- no duplicate attachment side effects.
+### GD-006 — Idempotency conflict
 
-### GD-006 — Idempotency key conflict
+Same key + changed material command.
 
-Same key, changed material command.
-
-Expected:
-
-- 409 conflict;
-- no second customer;
-- no second workflow side effect for changed command.
+Expected 409 and no second Customer/business side effect.
 
 ### GD-007 — Invalid request
 
-Missing customer name.
+Expected API-edge rejection with no Temporal workflow and no persistence side effects.
 
-Expected:
+### GD-008 — Transient PostgreSQL Customer-write failure
 
-- rejected at API edge;
-- no workflow start;
-- no Customer write;
-- no committed attachment.
+Expected Temporal retry/recovery and exactly one Customer after PostgreSQL recovers.
 
-### GD-008 — Transient Mongo customer-write failure
+### GD-009 — Transient MongoDB attachment failure
 
-Injected temporary failure before successful Customer Activity completion.
+Expected retry/recovery, no early Customer finalization and one committed logical attachment after recovery.
 
-Expected:
+### GD-010 — Permanent attachment integrity mismatch
 
-- workflow retries;
-- completes after recovery;
-- exactly one customer.
+Expected typed workflow failure and no false successful Customer finalization.
 
-### GD-009 — Transient local attachment-store failure
+### GD-011 — Temporal worker restart
 
-Expected:
-
-- workflow retries attachment commit;
-- customer not finalized during failure;
-- completes after store recovers;
-- one committed attachment.
-
-### GD-010 — Permanent attachment hash mismatch
-
-Expected:
-
-- typed permanent workflow failure;
-- no false ACTIVE/success outcome;
-- mismatched attachment not linked as valid;
-- terminal audit failure event.
-
-### GD-011 — Worker restart
-
-Restart the Temporal worker after Customer base persistence and before finalization.
-
-Expected:
-
-- workflow resumes;
-- one customer;
-- correct completion;
-- no lost accepted command.
+Expected workflow resume, exactly one Customer and no lost accepted command.
 
 ### GD-012 — Scheduling isolation
 
-Execute successful registration and explicitly inspect scheduling persistence.
-
 Expected:
 
-- Appointment count delta = 0;
-- ResourceReservation count delta = 0;
+- Appointment delta = 0;
+- ResourceReservation delta = 0;
 - AvailabilitySlot mutation delta = 0.
-
----
 
 ## Data rules
 
-Golden fixtures use synthetic people and identifiers only.
+Use synthetic people/identifiers only. Do not place real Customer PII in the dataset.
 
-Do not place real customer PII in this dataset.
-
-Attachment fixtures, when later added, should be tiny synthetic files with fixed SHA-256 hashes.
-
----
+Attachment fixtures, when added, should be tiny synthetic objects with fixed hashes.
 
 ## Approval rule
 
 `v0` is approved when:
 
-- every case has a machine-readable fixture;
-- expected outcomes are reviewed;
-- unresolved fields are removed or explicitly marked;
-- Design documents and case expectations agree;
-- no implementation output was used as the sole reason for expected behavior.
+- every case is machine-readable;
+- expected PostgreSQL/MongoDB effects are explicit;
+- unresolved fixture hashes are frozen or explicitly marked;
+- Design and Golden Dataset agree;
+- expected behavior was not reverse-engineered solely from implementation output.
 
-The companion machine-readable manifest is `register-new-customer-v0.json`.
+The companion manifest is `register-new-customer-v0.json`.
