@@ -33,7 +33,7 @@ Pass when this is unambiguous:
 
 ```text
 Postman / CLI now
-Form / MCP / WhatsApp / Telegram / API later
+Form / WhatsApp / Telegram / API later
         ↓
 CTA Adapter
         ↓
