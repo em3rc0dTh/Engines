@@ -5,8 +5,9 @@
 Certify the first three architecture zones without selecting an application framework:
 
 ```text
-CTA / controlled input
-→ Temporal orchestration
+CTA channel
+→ CTA Adapter
+→ full Temporal Orchestration Engine
 → PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
@@ -17,8 +18,9 @@ No coding is authorized yet.
 Deliverables:
 
 - TimeSlots/DataModel Customer source frozen;
-- Temporal Workflow/Activity constraints frozen;
-- project decision frozen: no required framework in mk0;
+- Temporal durable execution / Workflow / Activity / Worker / Task Queue constraints frozen;
+- project decision frozen: no required web framework in mk0;
+- project decision frozen: omnichannel CTA Adapter boundary;
 - persistence authority frozen: PostgreSQL Customer truth + MongoDB audit/context;
 - attachment persistence kept as a separate technology-neutral capability.
 
@@ -27,15 +29,21 @@ Deliverables:
 Pass when this is unambiguous:
 
 ```text
-Postman | CLI | minimal harness
-→ Temporal RegisterNewCustomer
-→ PostgreSQL + MongoDB + optional AttachmentStore
+Postman / CLI now
+Form / MCP / WhatsApp / Telegram / API later
+        ↓
+CTA Adapter
+        ↓
+Full Temporal RegisterNewCustomer orchestration
+        ↓
+PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
 Authorities:
 
-- CTA = controlled command entry and observation;
-- Temporal = durable sequencing/retry/restart authority;
+- CTA channel = raw external input/output;
+- CTA Adapter = structural validation + canonical command mapping + Temporal start/query boundary;
+- Temporal = durable sequencing, Event History, retries, Task Queues/Workers and recovery;
 - PostgreSQL = canonical Customer + registration/idempotency truth;
 - MongoDB = execution/audit/workflow context;
 - AttachmentStore = optional binary/document authority.
@@ -44,33 +52,41 @@ Authorities:
 
 Deliverables:
 
-- framework-agnostic command envelope;
+- framework-agnostic canonical command envelope;
 - required/optional TimeSlots Customer fields;
 - pre-start structural validation;
 - normalization;
 - idempotency/fingerprint semantics;
-- Temporal start acceptance projection;
-- workflow status/result query projection;
+- channel metadata policy;
+- Temporal Workflow start acceptance projection;
+- Workflow Query/status/result projection;
 - typed failure taxonomy;
 - optional attachment ingress/reference contract.
 
-Pass when both a CLI test client and a Postman-compatible adapter could be produced from documentation without changing business semantics.
+Pass when a CLI CTA Adapter and a Postman-compatible CTA Adapter can both be produced from documentation without changing business semantics.
 
-## M3 — Temporal workflow lock
+## M3 — Temporal orchestration lock
 
 Deliverables:
 
-- workflow type/ID;
-- workflow phases;
+- Temporal Service topology assumptions;
+- Workflow type/ID;
+- Task Queue/Worker responsibility;
+- Workflow phases;
 - PostgreSQL Activities;
 - MongoDB Activities;
 - AttachmentStore Activities when needed;
-- retry taxonomy;
+- retry/backoff/timeout taxonomy;
 - idempotent side-effect rules;
-- worker restart behavior;
+- Worker restart behavior;
+- CTA disconnect/reconnect behavior;
 - cross-store consistency;
-- query/status projection;
-- workflow versioning.
+- Query/status projection;
+- Signals/Updates reserved interaction contract;
+- Workflow versioning/replay strategy;
+- visibility/operational evidence requirements.
+
+Pass when the design uses real Temporal semantics instead of recreating orchestration in the CTA or database layer.
 
 ## M4 — Persistence contract lock
 
@@ -101,14 +117,15 @@ Deliverables:
 Must cover:
 
 - command/normalization tests;
-- CTA pre-start validation tests;
-- Temporal workflow tests;
+- CTA Adapter pre-start validation tests;
+- Temporal Workflow tests;
+- Task Queue/Worker execution proof;
 - PostgreSQL integration tests;
 - MongoDB integration tests;
 - AttachmentStore integration tests when enabled;
 - cross-store retry/failure tests;
 - CTA disconnect/reconnect observation;
-- Temporal worker restart;
+- Temporal Worker restart;
 - Golden Dataset mapping.
 
 ## M6 — Golden Dataset v0
@@ -121,13 +138,14 @@ Minimum cases:
 - GD-004 multiple attachments;
 - GD-005 exact idempotent replay;
 - GD-006 idempotency conflict;
-- GD-007 invalid structural input/no workflow;
+- GD-007 invalid structural input/no Workflow;
 - GD-008 transient PostgreSQL failure/recovery;
 - GD-009 transient attachment persistence failure/recovery;
 - GD-010 permanent attachment integrity mismatch;
-- GD-011 Temporal worker restart;
+- GD-011 Temporal Worker restart;
 - GD-012 zero scheduling side effects;
-- GD-013 CTA disconnect after workflow acceptance then reconnect/query same outcome.
+- GD-013 CTA disconnect after Workflow acceptance then reconnect/query same outcome;
+- GD-014 prove the path uses a real Temporal Service + Task Queue + Worker, not an in-process fake orchestrator.
 
 ## BUILD AUTHORIZATION GATE
 
@@ -137,26 +155,28 @@ Future first build sequence:
 
 ```text
 B0  runtime/repository skeleton with no web framework
-B1  framework-free command contract + validation library
-B2  minimal CTA client/harness (CLI first is acceptable)
-B3  Temporal client + worker
-B4  PostgreSQL Customer + registration/idempotency persistence
-B5  MongoDB execution/audit/context persistence
-B6  AttachmentStore implementation selected only if attachment cases are enabled
-B7  RegisterNewCustomer Workflow + Activities
-B8  optional Postman-compatible thin adapter, only if useful for test ergonomics
-B9  full end-to-end runtime verification
-B10 failure/retry/restart/CTA reconnect certification
-B11 mk0 stable candidate
+B1  canonical RegisterNewCustomer command + validation contract
+B2  full Temporal local/runtime topology
+B3  first CTA Adapter implementation (CLI is acceptable for core proof)
+B4  Temporal Worker + Task Queue + RegisterNewCustomer Workflow shell
+B5  PostgreSQL Customer + registration/idempotency persistence Activities
+B6  MongoDB execution/audit/context Activities
+B7  AttachmentStore implementation if attachment cases are enabled
+B8  complete RegisterNewCustomer orchestration
+B9  Postman-compatible CTA Adapter for channel proof
+B10 end-to-end runtime verification
+B11 failure/retry/Worker-restart/CTA-reconnect certification
+B12 mk0 stable candidate
 ```
 
-A framework is not a prerequisite for B0–B11.
+No web framework is a prerequisite for B0–B12.
 
 ## mk0 stable definition
 
 ```text
-controlled CTA command
-→ Temporal durable workflow
+Postman or CLI CTA
+→ CTA Adapter
+→ real Temporal Service / Workflow / Task Queue / Worker / Activities
 → TimeSlots-aligned Customer persistence in PostgreSQL
 → required MongoDB audit/context
 → optional attachment persistence + PostgreSQL reference
