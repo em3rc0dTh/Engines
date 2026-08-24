@@ -6,19 +6,23 @@
 
 ## Purpose
 
-The golden dataset freezes expected behavior **before implementation** for:
+The golden dataset freezes expected behavior before implementation for:
 
 ```text
-Postman → NestJS → Temporal → PostgreSQL + MongoDB
+Postman | CLI | minimal test harness
+→ Temporal
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
-Each case defines the expected:
+No framework or HTTP status is part of the canonical expected behavior. A future HTTP adapter may map the same outcomes to HTTP codes without changing the dataset semantics.
 
-- HTTP/CTA behavior;
+Each case defines expected:
+
+- CTA command acceptance/rejection;
 - Temporal outcome;
 - PostgreSQL Customer/registration effect;
 - MongoDB audit/context effect;
-- optional MongoDB attachment/document effect;
+- optional AttachmentStore effect;
 - PostgreSQL attachment-reference effect;
 - scheduling non-effect.
 
@@ -26,88 +30,70 @@ Each case defines the expected:
 
 ### GD-001 — Minimal valid Customer
 
-Expected:
-
-- 202 accepted;
-- workflow completes;
-- exactly one PostgreSQL Customer;
-- MongoDB audit milestones exist;
-- zero attachment references;
-- zero scheduling side effects.
+Expected durable workflow acceptance, completion, exactly one PostgreSQL Customer, required MongoDB audit/context, no attachments and zero scheduling side effects.
 
 ### GD-002 — Full Customer
 
-Document/contact/notes are persisted according to the approved PostgreSQL business projection without inventing missing facts.
+Document/contact/notes persist according to the approved TimeSlots Customer projection without inventing missing facts.
 
 ### GD-003 — One attachment
 
-Expected:
-
-- one committed MongoDB attachment/document;
-- one PostgreSQL Customer attachment reference;
-- matching integrity metadata;
-- no attachment binary in PostgreSQL Customer storage.
+Expected one committed AttachmentStore object, one PostgreSQL Customer attachment reference, matching integrity metadata and no binary forced into Customer relational storage.
 
 ### GD-004 — Multiple attachments
 
-Expected:
-
-- every requested attachment commits once logically;
-- every committed attachment is referenced once in PostgreSQL;
-- Customer finalization occurs only after all mandatory effects.
+Every requested attachment commits once logically and finalization waits for all mandatory references.
 
 ### GD-005 — Exact idempotent replay
 
-Same `Idempotency-Key` + same material command.
-
-Expected one logical workflow/Customer outcome and no duplicate attachments.
+Same idempotency key + same material command produces one logical workflow/Customer outcome.
 
 ### GD-006 — Idempotency conflict
 
-Same key + changed material command.
+Same key + changed material command is rejected with no second Customer/business side effect.
 
-Expected 409 and no second Customer/business side effect.
+### GD-007 — Invalid structural input
 
-### GD-007 — Invalid request
-
-Expected API-edge rejection with no Temporal workflow and no persistence side effects.
+Rejected before Temporal start with zero persistence side effects.
 
 ### GD-008 — Transient PostgreSQL Customer-write failure
 
-Expected Temporal retry/recovery and exactly one Customer after PostgreSQL recovers.
+Temporal retries/recoveries and exactly one Customer exists after PostgreSQL recovery.
 
-### GD-009 — Transient MongoDB attachment failure
+### GD-009 — Transient AttachmentStore failure
 
-Expected retry/recovery, no early Customer finalization and one committed logical attachment after recovery.
+Temporal retries; Customer is not finalized early; one logical attachment exists after recovery.
 
 ### GD-010 — Permanent attachment integrity mismatch
 
-Expected typed workflow failure and no false successful Customer finalization.
+Typed terminal failure and no false successful Customer finalization.
 
 ### GD-011 — Temporal worker restart
 
-Expected workflow resume, exactly one Customer and no lost accepted command.
+Workflow resumes with one Customer and no lost accepted command.
 
 ### GD-012 — Scheduling isolation
 
-Expected:
+Appointment, ResourceReservation and AvailabilitySlot mutation deltas remain zero.
 
-- Appointment delta = 0;
-- ResourceReservation delta = 0;
-- AvailabilitySlot mutation delta = 0.
+### GD-013 — CTA disconnect/reconnect continuity
+
+CTA starts the workflow and receives its workflow identity, then the CTA session/process disappears. Temporal continues independently. A later CTA session queries the same workflow identity and observes the same durable final result.
+
+This is the canonical mk0 continuity proof.
 
 ## Data rules
 
 Use synthetic people/identifiers only. Do not place real Customer PII in the dataset.
 
-Attachment fixtures, when added, should be tiny synthetic objects with fixed hashes.
+Attachment fixtures, when added, should be tiny synthetic objects with frozen hashes.
 
 ## Approval rule
 
 `v0` is approved when:
 
 - every case is machine-readable;
-- expected PostgreSQL/MongoDB effects are explicit;
+- expected PostgreSQL/MongoDB/AttachmentStore effects are explicit;
 - unresolved fixture hashes are frozen or explicitly marked;
 - Design and Golden Dataset agree;
 - expected behavior was not reverse-engineered solely from implementation output.
