@@ -11,6 +11,8 @@ CTA channel
 → PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
+The first proof is not just one-shot persistence. It is a durable interactive registration session that can ask for missing information, receive later input, check existing-customer policy and then persist the correct outcome.
+
 No coding is authorized yet.
 
 ## M0 — Reality / source lock
@@ -18,11 +20,12 @@ No coding is authorized yet.
 Deliverables:
 
 - TimeSlots/DataModel Customer source frozen;
-- Temporal durable execution / Workflow / Activity / Worker / Task Queue constraints frozen;
+- BusinessProfile/WorkflowProfile role in required-field policy recognized;
+- Temporal Workflow/Activity/Worker/Task Queue/message-passing constraints frozen;
 - project decision frozen: no required web framework in mk0;
-- project decision frozen: omnichannel CTA Adapter boundary;
-- persistence authority frozen: PostgreSQL Customer truth + MongoDB audit/context;
-- attachment persistence kept as a separate technology-neutral capability.
+- omnichannel CTA Adapter boundary frozen;
+- persistence authority frozen: PostgreSQL Customer truth + MongoDB interaction/audit/context;
+- AttachmentStore kept as a separate technology-neutral capability.
 
 ## M1 — Architecture lock
 
@@ -41,67 +44,70 @@ PostgreSQL + MongoDB + optional AttachmentStore
 
 Authorities:
 
-- CTA channel = raw external input/output;
-- CTA Adapter = structural validation + canonical command mapping + Temporal start/query boundary;
-- Temporal = durable sequencing, Event History, retries, Task Queues/Workers and recovery;
-- PostgreSQL = canonical Customer + registration/idempotency truth;
-- MongoDB = execution/audit/workflow context;
+- CTA channel = external input/output;
+- CTA Adapter = channel mapping + Temporal start/query/update boundary;
+- Temporal = durable session state, message handling, sequencing, retries, Event History, Task Queues/Workers and recovery;
+- PostgreSQL = canonical Customer/registration truth;
+- MongoDB = application interaction/audit/context;
 - AttachmentStore = optional binary/document authority.
 
-## M2 — RegisterNewCustomer command contract lock
+## M2 — Interactive RegisterNewCustomer contract lock
 
 Deliverables:
 
-- framework-agnostic canonical command envelope;
-- required/optional TimeSlots Customer fields;
-- pre-start structural validation;
-- normalization;
-- idempotency/fingerprint semantics;
-- channel metadata policy;
-- Temporal Workflow start acceptance projection;
-- Workflow Query/status/result projection;
-- typed failure taxonomy;
-- optional attachment ingress/reference contract.
+- framework-agnostic start/session envelope;
+- partial Customer draft support;
+- versioned RegistrationPolicy contract;
+- policy-driven required fields;
+- `GetRegistrationState` Query contract;
+- `ProvideCustomerData` Update contract;
+- input/update identity and retry semantics;
+- normalization rules;
+- duplicate classification policy (`HARD_UNIQUE`, `SOFT_MATCH`, `NON_UNIQUE`);
+- terminal `CREATED` vs `ALREADY_EXISTS` outcomes;
+- optional attachment ingress/reference contract;
+- channel-neutral state/response projection.
 
-Pass when a CLI CTA Adapter and a Postman-compatible CTA Adapter can both be produced from documentation without changing business semantics.
+Pass when Postman and CLI can conduct the same multi-step registration without business logic living in either CTA.
 
 ## M3 — Temporal orchestration lock
 
 Deliverables:
 
-- Temporal Service topology assumptions;
-- Workflow type/ID;
+- real Temporal Service topology assumptions;
+- Workflow type/ID/session idempotency;
 - Task Queue/Worker responsibility;
-- Workflow phases;
-- PostgreSQL Activities;
-- MongoDB Activities;
+- `loadRegistrationPolicy` Activity;
+- waiting-for-data phases;
+- Query/Update handlers;
+- PostgreSQL duplicate-check/create Activities;
+- MongoDB interaction/audit Activity;
 - AttachmentStore Activities when needed;
 - retry/backoff/timeout taxonomy;
-- idempotent side-effect rules;
-- Worker restart behavior;
+- Worker restart behavior while waiting and after side effects;
 - CTA disconnect/reconnect behavior;
 - cross-store consistency;
-- Query/status projection;
-- Signals/Updates reserved interaction contract;
 - Workflow versioning/replay strategy;
-- visibility/operational evidence requirements.
+- Temporal Web UI/visibility evidence requirements.
 
-Pass when the design uses real Temporal semantics instead of recreating orchestration in the CTA or database layer.
+Pass when missing-information collection, duplicate detection and persistence are visibly controlled by the same durable Temporal Workflow.
 
 ## M4 — Persistence contract lock
 
 ### PostgreSQL
 
 - Customer projection from DataModel v3 / TimeSlots;
-- registration/idempotency relation;
+- registration/session relation;
+- policy-defined duplicate lookup rules;
 - attachment-reference relation;
 - finalization invariants.
 
 ### MongoDB
 
-- execution audit contract;
-- workflow context contract;
-- PII/logging rules;
+- interaction/audit event contract;
+- Workflow context contract;
+- event deduplication identity;
+- PII/logging/retention rules;
 - query/index requirements.
 
 ### AttachmentStore
@@ -116,36 +122,43 @@ Pass when the design uses real Temporal semantics instead of recreating orchestr
 
 Must cover:
 
-- command/normalization tests;
-- CTA Adapter pre-start validation tests;
-- Temporal Workflow tests;
+- partial-intent start;
+- Query missing fields;
+- multi-round ProvideCustomerData Updates;
+- repeated Update delivery/idempotency;
+- policy version lock;
+- hard duplicate existing-Customer result;
+- soft duplicate behavior;
+- new Customer creation;
 - Task Queue/Worker execution proof;
-- PostgreSQL integration tests;
-- MongoDB integration tests;
-- AttachmentStore integration tests when enabled;
-- cross-store retry/failure tests;
-- CTA disconnect/reconnect observation;
-- Temporal Worker restart;
+- CTA disconnect/reconnect while waiting;
+- Worker restart while waiting;
+- PostgreSQL/MongoDB/AttachmentStore failure tests;
+- zero scheduling side effects;
 - Golden Dataset mapping.
 
 ## M6 — Golden Dataset v0
 
-Minimum cases:
+Minimum cases include:
 
 - GD-001 minimal valid Customer;
 - GD-002 full Customer;
 - GD-003 Customer with one attachment;
 - GD-004 multiple attachments;
-- GD-005 exact idempotent replay;
-- GD-006 idempotency conflict;
-- GD-007 invalid structural input/no Workflow;
+- GD-005 exact start/session replay;
+- GD-006 session idempotency conflict;
+- GD-007 invalid start envelope/no Workflow;
 - GD-008 transient PostgreSQL failure/recovery;
 - GD-009 transient attachment persistence failure/recovery;
 - GD-010 permanent attachment integrity mismatch;
 - GD-011 Temporal Worker restart;
 - GD-012 zero scheduling side effects;
-- GD-013 CTA disconnect after Workflow acceptance then reconnect/query same outcome;
-- GD-014 prove the path uses a real Temporal Service + Task Queue + Worker, not an in-process fake orchestrator.
+- GD-013 CTA disconnect/reconnect continuity;
+- GD-014 real Temporal Service + Task Queue + Worker proof;
+- GD-015 intent-only start → WAITING_FOR_REQUIRED_DATA;
+- GD-016 multi-round data collection through Updates;
+- GD-017 policy-defined hard duplicate → ALREADY_EXISTS / no second Customer;
+- GD-018 policy-defined soft duplicate → non-silent possible-duplicate outcome.
 
 ## BUILD AUTHORIZATION GATE
 
@@ -155,32 +168,35 @@ Future first build sequence:
 
 ```text
 B0  runtime/repository skeleton with no web framework
-B1  canonical RegisterNewCustomer command + validation contract
-B2  full Temporal local/runtime topology
-B3  first CTA Adapter implementation (CLI is acceptable for core proof)
-B4  Temporal Worker + Task Queue + RegisterNewCustomer Workflow shell
-B5  PostgreSQL Customer + registration/idempotency persistence Activities
-B6  MongoDB execution/audit/context Activities
+B1  versioned RegistrationPolicy + canonical interaction contracts
+B2  full Temporal local/runtime topology + Web UI
+B3  first CTA Adapter (CLI is acceptable for core proof)
+B4  Temporal Worker + Task Queue + interactive RegisterNewCustomer Workflow
+B5  PostgreSQL policy/duplicate lookup + Customer persistence Activities
+B6  MongoDB interaction/audit Activities
 B7  AttachmentStore implementation if attachment cases are enabled
-B8  complete RegisterNewCustomer orchestration
-B9  Postman-compatible CTA Adapter for channel proof
-B10 end-to-end runtime verification
+B8  complete waiting/query/update/duplicate/persistence orchestration
+B9  Postman-compatible CTA Adapter
+B10 end-to-end laboratory verification
 B11 failure/retry/Worker-restart/CTA-reconnect certification
 B12 mk0 stable candidate
 ```
 
-No web framework is a prerequisite for B0–B12.
+No web framework is a prerequisite.
 
 ## mk0 stable definition
 
 ```text
-Postman or CLI CTA
-→ CTA Adapter
-→ real Temporal Service / Workflow / Task Queue / Worker / Activities
-→ TimeSlots-aligned Customer persistence in PostgreSQL
-→ required MongoDB audit/context
-→ optional attachment persistence + PostgreSQL reference
-→ same durable outcome remains observable after CTA reconnect
+Postman or CLI starts RegisterNewCustomer intent
+→ real Temporal Workflow loads versioned policy
+→ Workflow asks/exposes missing data
+→ CTA provides data to same Workflow
+→ Temporal orchestrates duplicate lookup
+→ ALREADY_EXISTS or CREATED deterministically
+→ PostgreSQL shows canonical Customer result
+→ MongoDB shows interaction/audit history
+→ Temporal Web UI shows the orchestration path
+→ CTA/Worker restart does not lose durable state
 ```
 
-Only after this is certified should another engine slice or application framework be selected.
+Only after this is certified should another workflow/engine slice or application framework be selected.
