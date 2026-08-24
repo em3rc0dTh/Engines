@@ -12,7 +12,7 @@ The long-term goal is a reusable orchestration core capable of receiving operati
 
 ```text
 INPUT CHANNELS
-Postman / CLI / Form / MCP / WhatsApp / Telegram / Web / Mobile / API / Webhook / ...
+Postman / CLI / Form / WhatsApp / Telegram / Web / Mobile / API / Webhook / ...
                          ↓
                  CHANNEL / CTA ADAPTER
                          ↓
@@ -40,7 +40,7 @@ Postman / CLI / Form / MCP / WhatsApp / Telegram / Web / Mobile / API / Webhook 
                         ↓
               OUTBOUND / NOTIFICATION PORTS
                         ↓
-Postman / CLI / Form / MCP / WhatsApp / Telegram / Web / Mobile / API / ...
+Postman / CLI / Form / WhatsApp / Telegram / Web / Mobile / API / ...
 ```
 
 The channel is replaceable. The Workflow is reusable. Temporal remains the durable orchestration authority.
@@ -115,7 +115,6 @@ Temporal result → CLI terminal output
 Temporal result → website/API response
 Temporal notification → WhatsApp message
 Temporal notification → Telegram message
-Temporal result → MCP structured response
 ```
 
 The source channel and output channel can be the same, but the architecture must not require that permanently. A Workflow may later receive from one source and notify another approved destination.
