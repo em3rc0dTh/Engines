@@ -20,7 +20,7 @@ Temporal workflow: RegisterNewCustomer
 Persistence
   ├── MongoDB / customer data
   ├── MongoDB / workflow + audit log
-  └── Local attachment database/store / binary attachments
+  └── SQLite / local attachments
 ```
 
 ## Why this slice first
@@ -87,19 +87,21 @@ mk0 separates three authorities:
    - references to persisted attachments.
 
 2. **Execution/Audit Log — MongoDB**
-   - append-oriented workflow events;
+   - append-oriented application/workflow milestones;
    - correlation IDs;
    - activity attempts/outcomes;
    - important state changes;
    - sanitized failure information.
 
-3. **Attachment Store — local database/store**
-   - binary attachment content;
+3. **Attachment Database — SQLite local**
+   - staged ingress BLOBs;
+   - committed binary attachment content;
    - content hash;
    - size/media type;
-   - opaque attachment identifier.
+   - opaque attachment identifier;
+   - storage lifecycle state.
 
-The exact technology for the local attachment store is intentionally **not selected in mk0 Design**. The contract is selected first.
+SQLite is an mk0 physical choice behind an `AttachmentStore` abstraction, not a permanent public contract.
 
 ## First workflow
 
@@ -128,21 +130,22 @@ ResourceReservation = real operational capacity lock
 
 ## Core invariants
 
-1. No external caller writes directly to MongoDB or the attachment store.
+1. No external caller writes directly to MongoDB or SQLite.
 2. NestJS does not contain durable workflow sequencing.
 3. Temporal Workflow code does not perform direct database/file/network side effects.
-4. Persistence side effects occur through explicit Activities/adapters.
-5. Repeating the same idempotent request must not create a second customer.
-6. Reusing the same idempotency key with a materially different payload is rejected.
-7. A customer is not reported `ACTIVE` until all mandatory registration effects have completed.
-8. If attachments were requested, every committed attachment has a stable reference and integrity metadata.
-9. Attachment bytes are not stored in the customer document.
-10. Audit records never become the source of truth for customer business state.
-11. Customer business documents never become the workflow event history.
-12. Failure is observable; no silent fallback converts failed persistence into success.
-13. PII/secrets must not be copied indiscriminately into workflow/audit logs.
-14. `RegisterNewCustomer` does not schedule capacity.
-15. Future CTAs must reuse the same application contract.
+4. Persistence side effects occur through explicit Activities/adapters, except technical attachment ingress staging at the API data plane.
+5. A staged attachment is not a committed Customer attachment.
+6. Repeating the same idempotent request must not create a second customer.
+7. Reusing the same idempotency key with a materially different payload is rejected.
+8. A customer is not reported as successful until all mandatory registration effects have completed.
+9. If attachments were requested, every committed attachment has a stable reference and integrity metadata.
+10. Attachment bytes are not stored in the Customer MongoDB document.
+11. Audit records never become the source of truth for customer business state.
+12. Customer business documents never become the workflow event history.
+13. Failure is observable; no silent fallback converts failed persistence into success.
+14. PII/secrets must not be copied indiscriminately into workflow/audit logs.
+15. `RegisterNewCustomer` does not schedule capacity.
+16. Future CTAs must reuse the same application contract.
 
 ## Folder map
 
@@ -155,7 +158,8 @@ mk0/
 │   ├── 01-system-architecture.md
 │   ├── 02-register-new-customer-contract.md
 │   ├── 03-temporal-workflow.md
-│   └── 04-persistence-boundaries.md
+│   ├── 04-persistence-boundaries.md
+│   └── 05-mk0-persistence-profile.md
 ├── Plan/
 │   └── README.md
 ├── Build/
@@ -165,11 +169,14 @@ mk0/
 ├── mining-site/
 │   └── README.md
 ├── quarries/
+│   ├── README.md
 │   ├── quarry-01-timeslot-data-model.md
 │   ├── quarry-02-temporal.md
-│   └── quarry-03-nestjs-boundary.md
+│   ├── quarry-03-nestjs-boundary.md
+│   └── quarry-04-attachment-persistence.md
 └── golden-dataset/
-    └── README.md
+    ├── README.md
+    └── register-new-customer-v0.json
 ```
 
 ## Gate order
