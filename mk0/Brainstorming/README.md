@@ -2,142 +2,148 @@
 
 ## Problem statement
 
-We want a small first slice of the future agentic architecture that can be exercised without an Agent or UI.
+We want the smallest first slice of the target agentic platform that proves the architectural spine without building an Agent, Services Engine or Scheduler yet.
 
-The first caller is Postman. The first business operation is **Register New Customer**.
+The first CTA is Postman. The first workflow is **Register New Customer**.
 
-The architecture must prove that a request can enter through an HTTP boundary, become a durable workflow, persist business truth, persist an execution trail, and optionally persist attachments without mixing those responsibilities.
-
-## Working architecture
+## First three zones
 
 ```text
-External CTA
-  Postman now
-  Agent/UI/WhatsApp later
-        │
-        ▼
-NestJS
-  HTTP + DTO + correlation + idempotency
-        │
-        ▼
-Orchestration Engine
-  Temporal Workflow
-        │
-        ├── Activity: persist customer business record
-        ├── Activity: persist attachment(s), when present
-        ├── Activity: link committed attachment metadata
-        └── Activity: append/query operational audit where required
-        │
-        ▼
-Persistence
-  MongoDB business data
-  MongoDB audit/execution log
-  Local attachment database/store
+1. CTA / API
+   Postman → NestJS
+
+2. Orchestration Engine
+   Temporal → RegisterNewCustomer
+
+3. Persistence
+   PostgreSQL → Customer + registration/idempotency truth
+   MongoDB    → execution audit + workflow context + optional attachments/documents
 ```
 
-## What mk0 is trying to learn
+## Why this is the right mk0 cut
 
-### H1 — The API can remain channel-agnostic
+This slice forces us to solve the reusable foundations every later workflow needs:
 
-If Postman can trigger the same command contract that a future Agent will use, we avoid rebuilding workflow semantics for each CTA.
+- one external command path;
+- transport validation;
+- idempotency;
+- correlation;
+- durable workflow sequencing;
+- retry-safe Activities;
+- canonical business persistence;
+- audit/context persistence;
+- optional document persistence;
+- cross-store consistency;
+- failure/restart behavior;
+- observable result contract.
 
-### H2 — NestJS should be a boundary, not an orchestrator
+It deliberately avoids service catalog and scheduling complexity.
 
-The HTTP request can disappear, clients can disconnect, and workflows can retry. Durable business progress therefore belongs to Temporal, not to a long NestJS request handler.
+## Working sequence
 
-### H3 — Persistence needs multiple authorities
+```text
+Postman
+   ↓
+NestJS
+   ↓
+Temporal RegisterNewCustomer
+   ├→ PostgreSQL: reserve command/idempotency
+   ├→ PostgreSQL: create Customer base
+   ├→ MongoDB: append audit/context
+   ├→ MongoDB: optional attachment commit
+   ├→ PostgreSQL: optional attachment reference
+   └→ PostgreSQL: finalize registration
+```
 
-Customer data, workflow/audit events, and attachment bytes have different lifecycle and query requirements. Treating them as one generic repository would hide important failure modes.
+## Hypotheses to prove
 
-### H4 — Idempotency must exist before retries
+### H1 — CTA remains replaceable
 
-Temporal retries and client retries are both normal. Without idempotency, `RegisterNewCustomer` can create duplicate customers.
+Postman is only the first caller. A future Agent/UI/channel should invoke the same NestJS application contract rather than obtaining special access to Temporal or persistence.
 
-### H5 — Optional attachment handling creates a distributed consistency problem
+### H2 — NestJS remains an edge, not an orchestrator
 
-MongoDB customer data and a local attachment database/store do not share a transaction. We therefore need an explicit registration state and deterministic retry/recovery semantics.
+NestJS maps HTTP to an application command. Durable sequencing belongs to Temporal.
 
-## Proposed registration states
+### H3 — PostgreSQL owns business truth
 
-These states are mk0 workflow/business-registration states, not Temporal internal states:
+Customer registration is transactional business data and belongs in the primary relational business authority.
+
+### H4 — MongoDB owns execution/context/document concerns
+
+Audit events, workflow context and optional document/attachment objects have different shapes and query/lifecycle behavior from the canonical Customer row/relations.
+
+### H5 — Temporal mediates cross-store consistency
+
+PostgreSQL and MongoDB do not share one transaction. Workflow state and idempotent Activities must make failure/retry safe.
+
+### H6 — retries must be designed before Build
+
+Client retries and Temporal Activity retries are normal. A retry after a side effect must not create another Customer or another logical attachment.
+
+## Proposed workflow phases
 
 ```text
 RECEIVED
-  ↓
-VALIDATED
-  ↓
-PERSISTING_CUSTOMER
-  ↓
-PERSISTING_ATTACHMENTS   (only when attachments exist)
-  ↓
-FINALIZING
-  ↓
-ACTIVE
+→ VALIDATED
+→ IDEMPOTENCY_RESERVED
+→ CUSTOMER_PERSISTED
+→ ATTACHMENTS_PERSISTED       optional
+→ REFERENCES_LINKED           optional
+→ FINALIZING
+→ COMPLETED
 ```
 
-Failure does not imply deletion. A failed execution keeps enough durable identity to retry safely.
-
-Possible terminal/observable failure state:
+Terminal permanent failure:
 
 `REGISTRATION_FAILED`
 
-The canonical Customer domain status may later use a smaller vocabulary. Until the data-model decision is frozen, implementation must not invent extra persisted business statuses beyond the approved schema.
+The exact persisted Customer status vocabulary must follow the approved business schema; workflow phases are not automatically Customer statuses.
 
-## Decisions already closed
+## Decisions closed for mk0
 
+- Repository/version: `Engines/mk0`.
 - First CTA: Postman/API.
-- HTTP/application runtime boundary: NestJS.
-- Durable workflow runtime: Temporal.
-- First workflow: Register New Customer.
-- Customer business data: MongoDB.
-- Execution/audit log: MongoDB.
-- Attachment content: separate local attachment database/store.
-- Data-model baseline: DataModel v3 / TimeSlots.
-- No Services Engine implementation in the first vertical.
-- No Scheduler Engine implementation in the first vertical.
-- No Agent implementation in mk0.
+- API boundary: NestJS.
+- Durable orchestration: Temporal.
+- First workflow: RegisterNewCustomer.
+- Customer/registration truth: PostgreSQL.
+- Execution/audit/context: MongoDB.
+- Optional attachments/documents: MongoDB persistence capability with opaque reference back to PostgreSQL.
+- SQLite: not part of mk0.
+- Data model baseline: DataModel v3 / TimeSlots.
+- No Services Engine implementation yet.
+- No Scheduler Engine implementation yet.
+- No Integration Engine implementation yet.
+- No Agent implementation yet.
 - No production code until documentation gates close.
 
-## Open design questions that mk0 must close
+## Remaining design questions
 
-1. Which exact Customer fields are mandatory at API ingress?
-2. Is a normalized phone mandatory for mk0, or is email-only registration legal?
-3. What constitutes the material payload for idempotency comparison?
-4. How long is an idempotency record retained?
-5. Does a failed optional attachment fail the whole registration or produce a partial customer outcome?
-6. Which attachment metadata must be stored in MongoDB?
-7. What is the first local attachment-store technology?
-8. Which audit events are application-authored versus derived from Temporal visibility/history?
-9. How much PII can appear in audit records?
-10. What is the HTTP status contract: async `202` only, or a bounded synchronous wait option later?
-
-## mk0 recommendation on unresolved items
-
-For the first stable build, prefer the strictest behavior that is easy to reason about:
-
-- API starts a durable workflow and returns `202 Accepted`.
-- Client polls workflow status.
-- `Idempotency-Key` is mandatory.
-- A requested attachment is part of the command contract; the registration is not `ACTIVE` until it is stored successfully.
-- Binary attachment content never enters MongoDB.
-- MongoDB contains only attachment metadata/references.
-- Audit documents use IDs and classifications; raw request bodies are not logged by default.
+1. Exact Customer relational projection of the canonical Customer model.
+2. Required contact rule for mk0: phone, email, or either.
+3. Idempotency retention duration.
+4. Exact mandatory audit milestone policy.
+5. Exact MongoDB attachment mechanism during Build.
+6. Attachment size/count limits.
+7. Attachment ingress TTL and reconciliation policy.
+8. PII allowed in MongoDB audit/context.
+9. Exact 202/status-query lifecycle.
+10. Separate PostgreSQL schemas/databases for application vs Temporal infrastructure in local topology.
 
 ## Explicit non-goals
 
-mk0 does not yet solve:
+mk0 does not yet implement:
 
-- service catalog execution;
+- service catalog;
 - availability search;
-- `ResourceReservation` creation;
-- appointment booking;
+- Appointment booking;
+- ResourceReservation;
 - quotes;
 - work orders;
+- integrations;
 - Agent reasoning;
 - WhatsApp;
-- frontend;
-- distributed deployment;
-- attachment cloud storage;
-- authentication/authorization model beyond preserving a boundary for it.
+- frontend.
 
-Those enter only after this vertical proves its contracts.
+Those belong after this first architectural spine is certified.
