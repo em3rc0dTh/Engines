@@ -2,7 +2,7 @@
 
 ## 1. Persistence is not one database
 
-mk0 intentionally separates three persistence concerns:
+mk0 separates three persistence authorities:
 
 ```text
 Persistence
@@ -11,30 +11,24 @@ Persistence
 ├── Workflow / audit application log
 │   └── MongoDB
 └── Attachment binary content
-    └── separate local attachment database/store
+    └── SQLite local attachment database
 ```
 
-The separation is semantic first and technological second.
+The semantic boundary is primary. The mk0 physical profile is frozen in [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md).
 
 ---
 
 ## 2. Customer business store — MongoDB
 
-### Authority
-
-The Customer store answers:
+Authority question:
 
 > What is the canonical business state of this registered customer?
 
-### Proposed collection
+Collection:
 
 `customers`
 
-Final naming can change during Build, but its authority cannot.
-
-### Canonical fields from the TimeSlots data-model baseline
-
-Conceptual Customer shape:
+Conceptual Customer shape inherited from the TimeSlots data-model baseline:
 
 ```text
 Customer
@@ -54,45 +48,40 @@ Customer
 └── updatedAt
 ```
 
-mk0 should not populate fields it does not know merely to make the document look complete.
+mk0 must not populate facts it does not know merely to make the document look complete.
 
-### Registration metadata
+Technical registration metadata may include:
 
-Persistence may additionally need technical metadata such as:
-
-- registration command/workflow identity;
-- schema version;
+- registration workflow identity;
+- command fingerprint/schema version;
 - attachment references;
-- optimistic/concurrency version.
+- concurrency/version metadata.
 
-Technical metadata must be clearly namespaced or modeled so it is not confused with customer-facing business facts.
+Technical metadata must remain distinguishable from customer-facing facts.
 
 ---
 
 ## 3. Execution/Audit log — MongoDB
 
-### Authority
-
-The audit store answers:
+Authority question:
 
 > Which important application/business execution events occurred, for which workflow/customer, and with what outcome?
 
-It is not the canonical Customer state and it is not a copy of Temporal Event History.
-
-### Proposed collection
+Collection:
 
 `execution_audit`
 
-### Event characteristics
+Characteristics:
 
 - append-oriented;
-- immutable after commit except explicit retention/redaction operations;
-- stable `eventId`;
+- stable event identity;
 - queryable by business/workflow/correlation/customer;
 - sanitized;
-- schema-versioned.
+- schema-versioned;
+- not a copy of the Customer document;
+- not a verbatim copy of Temporal Event History.
 
-### Proposed event shape
+Conceptual event:
 
 ```json
 {
@@ -106,40 +95,26 @@ It is not the canonical Customer state and it is not a copy of Temporal Event Hi
   "phase": "PERSISTING_CUSTOMER_BASE",
   "attempt": 1,
   "occurredAt": "...",
-  "metadata": {
-    "attachmentCount": 0
-  },
+  "metadata": {"attachmentCount": 0},
   "failure": null
 }
 ```
 
-### PII policy
+PII policy:
 
-Do not log the entire request/customer document by default.
-
-Prefer:
-
-- IDs;
-- event classifications;
-- counts;
-- hashes/fingerprints where useful;
-- safe status metadata.
-
-Raw DNI/document numbers, full phone lists, full emails, attachment bytes, secrets, auth tokens, and database connection details should not be duplicated into routine audit events.
+- do not log whole request bodies;
+- prefer IDs, classifications, counts, hashes, and safe status metadata;
+- do not routinely duplicate raw DNI/document values, complete phones/emails, attachment bytes, secrets, auth tokens, or connection details.
 
 ---
 
-## 4. Command idempotency receipt — MongoDB
+## 4. Command idempotency receipts — MongoDB
 
-Idempotency requires durable comparison across API/client retries.
-
-This may be a dedicated collection or a clearly separated document family.
-
-Proposed concept:
+Collection:
 
 `command_receipts`
 
-Minimum fields:
+Conceptual fields:
 
 ```text
 operation
@@ -147,13 +122,13 @@ businessSlug
 idempotencyKeyHash
 commandFingerprint
 workflowId
-customerId?       once known
+customerId?
 status
 createdAt
 updatedAt
 ```
 
-Required uniqueness:
+Required logical uniqueness:
 
 ```text
 (operation, businessSlug, idempotencyKeyHash)
@@ -163,70 +138,59 @@ Rules:
 
 - same key hash + same fingerprint → same workflow/outcome;
 - same key hash + different fingerprint → conflict;
-- raw idempotency key is not required to be stored.
-
-Temporal Workflow ID uniqueness and command receipts should reinforce one another; neither should rely on customer phone uniqueness as idempotency.
+- raw key need not be stored;
+- phone/email uniqueness is not an idempotency mechanism.
 
 ---
 
-## 5. Attachment store — local database/store
+## 5. Attachment authority — SQLite
 
-### Authority
+Authority question:
 
-The attachment store answers:
+> Which exact binary object was staged/committed and can it be retrieved with integrity?
 
-> Which exact binary object was committed and can it be retrieved with integrity?
+mk0 uses SQLite behind the `AttachmentStore` contract.
 
-### Technology
-
-**Not selected in Design.**
-
-Build must choose a local technology that satisfies the following contract instead of choosing a database first and adapting semantics around it.
-
-### Required capability contract
-
-Conceptual operations:
+Conceptual capabilities:
 
 ```text
-stage/resolve ingress
+stage ingress
+resolve ingress
 commit attachment idempotently
 read metadata
-open/read content
+read/stream content
 verify integrity
 mark/reconcile orphan candidate
-delete only by explicit retention/cleanup policy
+expire staged data
+explicit cleanup/retention
 ```
 
-### Committed attachment metadata
-
-Minimum:
+Committed metadata includes at least:
 
 ```text
 attachmentId
 sha256
 byteLength
 mediaType
-originalFileName?      display metadata only
+originalFileName?
 createdAt
 storageState
 ```
 
-### Forbidden public contract
+The public contract never exposes:
 
-Never expose:
+- physical SQLite path;
+- host directory;
+- page/row coordinates;
+- migration-hostile internal storage keys.
 
-- physical path;
-- local database page/row location;
-- host-specific absolute directory;
-- storage-engine internal key that would prevent future migration.
-
-Expose only opaque `attachmentId`.
+Only opaque attachment identities cross the boundary.
 
 ---
 
 ## 6. Customer attachment references
 
-MongoDB should store references/metadata sufficient for business traversal.
+MongoDB stores reference metadata, never binary content.
 
 Conceptual reference:
 
@@ -242,104 +206,97 @@ Conceptual reference:
 }
 ```
 
-No bytes.
+No BLOB.
 
 No local path.
 
 ---
 
-## 7. Attachment ingress lifecycle
-
-Because large binary payloads should not become Temporal Workflow payload/history, mk0 distinguishes:
+## 7. Attachment lifecycle
 
 ```text
 INGRESS/STAGED
       ↓
-COMMITTED
+COMMITTED IN SQLITE
       ↓
-REFERENCED BY CUSTOMER
+REFERENCED BY CUSTOMER IN MONGODB
 ```
 
 ### STAGED
 
-- accepted temporarily by the API ingress mechanism;
-- has `ingressRef` and hash;
-- not yet canonical business evidence;
-- subject to TTL/cleanup if no workflow commits it.
+- accepted at API data-plane ingress;
+- has opaque `ingressRef` and server-computed integrity metadata;
+- not yet a committed Customer attachment;
+- expires if never claimed/committed.
 
 ### COMMITTED
 
-- persisted in the local attachment store;
-- stable `attachmentId`;
-- integrity metadata verified.
+- binary exists in SQLite `attachments`;
+- stable `attachmentId` exists;
+- integrity verification passed.
 
 ### REFERENCED
 
-- Customer document contains the committed reference.
-
-A cleanup/reconciliation job may later remove expired staged data and true orphaned committed data, but not as an implicit side effect of a random API retry.
+- Customer document contains the expected committed reference.
 
 ---
 
 ## 8. Consistency model
 
-There is no distributed transaction across MongoDB and the local attachment database/store.
+MongoDB and SQLite do not share one atomic transaction.
 
-Therefore mk0 uses a saga-like workflow state.
+mk0 uses workflow-mediated/saga-like consistency.
 
-### Successful no-attachment path
+### No-attachment success
 
 ```text
 idempotency receipt
 → customer base
 → finalization
-→ ACTIVE
+→ success
 ```
 
-### Successful attachment path
+### Attachment success
 
 ```text
 idempotency receipt
 → customer base/registration identity
-→ commit attachment(s)
+→ commit attachment(s) in SQLite
 → link references in MongoDB
 → verify expected count/hashes
 → finalization
-→ ACTIVE
+→ success
 ```
 
-### Failure during attachment commit
+### Permanent failure during attachment commit
 
-```text
-customer base exists
-attachment N fails permanently
-→ workflow FAILED
-→ customer must not be exposed as completed ACTIVE registration
-→ durable references allow retry/reconciliation
-```
+- workflow fails with typed outcome;
+- base registration identity remains for traceability/idempotency;
+- customer is not exposed as completed successful registration;
+- committed orphan candidates remain discoverable.
 
-### Failure after attachment commit but before Mongo link
+### Attachment committed but Mongo link lost/fails
 
-Retry must discover the same committed attachment and link it; it must not create a second copy solely because the prior Activity completion was lost.
+Retry discovers/reuses the same attachment and links it. It must not create a new logical attachment merely because an Activity completion was lost.
 
-### Failure after Mongo link but before workflow completion
+### Mongo link exists but final workflow completion is lost
 
-Retry finalization must be idempotent and return the existing result.
+Finalization retry must be idempotent and return the existing result.
 
 ---
 
-## 9. Suggested indexes/invariants — design level
+## 9. Design-level indexes/invariants
 
 ### Customer
 
-- unique `_id`.
-- indexed `businessSlug`.
-- query indexes for normalized contact fields only after duplicate/business lookup policy is frozen.
-- no automatic unique phone constraint in generic mk0 without an explicit business rule.
+- unique `_id`;
+- indexed `businessSlug`;
+- normalized-contact indexes only after lookup/duplicate policy is frozen;
+- no generic unique-phone assumption without explicit business rule.
 
 ### Audit
 
-Indexes supporting:
+Support queries by:
 
 - `(businessSlug, workflowId, occurredAt)`;
 - `(businessSlug, correlationId, occurredAt)`;
@@ -351,15 +308,15 @@ Unique:
 
 - `(operation, businessSlug, idempotencyKeyHash)`.
 
-### Attachment references
+### Customer attachment refs
 
-Within one customer registration, the same committed `attachmentId` must not be linked twice accidentally.
+One committed `attachmentId` must not be linked twice accidentally to the same registration.
 
 ---
 
 ## 10. Persistence failure taxonomy
 
-Typed categories should include at least:
+At minimum:
 
 ```text
 CUSTOMER_STORE_UNAVAILABLE
@@ -375,25 +332,23 @@ CUSTOMER_ATTACHMENT_LINK_FAILED
 FINALIZATION_PRECONDITION_FAILED
 ```
 
-Build may refine names, but it must not collapse all failures to `500 database error`.
+Build can refine names but must not collapse every persistence failure to an undifferentiated database error.
 
 ---
 
 ## 11. Persistence gate
 
-Persistence design is accepted when we can answer all of these without implementation-specific hand waving:
+Persistence design is accepted when all answers are explicit:
 
-1. Where is Customer truth?
-2. Where is audit truth?
-3. Where are binary attachments?
-4. What identifier crosses store boundaries?
-5. How is attachment integrity verified?
-6. How does retry avoid duplicate customers?
-7. How does retry avoid duplicate attachments?
-8. What happens if local attachment persistence succeeds but Mongo linking fails?
-9. What happens if Mongo customer persistence succeeds but attachment persistence fails?
-10. How are staged/orphaned attachments discovered later?
-11. What data is forbidden from normal audit logs?
-12. Can we migrate the local attachment technology without changing the public API?
-
-mk0 answers these semantically before selecting the local database technology.
+1. Customer truth → MongoDB `customers`.
+2. Idempotency receipt → MongoDB `command_receipts`.
+3. Application audit → MongoDB `execution_audit`.
+4. Binary attachments → SQLite.
+5. Cross-store identity → opaque `attachmentId` plus hash metadata.
+6. Retry-safe customer identity → workflow/command identity.
+7. Retry-safe attachment identity → ingress/commit identity.
+8. Mongo-link failure after SQLite commit → reuse and retry link.
+9. Attachment failure after Customer base → no false successful finalization.
+10. Staged/orphaned attachments → discoverable for TTL/reconciliation.
+11. Routine audit logs → sanitized, no unrestricted PII/blobs.
+12. Future store migration → possible behind `AttachmentStore` without public API change.
