@@ -1,84 +1,16 @@
 # 02 — Register New Customer Contract
 
-## 1. Command
-
-Canonical command name:
+## 1. Canonical command
 
 `RegisterNewCustomer`
 
-The HTTP API is a transport mapping of this command. The command contract must remain usable by Postman now and by future CTAs later.
+The command is transport-agnostic. Postman, CLI, a tiny test harness, or a future API adapter must all map into this same command shape.
 
----
+mk0 does **not** require HTTP, NestJS, REST, gRPC gateway code, or any application framework.
 
-## 2. HTTP endpoints for mk0
+## 2. Command envelope
 
-### 2.1 Stage an attachment — only when needed
-
-`POST /api/mk0/attachments/stage`
-
-Purpose:
-
-- accept binary data at the HTTP edge;
-- validate transport-level file constraints;
-- create a short-lived opaque `ingressRef`;
-- avoid putting large binary payloads inside Temporal Workflow input/history.
-
-This is a **technical ingress operation**, not a committed customer attachment.
-
-A staged attachment is not considered business-persisted until `RegisterNewCustomer` commits it through the persistence Activity.
-
-Proposed response:
-
-```json
-{
-  "ingressRef": "ing_01...",
-  "fileName": "dni-front.jpg",
-  "mediaType": "image/jpeg",
-  "byteLength": 184233,
-  "sha256": "...",
-  "expiresAt": "..."
-}
-```
-
-### 2.2 Register customer
-
-`POST /api/mk0/customers/register`
-
-Required header:
-
-```text
-Idempotency-Key: <caller-generated opaque key>
-```
-
-Optional caller correlation header:
-
-```text
-X-Correlation-Id: <caller value>
-```
-
-If absent, the server creates the correlation ID.
-
-### 2.3 Query workflow
-
-`GET /api/mk0/workflows/{workflowId}`
-
-Purpose:
-
-- inspect durable execution status;
-- retrieve final customer identity or typed failure;
-- make Postman sufficient as the first CTA.
-
-### 2.4 Read resulting customer
-
-`GET /api/mk0/customers/{customerId}`
-
-This is a read-only verification endpoint for mk0. It must use the Customer read/application boundary and must not expose persistence implementation details.
-
----
-
-## 3. Register request envelope
-
-Proposed mk0 envelope:
+Conceptual input:
 
 ```json
 {
@@ -112,215 +44,198 @@ Proposed mk0 envelope:
       "kind": "identity_document",
       "displayName": "DNI front"
     }
-  ]
+  ],
+  "request": {
+    "idempotencyKey": "caller-generated-opaque-key",
+    "correlationId": "optional-caller-correlation"
+  }
 }
 ```
 
-### Data-model relationship
+A transport adapter may map `idempotencyKey` from a header or CLI flag, but inside the canonical command contract the semantic value is explicit.
 
-The shape intentionally follows the existing target `Customer` concepts:
+## 3. Data-model relationship
+
+The Customer payload follows the approved DataModel v3 / TimeSlots Customer semantics:
 
 - `businessSlug`;
 - `type`;
 - `name`;
-- `document`;
+- `document` metadata;
 - `contact.phones`;
 - `contact.email`;
-- `notes`.
+- optional model-supported WhatsApp/business metadata when explicitly known;
+- `notes` when provided.
 
-Workflow/transport-only fields such as `ingressRef`, `Idempotency-Key`, `correlationId`, and execution state are **not Customer domain fields** unless explicitly mapped to metadata by Design.
+Workflow/control fields such as idempotency identity, correlation ID, workflow ID, ingress reference and execution phase are not Customer domain fields unless Design explicitly maps them to technical registration metadata.
 
----
+## 4. Required input — mk0 proposal
 
-## 4. Required fields — mk0 proposal
+Always required:
 
-### Always required
+- `businessSlug`;
+- `customer.type`;
+- `customer.name`;
+- `request.idempotencyKey`.
 
-- `businessSlug`.
-- `customer.type`.
-- `customer.name`.
-- `Idempotency-Key` header.
+Contact rule:
 
-### Contact rule
+- at least one usable phone or email locator.
 
-At least one usable contact locator must be provided:
-
-- one phone, or
-- one email.
-
-This avoids forcing phone-only registration into the generic engine while preserving the ability to normalize phones when they exist.
-
-### Optional
+Optional:
 
 - document;
 - additional phones;
-- email if phone exists;
+- email when phone exists;
 - notes;
 - attachments.
 
-### Not accepted in mk0
+Forbidden in this command:
 
-- appointment fields;
-- time-slot fields;
-- `ResourceReservation` data;
+- Appointment fields;
+- ResourceReservation fields;
+- availability/time-slot mutation fields;
+- service execution fields;
 - quote/work-order fields;
-- AI-generated classification fields.
+- AI-generated facts presented as Customer truth.
 
-If a caller needs those later, it must invoke another command/workflow.
+## 5. Pre-start validation
 
----
+The CTA adapter/harness must reject structurally unusable commands before starting Temporal.
 
-## 5. Normalization rules
+Examples:
 
-Normalization is deterministic and testable.
+```text
+INVALID_COMMAND_ENVELOPE
+MISSING_BUSINESS_SLUG
+MISSING_CUSTOMER_TYPE
+MISSING_CUSTOMER_NAME
+MISSING_IDEMPOTENCY_KEY
+MISSING_CONTACT_LOCATOR
+INVALID_ATTACHMENT_REFERENCE_SHAPE
+FORBIDDEN_SCHEDULING_FIELD
+```
 
-### Customer name
+A pre-start rejection produces:
+
+```text
+workflowStarted = false
+Customer delta = 0
+attachment committed delta = 0
+```
+
+The exact UI/HTTP/CLI representation of the error is adapter-specific and is not part of the core architecture.
+
+## 6. Normalization
+
+Normalization must be deterministic and testable.
+
+### Name
 
 - trim leading/trailing whitespace;
-- preserve meaningful internal spelling/case for display;
-- optionally derive a comparison-normalized value separately rather than mutating display truth.
+- preserve meaningful display spelling/case;
+- derive comparison-normalized data separately if required.
 
 ### Phone
 
-- preserve original components needed for display;
-- derive normalized international digits form;
-- do not silently invent a country code when context is insufficient.
+- preserve display components;
+- derive normalized international digits only when enough context exists;
+- never silently invent missing country context.
 
 ### Email
 
 - trim whitespace;
-- normalize comparison casing where valid;
-- preserve original value if later required for display/audit.
+- normalize comparison casing where valid.
 
 ### Document
 
 - trim value;
-- preserve explicit document type/country;
-- validation of authenticity is outside mk0.
+- preserve explicit type/country;
+- authenticity verification is outside mk0.
 
 ### Attachments
 
 - `ingressRef` is opaque;
-- caller never supplies final local attachment ID/path;
-- final hash must match staged hash when the attachment is committed.
+- caller never supplies a final storage path;
+- integrity metadata is server/system computed or independently verified before commitment.
 
----
+## 7. Idempotency contract
 
-## 6. Idempotency contract
-
-Idempotency protects against:
-
-- Postman retry;
-- client timeout and retry;
-- reverse-proxy retry;
-- repeated start calls;
-- Temporal Activity retry.
-
-### Identity
-
-Conceptual workflow identity:
+Conceptual Workflow ID:
 
 ```text
-register-customer:{businessSlug}:{hash(Idempotency-Key)}
+register-customer:{businessSlug}:{hash(idempotencyKey)}
 ```
 
-The raw idempotency key does not need to be exposed in logs.
+A deterministic command fingerprint is generated from the normalized material command.
 
-### Command fingerprint
-
-A deterministic hash is created from the **normalized material command**.
-
-Material command includes:
+Material input includes:
 
 - businessSlug;
-- normalized customer payload;
-- ordered/normalized attachment ingress identities and expected hashes.
+- normalized Customer payload;
+- normalized attachment ingress identities/expected integrity metadata.
 
 It excludes:
 
 - correlation ID;
 - request timestamp;
-- transport headers unrelated to business intent.
+- adapter-specific transport metadata.
 
-### Same key + same fingerprint
+### Same idempotency key + same fingerprint
 
-Expected behavior:
+Return/observe the existing logical registration outcome. Do not create another Customer.
 
-- do not create another customer;
-- return/query the existing workflow/outcome.
+### Same idempotency key + different fingerprint
 
-### Same key + different fingerprint
+Reject as:
 
-Expected behavior:
+`IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND`
 
-`409 IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND`
+No second logical workflow/customer may be created for the changed command.
 
-No second workflow/customer is created.
+Natural duplicate-person policy is separate from idempotent replay and is not invented by mk0.
 
-### Natural duplicates
+## 8. Temporal start contract
 
-A customer who happens to share phone/email/document data with an existing customer is **not the same problem as idempotent replay**.
+Successful CTA submission means only:
 
-Natural-person duplicate detection will be a separate policy. mk0 must not silently merge two customers merely because a field matches.
+> Temporal durably accepted the `RegisterNewCustomer` workflow identity.
 
----
-
-## 7. Start response
-
-Once the Temporal Workflow has been durably accepted:
-
-HTTP status:
-
-`202 Accepted`
-
-Body:
+Conceptual acceptance projection:
 
 ```json
 {
-  "requestId": "req_01...",
-  "correlationId": "corr_01...",
   "workflowId": "register-customer:example-business:...",
   "workflowType": "RegisterNewCustomer",
-  "status": "ACCEPTED",
-  "statusUrl": "/api/mk0/workflows/register-customer:example-business:..."
+  "correlationId": "corr_01...",
+  "status": "ACCEPTED"
 }
 ```
 
-A `202` means:
+The CTA may receive this through CLI output, Postman/gRPC response, a minimal adapter, or another test surface. `202 Accepted` is only an HTTP mapping if HTTP is later used; it is **not** a core requirement.
 
-> the durable process was accepted.
+## 9. Workflow query/result contract
 
-It does **not** mean the customer is already `ACTIVE`.
-
----
-
-## 8. Workflow status response
-
-Example in progress:
+In-progress projection:
 
 ```json
 {
   "workflowId": "...",
-  "workflowType": "RegisterNewCustomer",
   "status": "RUNNING",
-  "phase": "PERSISTING_ATTACHMENTS",
-  "correlationId": "corr_01...",
-  "customerId": "cus_01...",
-  "startedAt": "...",
-  "completedAt": null,
+  "phase": "PERSISTING_CUSTOMER_BASE",
+  "correlationId": "...",
+  "customerId": null,
   "failure": null
 }
 ```
 
-Example success:
+Successful projection:
 
 ```json
 {
   "workflowId": "...",
-  "workflowType": "RegisterNewCustomer",
   "status": "COMPLETED",
-  "phase": "ACTIVE",
-  "correlationId": "corr_01...",
+  "phase": "COMPLETED",
   "customerId": "cus_01...",
   "attachments": [
     {
@@ -333,43 +248,48 @@ Example success:
 }
 ```
 
----
+Failed projection includes a typed failure classification, not raw stack traces, credentials, database internals or unrestricted PII.
 
-## 9. Error taxonomy
+## 10. Persistence output contract
 
-### HTTP-edge errors — workflow not started
+A successful workflow must prove:
 
-- `INVALID_REQUEST` → 400.
-- `MISSING_IDEMPOTENCY_KEY` → 400.
-- `INVALID_ATTACHMENT_INGRESS_REF` → 400/422 depending on cause.
-- `UNSUPPORTED_MEDIA_TYPE` → 415.
-- `PAYLOAD_TOO_LARGE` → 413.
-- `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND` → 409.
-- `ORCHESTRATION_UNAVAILABLE` → 503 when the workflow could not be durably accepted.
+### PostgreSQL
 
-### Workflow/business failures — queryable after 202
+- exactly one canonical Customer registration;
+- exactly one logical registration/idempotency receipt;
+- normalized approved Customer data;
+- attachment references when applicable;
+- final successful registration state only after mandatory effects complete.
 
-- `CUSTOMER_PERSISTENCE_FAILED`.
-- `ATTACHMENT_PERSISTENCE_FAILED`.
-- `ATTACHMENT_INTEGRITY_MISMATCH`.
-- `FINALIZATION_FAILED`.
-- `REGISTRATION_POLICY_REJECTED`.
+### MongoDB
 
-Internal stack traces, database paths, credentials, and raw PII are never returned as error details.
+- required execution/audit milestones;
+- workflow/application context required by Design;
+- no unrestricted duplicate Customer shadow document.
 
----
+### AttachmentStore
 
-## 10. Contract success criteria
+When attachments exist:
 
-A conforming implementation must prove:
+- stable committed attachment identity;
+- integrity metadata;
+- retrievable content/object;
+- no duplicate logical attachment on Activity retry.
 
-1. Valid minimal customer can be registered.
-2. Valid full customer can be registered.
-3. Registration with one/multiple attachments can complete.
-4. Same idempotency key + same command does not duplicate.
-5. Same idempotency key + different command returns conflict.
-6. Bad HTTP/DTO input starts no workflow.
-7. Workflow failure remains queryable.
-8. Customer read returns the canonical persisted result.
-9. No API response exposes a local filesystem/database path.
-10. No scheduling record is created by this command.
+## 11. Contract success criteria
+
+A conforming mk0 implementation proves:
+
+1. minimal valid Customer can be registered;
+2. full valid Customer can be registered;
+3. optional attachments can be persisted/referenced;
+4. same key + same command is idempotent;
+5. same key + different command conflicts;
+6. invalid structural input starts no workflow;
+7. CTA disconnect/reconnect does not lose accepted workflow progress;
+8. workflow failure remains queryable;
+9. PostgreSQL result follows approved TimeSlots Customer semantics;
+10. required MongoDB audit/context exists;
+11. no persistence internals leak into the caller contract;
+12. zero scheduling side effects occur.
