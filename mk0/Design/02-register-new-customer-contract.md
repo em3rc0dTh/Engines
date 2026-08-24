@@ -182,6 +182,8 @@ The update:
 
 Each accepted external input has a stable `inputId`/Update identity so channel retries do not create duplicate logical interactions.
 
+The original normalized start fingerprint is frozen at Workflow start. Later `ProvideCustomerData` Updates change durable Workflow state but do not rewrite that original fingerprint.
+
 ### 6.3 Future interaction messages
 
 The same pattern can later support:
@@ -231,7 +233,46 @@ Idempotent replay and natural duplicate detection are different concerns.
 
 ### Session idempotency
 
-The start `idempotencyKey` identifies the registration attempt/session. Repeating the same start must resolve the same logical Workflow rather than create another registration session.
+The start `idempotencyKey` identifies the registration attempt/session.
+
+The authoritative session identity is business-scoped:
+
+```text
+(operation, businessSlug, idempotencyKeyHash)
+```
+
+Recommended Workflow identity:
+
+```text
+register-customer:{businessSlug}:{hash(idempotencyKey)}
+```
+
+The same opaque key value under another `businessSlug` is a different business-scoped identity and does not conflict solely because the raw key text matches.
+
+The CTA/system derives a deterministic fingerprint from the normalized material **initial start snapshot**, conceptually including:
+
+```text
+operation
+businessSlug
+schemaVersion
+normalized initial Customer draft
+normalized initial attachment ingress identities / expected integrity metadata
+```
+
+It excludes non-material transport/presentation metadata such as correlation ID, channel rendering metadata and request timestamp.
+
+Rules:
+
+```text
+same business-scoped session identity + same initial fingerprint
+→ resolve the same logical Workflow/session
+
+same business-scoped session identity + materially different initial fingerprint
+→ SESSION_IDEMPOTENCY_CONFLICT
+→ no second registration or Customer effect
+```
+
+Once the Workflow exists, Customer data changes or completion must use `ProvideCustomerData` or another explicitly designed Temporal Update. Later Updates do not change the original start fingerprint.
 
 ### Natural duplicate detection
 
@@ -284,7 +325,8 @@ Canonical business authority:
 
 - Customer;
 - contacts/documents according to approved projection;
-- registration/session identity;
+- business-scoped registration/session identity;
+- initial-start fingerprint / replay-conflict state;
 - final registration result;
 - attachment references where applicable.
 
@@ -299,6 +341,10 @@ Application interaction/audit authority:
 - duplicate-check outcome classification;
 - persistence milestones;
 - final outcome/failure classification.
+
+Applicable success-gating logical audit milestones must be durably represented before `CREATED` or `ALREADY_EXISTS` may be reported as successful. Retry-safe identity must prevent duplicate logical milestones.
+
+If a required audit milestone cannot be persisted after the frozen retry/failure policy is exhausted, the registration is not successful. Temporal Event History remains the durable orchestration evidence for a failure caused by the unavailable audit store.
 
 Do not copy unrestricted secrets or raw binary payloads. Customer PII retention in interaction records must follow an explicit policy; tests use synthetic data.
 
@@ -342,10 +388,14 @@ A conforming mk0 implementation proves:
 3. CTA can submit additional data to the same Workflow;
 4. accepted inputs survive CTA disconnect/reconnect;
 5. full valid draft advances automatically;
-6. duplicate lookup occurs through an Activity, not direct Workflow database access;
-7. hard duplicate creates no second Customer;
-8. new Customer creates exactly one canonical PostgreSQL record;
-9. MongoDB contains the required interaction/audit trail;
-10. optional attachments persist through AttachmentStore and are referenced safely;
-11. Worker restart/retry does not duplicate the logical registration;
-12. zero scheduling side effects occur.
+6. exact start replay resolves the same business-scoped session;
+7. same-business/same-key materially different initial-start fingerprint produces `SESSION_IDEMPOTENCY_CONFLICT` and no second business effect;
+8. later `ProvideCustomerData` Updates do not rewrite the original start fingerprint;
+9. duplicate lookup occurs through an Activity, not direct Workflow database access;
+10. hard duplicate creates no second Customer;
+11. new Customer creates exactly one canonical PostgreSQL record;
+12. MongoDB contains the required success-gating interaction/audit trail before success is reported;
+13. exhausted mandatory-audit failure cannot become successful registration;
+14. optional attachments persist through AttachmentStore and are referenced safely;
+15. Worker restart/retry does not duplicate the logical registration;
+16. zero scheduling side effects occur.
