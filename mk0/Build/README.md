@@ -13,10 +13,19 @@ No application framework is selected or required for mk0.
 When authorized, Build must realize only:
 
 ```text
-CTA / controlled entry
-   Postman | CLI | minimal test harness
+CTA channel
+   Postman / CLI first
         ↓
-Temporal RegisterNewCustomer
+CTA Adapter contract
+        ↓
+FULL TEMPORAL ORCHESTRATION ENGINE
+   Temporal Service
+   Workflow
+   Task Queue
+   Worker
+   Activities
+   durable Event History
+   retry/recovery/query semantics
         ↓
 Persistence Activities
    ├── PostgreSQL → Customer + registration/idempotency truth
@@ -24,18 +33,39 @@ Persistence Activities
    └── AttachmentStore → optional binary/document persistence
 ```
 
-## Preferred first runtime proof
+## Non-negotiable Temporal rule
 
-The cheapest valid proof is acceptable:
+mk0 must not use:
+
+- an in-process fake Workflow engine;
+- a hand-written state-machine loop presented as Temporal;
+- database flags as a substitute for Temporal Workflow state;
+- a CTA process that must remain alive for Workflow progress;
+- a reduced custom orchestrator that bypasses Task Queue/Worker semantics.
+
+The first proof must use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
+
+## CTA rule
+
+The channel and adapter remain replaceable.
 
 ```text
-CLI/test harness
-→ Temporal client
-→ Temporal worker
-→ PostgreSQL + MongoDB
+Postman
+CLI
+Form later
+MCP later
+WhatsApp later
+Telegram later
+...
+    ↓
+CTA Adapter
+    ↓
+Temporal
 ```
 
-Postman may be added through the thinnest practical adapter only if it improves testing. That adapter must not own orchestration or business persistence.
+A CLI may be the first executable CTA Adapter because it can speak to Temporal through the official client/SDK without introducing a web framework.
+
+Postman can be proven through a thin transport-compatible CTA Adapter. That adapter remains transport only and cannot own orchestration or persistence sequencing.
 
 ## Expected logical boundaries
 
@@ -44,12 +74,16 @@ contracts/
   register-new-customer/
 
 cta/
-  cli-or-test-client/
+  adapter-contract/
+  cli/
+  postman-transport/          later in mk0 proof
 
 orchestration/
   temporal/
     workflows/
     activities/
+    workers/
+    task-queues/
 
 persistence/
   postgres/
@@ -69,17 +103,20 @@ This is conceptual and does not authorize scaffolding yet.
 
 ## Frozen constraints
 
-- no framework dependency in the architecture;
+- no web framework dependency in the architecture;
+- all channels converge on one CTA Adapter contract;
 - CTA validates structural input before Temporal start;
-- CTA never writes persistence directly;
-- Temporal owns durable sequencing;
+- CTA/adapter never writes business persistence directly;
+- full Temporal owns durable sequencing/retries/recovery;
+- real Task Queue/Worker semantics are required;
 - Workflow code calls no DB/file/network driver directly;
 - Activities are retry-safe/idempotent;
 - PostgreSQL is canonical Customer + registration/idempotency truth;
 - Customer persistence follows approved DataModel v3 / TimeSlots semantics;
 - MongoDB stores execution/audit/workflow context, not a shadow Customer truth;
 - attachments use a separate persistence contract;
-- CTA disconnect must not stop an accepted workflow;
+- CTA disconnect must not stop an accepted Workflow;
+- Worker restart must not lose accepted Workflow progress;
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
@@ -90,11 +127,15 @@ When Build is approved, record:
 - approval date;
 - approved Design commit;
 - approved Golden Dataset version;
-- Temporal runtime topology;
+- Temporal Service topology;
+- namespace;
+- Task Queue/Worker topology;
+- Temporal SDK language/version;
 - PostgreSQL topology;
 - MongoDB topology;
 - chosen AttachmentStore technology if attachment cases are enabled;
-- chosen minimal CTA harness;
+- chosen first CTA Adapter implementation;
+- Postman transport decision;
 - exact Build ticket sequence.
 
 Until then:
