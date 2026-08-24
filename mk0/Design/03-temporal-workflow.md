@@ -6,7 +6,7 @@ Workflow type:
 
 `RegisterNewCustomer`
 
-Recommended Workflow ID shape:
+Recommended Workflow ID:
 
 ```text
 register-customer:{businessSlug}:{hash(Idempotency-Key)}
@@ -16,25 +16,21 @@ Goals:
 
 - deterministic identity;
 - duplicate-start resistance;
-- no raw idempotency key in logs;
-- business/tenant scoping via `businessSlug`.
-
----
+- no raw idempotency key in ordinary logs;
+- business/tenant scoping through `businessSlug`.
 
 ## 2. Workflow input
 
 The Workflow receives a normalized command envelope containing:
 
 - `businessSlug`;
-- customer command data;
+- Customer command data;
 - `commandFingerprint`;
 - correlation metadata;
-- opaque attachment ingress references, when present;
+- opaque attachment ingress references when present;
 - schema/contract version.
 
-The Workflow should not receive large attachment bytes.
-
----
+Large attachment bytes do not belong in ordinary Workflow input/history.
 
 ## 3. Workflow state machine
 
@@ -43,275 +39,210 @@ ACCEPTED
    ↓
 VALIDATING_COMMAND
    ↓
-RESERVING_IDEMPOTENCY
+RESERVING_IDEMPOTENCY       → PostgreSQL Activity
    ↓
-PERSISTING_CUSTOMER_BASE
+PERSISTING_CUSTOMER_BASE    → PostgreSQL Activity
    ↓
-┌───────────────────────────┐
-│ attachments requested?    │
-└───────┬───────────┬───────┘
-        │ no        │ yes
-        │           ▼
-        │     PERSISTING_ATTACHMENTS
-        │           ↓
-        │     LINKING_ATTACHMENTS
-        │           │
-        └───────────┘
-              ↓
-FINALIZING_CUSTOMER
-              ↓
-COMPLETED
+attachments requested?
+   ├─ no ───────────────────────────────┐
+   └─ yes                              │
+        ↓                              │
+      PERSISTING_ATTACHMENTS  → MongoDB Activity
+        ↓                              │
+      LINKING_ATTACHMENTS     → PostgreSQL Activity
+        └──────────────────────────────┘
+                     ↓
+             FINALIZING_CUSTOMER       → PostgreSQL Activity
+                     ↓
+             COMPLETED
 ```
 
-Any non-recoverable failure produces a typed failed outcome while preserving enough durable state for diagnosis and safe retry/recovery.
-
----
+MongoDB audit/context milestones are appended at the selected workflow phases through explicit Activities.
 
 ## 4. Activity boundaries
 
-Workflow code coordinates. Activities perform side effects.
-
-Proposed Activities:
-
-### `reserveRegistrationCommand`
+### `reserveRegistrationCommand` — PostgreSQL
 
 Purpose:
 
-- persist/verify idempotency command receipt;
+- persist/verify durable idempotency receipt;
 - compare command fingerprint;
-- return existing registration identity when replayed safely;
-- reject same key with different fingerprint.
+- return the existing registration identity on valid replay;
+- reject same key with a different material command.
 
 Must be idempotent.
 
-### `createCustomerRegistrationBase`
+### `createCustomerRegistrationBase` — PostgreSQL
 
 Purpose:
 
-- create the canonical customer registration record or recover the existing record for this command;
+- create the canonical Customer registration identity/record;
+- recover the existing record when the Activity is retried;
 - return stable `customerId`.
 
-Must be idempotent against Workflow/command identity.
+Must be idempotent against workflow/command identity.
 
-### `commitAttachment`
-
-One Activity invocation per requested attachment, or a carefully bounded batch.
+### `commitAttachment` — MongoDB, optional
 
 Purpose:
 
-- resolve `ingressRef`;
-- verify expected hash/metadata;
-- persist content into the local attachment database/store;
-- return opaque committed attachment metadata.
+- resolve an opaque ingress reference;
+- verify metadata/hash;
+- persist the optional attachment/document object through the MongoDB attachment capability;
+- return stable opaque attachment metadata.
 
-Must be idempotent by attachment ingress/content identity.
+Must be idempotent by ingress/content/workflow identity.
 
-### `linkCustomerAttachments`
+### `linkCustomerAttachments` — PostgreSQL, optional
 
 Purpose:
 
-- attach committed metadata/references to the Customer document;
-- never embed binary content;
+- persist opaque attachment references against the Customer/registration business record;
+- never copy the binary object into PostgreSQL;
 - tolerate retry without duplicate references.
 
-### `finalizeCustomerRegistration`
+### `appendExecutionAudit` — MongoDB
 
 Purpose:
 
-- make the customer visible as the final successful registration state according to the approved persistence model;
-- verify all requested mandatory effects are present.
+- persist selected application-level workflow milestones;
+- preserve queryable correlation/workflow/customer evidence;
+- remain separate from Temporal Event History.
 
-### `appendExecutionAudit`
+### `finalizeCustomerRegistration` — PostgreSQL
 
 Purpose:
 
-- persist selected application-level audit milestones.
+- verify all mandatory registration effects;
+- mark the authoritative registration as successfully finalized;
+- tolerate retry without changing the logical outcome.
 
-Important:
+## 5. Audit milestones — MongoDB
 
-Audit failure policy must be explicit. For compliance-critical milestones, audit persistence may be mandatory. For high-volume diagnostic detail, it must not create an uncontrolled source of workflow failure.
-
-mk0 begins with a small mandatory milestone set rather than logging every internal line.
-
----
-
-## 5. Audit milestone set — mk0
-
-Minimum application events:
+Minimum mk0 set:
 
 ```text
 REGISTER_CUSTOMER_ACCEPTED
 REGISTER_CUSTOMER_VALIDATED
 IDEMPOTENCY_RESERVED
 CUSTOMER_BASE_PERSISTED
-ATTACHMENT_COMMITTED          repeated per attachment
-CUSTOMER_ATTACHMENTS_LINKED   when applicable
+ATTACHMENT_COMMITTED          optional / repeated
+CUSTOMER_ATTACHMENTS_LINKED   optional
 CUSTOMER_REGISTRATION_ACTIVE
-REGISTER_CUSTOMER_FAILED      when terminal failure occurs
+REGISTER_CUSTOMER_FAILED      terminal failure
 ```
 
-Each audit event should contain identifiers and classifications, not unrestricted request bodies.
-
-Minimum envelope:
-
-- `eventId`;
-- `eventType`;
-- `occurredAt`;
-- `businessSlug`;
-- `workflowId`;
-- `correlationId`;
-- `customerId` when known;
-- activity/phase classification;
-- attempt number when relevant;
-- sanitized metadata;
-- sanitized failure classification when relevant.
-
----
+Audit events contain IDs/classifications and sanitized metadata, not unrestricted Customer request bodies.
 
 ## 6. Retry semantics
 
-### Transient examples
+Potentially transient:
 
-Potentially retryable:
+- PostgreSQL temporarily unavailable;
+- MongoDB temporarily unavailable;
+- worker/process crash;
+- network interruption after a side effect but before Activity completion is recorded.
 
-- temporary MongoDB connectivity failure;
-- temporary attachment-store lock/unavailability;
-- process crash during Activity execution;
-- network interruption between worker and MongoDB.
-
-### Permanent examples
-
-Normally not retryable without command change:
+Normally permanent without a changed command/environment:
 
 - invalid command schema;
 - expired/invalid attachment ingress reference;
-- attachment hash mismatch;
-- idempotency key conflict with different fingerprint;
+- attachment integrity mismatch;
+- same idempotency key with different fingerprint;
 - explicit business-policy rejection.
 
-### Rule
+Retry classification is typed at the Activity/application boundary.
 
-Retry classification belongs to the Activity error taxonomy, not to string matching in the Workflow.
+## 7. Idempotency requirements
 
----
+### PostgreSQL Customer
 
-## 7. Idempotent Activity requirements
+A retried Activity cannot perform an unconditional new insert every time. A stable registration/command identity must return the same logical Customer.
 
-Temporal may retry an Activity after the Activity performed its side effect but before completion was recorded.
+### MongoDB attachment/document
 
-Therefore:
+A retried commit after the object already persisted must return/recover the same logical attachment rather than creating a duplicate merely because the first Activity acknowledgement was lost.
 
-### Customer creation
+### MongoDB audit
 
-Must not implement:
+A conceptual milestone requires a stable event/deduplication identity when Activity retries occur, unless separate retry-attempt records are intentionally part of the model.
+
+## 8. Cross-store consistency
+
+PostgreSQL and MongoDB do not share one application transaction.
+
+mk0 therefore uses **workflow-mediated consistency**.
+
+A Customer is not reported as successfully finalized until:
+
+1. the PostgreSQL Customer/registration record exists;
+2. every requested mandatory attachment/document is committed in MongoDB;
+3. PostgreSQL contains the corresponding opaque reference(s);
+4. required audit milestones are persisted according to policy;
+5. finalization preconditions pass.
+
+Failure handling:
+
+- transient side-effect failure → Temporal retries;
+- permanent attachment failure → workflow fails, Customer is not reported as successful;
+- MongoDB attachment committed but PostgreSQL link fails → retry/reconcile existing attachment;
+- PostgreSQL link succeeds but workflow completion is lost → idempotent finalization returns existing outcome.
+
+Deletion-based rollback is not the default. Durable partial evidence must remain diagnosable and reconcilable.
+
+## 9. Temporal persistence is separate
+
+Temporal's own server persistence is an infrastructure concern.
+
+Even if a local/production Temporal cluster uses PostgreSQL internally:
 
 ```text
-insert every attempt
+Temporal persistence schema
+≠
+Engines mk0 application PostgreSQL Customer schema
 ```
 
-It needs a stable uniqueness key derived from registration/workflow identity.
+No Customer authority may accidentally migrate into Temporal internal tables.
 
-### Attachment commit
+## 10. Workflow query contract
 
-Must not produce a new physical attachment for every retry.
+A safe status projection exposes:
 
-It should use one or more stable identities:
-
-- ingress identity;
-- content hash;
-- workflow/customer linkage identity.
-
-### Audit append
-
-If an audit milestone can be retried, it needs a stable event/deduplication identity so one conceptual milestone is not recorded repeatedly as distinct truth unless attempts are intentionally modeled separately.
-
----
-
-## 8. Cross-store consistency strategy
-
-MongoDB customer storage and the local attachment store do not share an atomic transaction.
-
-mk0 uses **workflow-mediated consistency**, not a pretend distributed transaction.
-
-### Rule
-
-A Customer is not finalized as successful until:
-
-1. the customer base exists;
-2. every requested attachment has a committed local identity;
-3. MongoDB contains the expected attachment references;
-4. finalization checks pass.
-
-If an attachment Activity fails transiently, Temporal retries.
-
-If it fails permanently:
-
-- workflow becomes failed;
-- base customer/registration identity is retained for traceability/idempotency;
-- it must not be presented as a successful completed registration;
-- committed orphan candidates must be discoverable for cleanup/reconciliation.
-
-Deletion-based rollback is not the default because deleting durable evidence can make retries and diagnosis less reliable.
-
----
-
-## 9. Workflow query contract
-
-The API must be able to obtain a safe projection with:
-
+- `workflowId`;
 - workflow status;
 - current mk0 phase;
 - `customerId` if assigned;
-- attachment count committed/requested;
-- start/completion timestamps;
-- typed failure classification;
-- correlation ID.
+- requested/committed attachment counts;
+- timestamps;
+- correlation ID;
+- typed failure classification.
 
-It must not expose raw Temporal Event History directly to ordinary API callers.
+Ordinary API callers do not receive raw Temporal Event History.
 
----
+## 11. Cancellation
 
-## 10. Cancellation
+Arbitrary cancellation is outside the first mk0 CTA capability. It can be designed later after partial-persistence semantics are explicitly defined.
 
-mk0 does not expose arbitrary cancellation as the first CTA capability.
+## 12. Versioning
 
-Reason:
-
-Customer registration is short and cancellation adds ambiguous partial-persistence semantics.
-
-A later design may add cancellation only after defining:
-
-- allowed phases;
-- attachment cleanup behavior;
-- customer-base status;
-- audit requirements.
-
----
-
-## 11. Workflow versioning
-
-The first implementation must treat Workflow behavior as versioned contract.
-
-At minimum preserve:
+At minimum preserve/version:
 
 - workflow type;
-- command schema version;
-- persistence schema version;
+- command schema;
+- PostgreSQL business persistence schema;
+- MongoDB audit/document schema;
 - golden dataset version.
 
-Changes that alter replay behavior or sequencing require an explicit Temporal-compatible migration/versioning strategy before production histories exist.
+## 13. Temporal gate
 
----
+The design is accepted only if future tests can prove:
 
-## 12. Temporal gate
-
-The Workflow design is accepted only if tests can prove:
-
-- same command replay produces one customer;
-- an Activity crash after side effect does not duplicate customer/attachment;
+- same command replay yields one PostgreSQL Customer;
+- Activity retry after side effect does not duplicate Customer or attachment;
 - worker restart resumes execution;
-- transient persistence failure retries;
-- permanent integrity error fails deterministically;
-- no Workflow code calls MongoDB/local DB directly;
-- workflow status remains queryable after failure;
-- customer is not finalized before attachments are committed.
+- transient PostgreSQL failure retries;
+- transient MongoDB failure retries;
+- permanent attachment integrity failure is deterministic;
+- Workflow code calls neither PostgreSQL nor MongoDB directly;
+- workflow failure remains queryable;
+- Customer is not finalized before mandatory attachment/reference effects complete.
