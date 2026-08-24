@@ -1,171 +1,166 @@
 # 04 — Persistence Boundaries
 
-## 1. Persistence is not one database
+## 1. Persistence scope
 
-mk0 separates three persistence authorities:
+mk0 uses exactly two application persistence technologies:
 
 ```text
 Persistence
-├── Customer business data
-│   └── MongoDB
-├── Workflow / audit application log
-│   └── MongoDB
-└── Attachment binary content
-    └── SQLite local attachment database
+├── PostgreSQL
+│   ├── Customer business truth
+│   ├── registration state
+│   ├── idempotency/command receipt
+│   └── attachment/document references
+│
+└── MongoDB
+    ├── execution audit
+    ├── workflow/application context
+    └── optional attachment/document persistence
 ```
 
-The semantic boundary is primary. The mk0 physical profile is frozen in [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md).
+SQLite is **not** part of mk0.
 
----
-
-## 2. Customer business store — MongoDB
+## 2. PostgreSQL — canonical Customer authority
 
 Authority question:
 
-> What is the canonical business state of this registered customer?
+> What Customer was registered and what is the authoritative transactional state of that registration?
 
-Collection:
+The relational model must represent the approved TimeSlots Customer semantics without forcing the entire canonical model into a single JSON blob.
 
-`customers`
-
-Conceptual Customer shape inherited from the TimeSlots data-model baseline:
+Conceptual logical relations:
 
 ```text
-Customer
-├── _id
-├── businessSlug
-├── type
-├── name
-├── document
-├── contact
-│   ├── phones[]
-│   └── email
-├── whatsapp              optional/future channel metadata
-├── metrics               business-derived metrics, not workflow logs
-├── notes
-├── status
-├── createdAt
-└── updatedAt
+customers
+customer_contacts
+customer_phones
+customer_documents
+registration_commands
+customer_attachment_refs
 ```
 
-mk0 must not populate facts it does not know merely to make the document look complete.
+These names are design-level placeholders, not DDL.
 
-Technical registration metadata may include:
+### PostgreSQL owns
 
-- registration workflow identity;
-- command fingerprint/schema version;
-- attachment references;
-- concurrency/version metadata.
+- Customer stable ID;
+- `businessSlug` ownership/partitioning field;
+- Customer type/name/status;
+- document/contact data required by the approved contract;
+- registration lifecycle/version metadata;
+- command/idempotency receipt;
+- opaque references to optional MongoDB-persisted attachments/documents;
+- transactional created/updated timestamps.
 
-Technical metadata must remain distinguishable from customer-facing facts.
+### PostgreSQL does not own
 
----
+- full Temporal Event History;
+- application log stream;
+- unrestricted workflow context documents;
+- raw attachment/document binary payloads in mk0.
 
-## 3. Execution/Audit log — MongoDB
+## 3. Registration/idempotency authority — PostgreSQL
 
-Authority question:
-
-> Which important application/business execution events occurred, for which workflow/customer, and with what outcome?
-
-Collection:
-
-`execution_audit`
-
-Characteristics:
-
-- append-oriented;
-- stable event identity;
-- queryable by business/workflow/correlation/customer;
-- sanitized;
-- schema-versioned;
-- not a copy of the Customer document;
-- not a verbatim copy of Temporal Event History.
-
-Conceptual event:
-
-```json
-{
-  "eventId": "evt_01...",
-  "schemaVersion": "mk0.audit.v1",
-  "eventType": "CUSTOMER_BASE_PERSISTED",
-  "businessSlug": "example-business",
-  "workflowId": "register-customer:...",
-  "correlationId": "corr_01...",
-  "customerId": "cus_01...",
-  "phase": "PERSISTING_CUSTOMER_BASE",
-  "attempt": 1,
-  "occurredAt": "...",
-  "metadata": {"attachmentCount": 0},
-  "failure": null
-}
-```
-
-PII policy:
-
-- do not log whole request bodies;
-- prefer IDs, classifications, counts, hashes, and safe status metadata;
-- do not routinely duplicate raw DNI/document values, complete phones/emails, attachment bytes, secrets, auth tokens, or connection details.
-
----
-
-## 4. Command idempotency receipts — MongoDB
-
-Collection:
-
-`command_receipts`
-
-Conceptual fields:
+Conceptual registration command fields:
 
 ```text
 operation
-businessSlug
-idempotencyKeyHash
-commandFingerprint
-workflowId
-customerId?
+business_slug
+idempotency_key_hash
+command_fingerprint
+workflow_id
+customer_id nullable until assigned
 status
-createdAt
-updatedAt
+created_at
+updated_at
 ```
 
 Required logical uniqueness:
 
 ```text
-(operation, businessSlug, idempotencyKeyHash)
+(operation, business_slug, idempotency_key_hash)
 ```
 
 Rules:
 
-- same key hash + same fingerprint → same workflow/outcome;
-- same key hash + different fingerprint → conflict;
-- raw key need not be stored;
-- phone/email uniqueness is not an idempotency mechanism.
+- same key + same fingerprint → recover the same logical workflow/outcome;
+- same key + different fingerprint → conflict;
+- raw idempotency key need not be stored;
+- phone/email/document equality is not a substitute for request idempotency.
 
----
+## 4. MongoDB — execution/audit/context authority
 
-## 5. Attachment authority — SQLite
+MongoDB answers:
 
-Authority question:
+> What application execution evidence/context exists around this workflow?
 
-> Which exact binary object was staged/committed and can it be retrieved with integrity?
+Conceptual collections:
 
-mk0 uses SQLite behind the `AttachmentStore` contract.
+```text
+execution_audit
+workflow_context
+attachment_ingress     optional
+attachments            optional
+```
 
-Conceptual capabilities:
+### `execution_audit`
+
+Append-oriented application milestones such as:
+
+```text
+REGISTER_CUSTOMER_ACCEPTED
+REGISTER_CUSTOMER_VALIDATED
+IDEMPOTENCY_RESERVED
+CUSTOMER_BASE_PERSISTED
+ATTACHMENT_COMMITTED
+CUSTOMER_ATTACHMENTS_LINKED
+CUSTOMER_REGISTRATION_ACTIVE
+REGISTER_CUSTOMER_FAILED
+```
+
+Minimum event envelope:
+
+```text
+eventId
+eventType
+schemaVersion
+businessSlug
+workflowId
+correlationId
+customerId?
+phase
+attempt?
+occurredAt
+metadata
+failure?
+```
+
+This is an application audit projection, not a verbatim duplicate of Temporal history.
+
+### PII rule
+
+Do not log unrestricted request bodies. Prefer identifiers, classifications, counts, hashes and safe state metadata.
+
+## 5. Optional attachments/documents — MongoDB capability
+
+When an mk0 registration includes attachments, MongoDB provides the document/attachment persistence boundary.
+
+Design intentionally does **not** freeze GridFS versus another MongoDB-backed binary/document representation yet. That is a Build-time implementation choice.
+
+The contract requires:
 
 ```text
 stage ingress
 resolve ingress
-commit attachment idempotently
+commit idempotently
 read metadata
-read/stream content
 verify integrity
-mark/reconcile orphan candidate
-expire staged data
-explicit cleanup/retention
+retrieve/stream content
+mark orphan/reconciliation state
+expire unused staged ingress
 ```
 
-Committed metadata includes at least:
+A committed attachment/document exposes an opaque `attachmentId` plus safe metadata:
 
 ```text
 attachmentId
@@ -177,22 +172,11 @@ createdAt
 storageState
 ```
 
-The public contract never exposes:
+The API never exposes MongoDB collection internals or storage-engine-specific identifiers as public semantics.
 
-- physical SQLite path;
-- host directory;
-- page/row coordinates;
-- migration-hostile internal storage keys.
+## 6. PostgreSQL attachment reference
 
-Only opaque attachment identities cross the boundary.
-
----
-
-## 6. Customer attachment references
-
-MongoDB stores reference metadata, never binary content.
-
-Conceptual reference:
+PostgreSQL stores only the business link/reference:
 
 ```json
 {
@@ -206,95 +190,87 @@ Conceptual reference:
 }
 ```
 
-No BLOB.
-
-No local path.
-
----
+No binary content is copied into the Customer relational row/table merely to simplify implementation.
 
 ## 7. Attachment lifecycle
 
 ```text
-INGRESS/STAGED
-      ↓
-COMMITTED IN SQLITE
-      ↓
-REFERENCED BY CUSTOMER IN MONGODB
+INGRESS / STAGED IN MONGODB
+          ↓
+COMMITTED IN MONGODB
+          ↓
+REFERENCED BY POSTGRESQL CUSTOMER/REGISTRATION
 ```
 
-### STAGED
+A staged object is not yet a committed Customer attachment.
 
-- accepted at API data-plane ingress;
-- has opaque `ingressRef` and server-computed integrity metadata;
-- not yet a committed Customer attachment;
-- expires if never claimed/committed.
+## 8. Cross-store consistency
 
-### COMMITTED
+PostgreSQL and MongoDB do not share an atomic application transaction.
 
-- binary exists in SQLite `attachments`;
-- stable `attachmentId` exists;
-- integrity verification passed.
+Temporal coordinates the saga-like progression.
 
-### REFERENCED
-
-- Customer document contains the expected committed reference.
-
----
-
-## 8. Consistency model
-
-MongoDB and SQLite do not share one atomic transaction.
-
-mk0 uses workflow-mediated/saga-like consistency.
-
-### No-attachment success
+### No attachments
 
 ```text
-idempotency receipt
-→ customer base
-→ finalization
-→ success
+PostgreSQL command receipt
+→ PostgreSQL Customer base
+→ MongoDB audit milestone(s)
+→ PostgreSQL finalization
 ```
 
-### Attachment success
+### With attachments
 
 ```text
-idempotency receipt
-→ customer base/registration identity
-→ commit attachment(s) in SQLite
-→ link references in MongoDB
-→ verify expected count/hashes
-→ finalization
-→ success
+PostgreSQL command receipt
+→ PostgreSQL Customer base
+→ MongoDB attachment commit(s)
+→ PostgreSQL attachment reference(s)
+→ MongoDB audit/context milestones
+→ PostgreSQL finalization
 ```
 
-### Permanent failure during attachment commit
+### Failure windows
 
-- workflow fails with typed outcome;
-- base registration identity remains for traceability/idempotency;
-- customer is not exposed as completed successful registration;
-- committed orphan candidates remain discoverable.
+**PostgreSQL Customer write succeeds, Activity completion is lost**
 
-### Attachment committed but Mongo link lost/fails
+Retry must recover the same Customer; no duplicate insert.
 
-Retry discovers/reuses the same attachment and links it. It must not create a new logical attachment merely because an Activity completion was lost.
+**MongoDB attachment commits, Activity completion is lost**
 
-### Mongo link exists but final workflow completion is lost
+Retry must recover the same logical attachment.
 
-Finalization retry must be idempotent and return the existing result.
+**MongoDB attachment commits, PostgreSQL reference fails**
 
----
+Temporal retries the reference step using the existing attachment ID.
 
-## 9. Design-level indexes/invariants
+**PostgreSQL reference succeeds, workflow completion is lost**
 
-### Customer
+Finalization must be idempotent.
 
-- unique `_id`;
-- indexed `businessSlug`;
-- normalized-contact indexes only after lookup/duplicate policy is frozen;
-- no generic unique-phone assumption without explicit business rule.
+**Permanent attachment failure**
 
-### Audit
+Customer registration is not reported as successfully finalized; partial document evidence remains discoverable for reconciliation.
+
+## 9. Temporal internal persistence is not application persistence
+
+Temporal may itself use PostgreSQL or another database internally.
+
+That storage belongs to Temporal infrastructure and must use separate schemas/databases/credentials from the Engines application persistence.
+
+Never query/update Temporal internal tables to infer or mutate Customer business truth.
+
+## 10. Design-level indexes/invariants
+
+### PostgreSQL
+
+- unique Customer primary key;
+- indexed/partitionable `businessSlug` as required by final tenancy design;
+- unique registration idempotency key tuple;
+- unique logical Customer-attachment reference per attachment/customer relation;
+- contact indexes only after duplicate/search policy is approved.
+
+### MongoDB audit
 
 Support queries by:
 
@@ -302,27 +278,20 @@ Support queries by:
 - `(businessSlug, correlationId, occurredAt)`;
 - `(businessSlug, customerId, occurredAt)`.
 
-### Command receipts
+### MongoDB attachment capability
 
-Unique:
+Stable ingress/attachment identity must prevent retry-induced logical duplication.
 
-- `(operation, businessSlug, idempotencyKeyHash)`.
-
-### Customer attachment refs
-
-One committed `attachmentId` must not be linked twice accidentally to the same registration.
-
----
-
-## 10. Persistence failure taxonomy
+## 11. Failure taxonomy
 
 At minimum:
 
 ```text
-CUSTOMER_STORE_UNAVAILABLE
-CUSTOMER_WRITE_CONFLICT
+POSTGRES_CUSTOMER_STORE_UNAVAILABLE
+POSTGRES_CUSTOMER_WRITE_CONFLICT
 IDEMPOTENCY_CONFLICT
-AUDIT_STORE_UNAVAILABLE
+MONGO_AUDIT_STORE_UNAVAILABLE
+MONGO_CONTEXT_STORE_UNAVAILABLE
 ATTACHMENT_INGRESS_NOT_FOUND
 ATTACHMENT_INGRESS_EXPIRED
 ATTACHMENT_STORE_UNAVAILABLE
@@ -332,23 +301,19 @@ CUSTOMER_ATTACHMENT_LINK_FAILED
 FINALIZATION_PRECONDITION_FAILED
 ```
 
-Build can refine names but must not collapse every persistence failure to an undifferentiated database error.
+## 12. Persistence gate
 
----
+Persistence design is accepted when these answers remain unambiguous:
 
-## 11. Persistence gate
-
-Persistence design is accepted when all answers are explicit:
-
-1. Customer truth → MongoDB `customers`.
-2. Idempotency receipt → MongoDB `command_receipts`.
-3. Application audit → MongoDB `execution_audit`.
-4. Binary attachments → SQLite.
-5. Cross-store identity → opaque `attachmentId` plus hash metadata.
-6. Retry-safe customer identity → workflow/command identity.
-7. Retry-safe attachment identity → ingress/commit identity.
-8. Mongo-link failure after SQLite commit → reuse and retry link.
-9. Attachment failure after Customer base → no false successful finalization.
-10. Staged/orphaned attachments → discoverable for TTL/reconciliation.
-11. Routine audit logs → sanitized, no unrestricted PII/blobs.
-12. Future store migration → possible behind `AttachmentStore` without public API change.
+1. Customer truth → PostgreSQL.
+2. Registration/idempotency truth → PostgreSQL.
+3. Application audit/context → MongoDB.
+4. Optional document/attachment persistence → MongoDB capability.
+5. Customer attachment reference → PostgreSQL.
+6. Workflow history → Temporal, not MongoDB.
+7. Cross-store coordination → Temporal workflow/Activities.
+8. Retry-safe Customer identity → registration/command identity.
+9. Retry-safe attachment identity → ingress/commit identity.
+10. No false success after permanent mandatory persistence failure.
+11. No unrestricted PII/raw request duplication in audit.
+12. No Services/Scheduler persistence is introduced in this mk0 slice.
