@@ -2,307 +2,278 @@
 
 ## 1. Architectural objective
 
-mk0 must prove one clean operational path:
+mk0 proves exactly the first three architecture zones:
 
 ```text
-Postman CTA
-   │
-   │ HTTP command
-   ▼
-NestJS API Boundary
-   │
-   │ start/query workflow
-   ▼
-Orchestration Engine
-   │
-   │ Temporal Workflow + Activities
-   ▼
-Persistence Ports
-   ├── CustomerRepository      → MongoDB
-   ├── ExecutionAuditRepository→ MongoDB
-   └── AttachmentStore         → local database/store
+┌──────────────────────────────────────────┐
+│ 1. CTA / API                             │
+│ Postman → NestJS                         │
+└──────────────────┬───────────────────────┘
+                   │ command / query
+                   ▼
+┌──────────────────────────────────────────┐
+│ 2. ORCHESTRATION ENGINE                  │
+│ Temporal                                 │
+│ RegisterNewCustomer Workflow + Activities│
+└──────────────────┬───────────────────────┘
+                   │ persistence ports
+                   ▼
+┌──────────────────────────────────────────┐
+│ 3. PERSISTENCE                           │
+│ PostgreSQL → Customer/registration truth │
+│ MongoDB    → audit/context/documents     │
+└──────────────────────────────────────────┘
 ```
 
-This architecture is intentionally **agent-ready but not agent-dependent**.
-
-A future Agent becomes another caller of the NestJS command contract. It does not obtain direct access to the workflow runtime or databases.
+This architecture is **agent-ready but not agent-dependent**. Services, Scheduler, Integration and Agent remain outside the mk0 first slice.
 
 ---
 
-## 2. Component responsibilities
+## 2. CTA / API
 
-### 2.1 Postman CTA
+### Postman
 
-Postman is a development/test caller.
+Postman is the initial development/test CTA.
 
-Responsibilities:
+It may:
 
-- build the HTTP request;
+- submit a registration command;
 - provide `Idempotency-Key`;
 - optionally provide correlation metadata;
-- submit JSON or multipart content;
+- stage/submit optional attachments through the approved API contract;
 - inspect accepted workflow identity;
 - query workflow status;
-- inspect final outcome.
+- read the resulting Customer projection.
 
-Postman owns no business rules.
+Postman owns no business rules and has no database credentials/path.
 
-### 2.2 NestJS API Boundary
+### NestJS
 
-NestJS is the public application edge.
-
-Responsibilities:
-
-- API versioning;
-- DTO parsing;
-- schema validation;
-- basic normalization;
-- request-size and attachment-count limits;
-- authentication/authorization boundary when enabled;
-- correlation ID creation/propagation;
-- idempotency-key validation;
-- construction of the application command;
-- start/query interaction with the Orchestration Engine;
-- translation of known outcomes to HTTP responses.
-
-NestJS must not:
-
-- write Customer directly to MongoDB;
-- write attachment bytes directly to the local store;
-- implement retry loops for durable business steps;
-- model a long-running registration state machine in a controller;
-- infer scheduling.
-
-### 2.3 Orchestration Engine
-
-The Orchestration Engine owns durable sequencing.
-
-Runtime for mk0: **Temporal**.
-
-Responsibilities:
-
-- assign deterministic Workflow identity;
-- coordinate registration steps;
-- call Activities;
-- retry transient failures according to policy;
-- preserve progress across process/runtime failure;
-- return/query workflow status;
-- prevent workflow-level duplication;
-- encode compensation/failure policy explicitly.
-
-The Workflow must not perform direct database, filesystem, clock-dependent, random, or network side effects.
-
-### 2.4 Persistence
-
-Persistence is three separate capabilities.
-
-#### Customer business authority
-
-MongoDB collection conceptually named `customers`.
+NestJS is the application boundary.
 
 Owns:
 
-- Customer canonical business document;
-- lifecycle/status required by the approved model;
-- normalized contact data;
-- attachment references/metadata;
-- timestamps/version metadata;
-- correlation to registration workflow where useful.
+- HTTP versioning/routes;
+- DTO parsing and edge validation;
+- request normalization;
+- correlation propagation;
+- idempotency header validation;
+- auth boundary when later enabled;
+- optional attachment ingress contract;
+- Temporal client boundary;
+- mapping typed workflow outcomes to HTTP.
 
-#### Execution/Audit authority
+Must not:
 
-MongoDB collection conceptually named `execution_audit`.
-
-Owns append-oriented application/audit facts such as:
-
-- request accepted;
-- workflow started;
-- validation accepted/rejected;
-- customer persistence attempt/outcome;
-- attachment persistence attempt/outcome;
-- registration activated/failed;
-- sanitized error classification.
-
-This collection is **not** a replacement for Temporal Event History. It is a business/application audit projection designed for application queries and retention rules.
-
-#### Attachment authority
-
-A separate local database/store.
-
-Owns:
-
-- binary content;
-- opaque attachment ID;
-- content hash;
-- media type;
-- byte length;
-- local persistence timestamp;
-- integrity/readability state.
-
-MongoDB stores references, not binary attachment content.
+- directly execute the durable Customer registration sequence;
+- create a second direct-to-PostgreSQL registration path;
+- write audit records as a substitute for the Temporal workflow;
+- implement durable retry loops in controllers;
+- infer service/scheduling behavior.
 
 ---
 
-## 3. Control flow
+## 3. Orchestration Engine — Temporal
 
-### 3.1 No attachments
+Workflow type:
 
-```text
-Postman
-  │ POST register
-  ▼
-NestJS
-  │ validate envelope + idempotency key
-  │ create correlationId
-  ▼
-Temporal Client
-  │ start RegisterNewCustomer workflow
-  ▼
-Workflow
-  │ validate/normalize business command
-  │ activity: ensure idempotency reservation
-  │ activity: create customer
-  │ activity: finalize customer
-  │ activity: append audit milestones
-  ▼
-ACTIVE customer
-```
+`RegisterNewCustomer`
 
-### 3.2 With attachments
+Temporal owns:
+
+- durable step ordering;
+- workflow identity;
+- transient retry policy through Activities;
+- recovery after worker/process restart;
+- workflow-level failure state;
+- queryable execution phase;
+- coordination between PostgreSQL and MongoDB effects.
+
+Temporal Workflow code must remain replay-safe. PostgreSQL and MongoDB calls are side effects and belong in Activities/adapters.
+
+### Important persistence distinction
+
+Temporal itself needs runtime persistence in a real deployment. If Temporal is configured to use PostgreSQL internally, that database/schema is **Temporal infrastructure persistence**, not the mk0 application PostgreSQL Customer authority.
 
 ```text
-Postman
-  │ POST register + attachment(s)
-  ▼
-NestJS
-  │ validates metadata/limits
-  │ stages attachment ingress in an implementation-defined safe handoff
-  ▼
-Temporal Workflow
-  │ ensure idempotency
-  │ create pending registration identity
-  │ activity: persist each attachment
-  │ receive attachment IDs + hashes
-  │ activity: create/link customer with committed references
-  │ finalize registration
-  ▼
-ACTIVE customer + attachment references
+PostgreSQL/application ≠ PostgreSQL/Temporal-internal
 ```
 
-Important: Temporal Workflow input should not blindly contain large binary blobs. The Build phase must choose a safe ingress/staging mechanism while preserving the contract that attachment bytes ultimately live in the local attachment store.
+This boundary must remain explicit in local and production topology documentation.
 
 ---
 
-## 4. Authority matrix
+## 4. Persistence
 
-| Concern | Authority | Not authority |
+### 4.1 PostgreSQL — Primary Business Database
+
+PostgreSQL is the canonical source of truth for the first workflow.
+
+Owns conceptually:
+
+- Customer identity;
+- business/customer fields approved by the Customer contract;
+- registration state;
+- command/idempotency receipt;
+- transactional timestamps/versioning;
+- optional opaque attachment/document references.
+
+Question answered:
+
+> What Customer was registered and what is the authoritative transactional state of that registration?
+
+### 4.2 MongoDB — Context / Audit / Documents
+
+MongoDB owns application document-oriented evidence around execution.
+
+Owns conceptually:
+
+- `execution_audit` events;
+- workflow/application context documents that should not expand the relational Customer model;
+- optional attachment/document staging/committed objects and metadata for mk0 when attachments exist.
+
+Question answered:
+
+> What happened during this application workflow, what context was preserved, and which optional document objects belong to it?
+
+MongoDB is not the canonical Customer authority.
+
+### 4.3 Optional attachments
+
+When attachments exist:
+
+```text
+attachment bytes/document object → MongoDB attachment capability
+attachmentId + safe metadata     → PostgreSQL Customer/reference relation
+```
+
+The exact MongoDB binary mechanism is a Build-time implementation decision; Design freezes only the authority contract. The public API sees opaque attachment IDs, never collection internals/storage paths.
+
+---
+
+## 5. Primary control flow
+
+### No attachments
+
+```text
+Postman
+  ↓ POST RegisterNewCustomer
+NestJS
+  ↓ validate/map/start
+Temporal
+  ↓ reserve idempotency
+PostgreSQL
+  ↓ persist Customer registration
+Temporal
+  ↓ append application milestones
+MongoDB
+  ↓
+Temporal finalization
+  ↓
+COMPLETED
+```
+
+### With attachments
+
+```text
+Postman
+  ↓ stage/submit attachment through NestJS
+MongoDB ingress/document capability
+  ↓ opaque ingressRef
+Postman
+  ↓ RegisterNewCustomer + ingressRef
+NestJS
+  ↓
+Temporal
+  ├→ PostgreSQL: reserve command + persist Customer base
+  ├→ MongoDB: commit/verify attachment(s) + audit/context
+  ├→ PostgreSQL: link opaque attachment reference(s)
+  └→ finalize
+```
+
+Large binary objects must not be treated as ordinary Temporal Workflow history payloads.
+
+---
+
+## 6. Authority matrix
+
+| Concern | Authority | Explicitly not authority |
 |---|---|---|
-| HTTP syntax | NestJS | Temporal |
-| DTO validation | NestJS | MongoDB |
-| Durable process order | Temporal Workflow | Controller |
-| Retry policy | Orchestration/Activity policy | Postman |
-| Customer truth | MongoDB Customer store | Audit log |
-| Workflow execution history | Temporal | Customer document |
-| Business/application audit view | MongoDB audit collection | Postman console |
-| Attachment bytes | Local attachment store | MongoDB Customer |
-| Attachment references | Customer document / metadata projection | Raw local path in API |
-| Scheduling capacity | Future Scheduler/ResourceReservation | RegisterNewCustomer |
+| HTTP transport | NestJS | Temporal |
+| Durable workflow order | Temporal | NestJS controller |
+| Customer business truth | PostgreSQL | MongoDB audit |
+| Registration/idempotency state | PostgreSQL | Postman |
+| Temporal Event History | Temporal | MongoDB audit |
+| Application audit/context | MongoDB | Customer tables |
+| Optional attachment/document object | MongoDB attachment capability | PostgreSQL binary column |
+| Attachment business reference | PostgreSQL | API-local path |
+| Scheduling capacity | Future Scheduler / ResourceReservation | RegisterNewCustomer |
 
 ---
 
-## 5. Couplings explicitly forbidden
-
-### Forbidden A
+## 7. Forbidden couplings
 
 ```text
-Postman → MongoDB
+Postman → PostgreSQL/MongoDB                 FORBIDDEN
+NestJS controller → direct registration SQL FORBIDDEN
+Temporal Workflow → DB driver directly      FORBIDDEN
+MongoDB audit → Customer source of truth     FORBIDDEN
+PostgreSQL → raw attachment binary store     FORBIDDEN in mk0
+RegisterNewCustomer → Appointment            FORBIDDEN
+RegisterNewCustomer → ResourceReservation    FORBIDDEN
 ```
 
-Reason: bypasses application contract and orchestration.
-
-### Forbidden B
-
-```text
-NestJS Controller → CustomerRepository.create()
-```
-
-for the orchestrated registration path.
-
-Reason: creates a second non-durable business path.
-
-### Forbidden C
-
-```text
-Temporal Workflow → Mongo driver / filesystem
-```
-
-Reason: Workflow code must remain replay-safe/deterministic; side effects belong in Activities.
-
-### Forbidden D
-
-```text
-Customer document → embedded attachment binaries
-```
-
-Reason: mixes business data and binary storage lifecycle.
-
-### Forbidden E
-
-```text
-RegisterNewCustomer → Appointment / ResourceReservation
-```
-
-Reason: customer registration is not scheduling.
-
-### Forbidden F
-
-```text
-Audit log == source of customer truth
-```
-
-Reason: audit is evidence/projection; business state lives in the Customer store.
+All side effects are mediated through explicit application/orchestration ports.
 
 ---
 
-## 6. Future extension points
+## 8. Cross-store consistency
 
-After mk0 is proven, the architecture can add capabilities without changing the entry rule:
+PostgreSQL and MongoDB do not provide one shared transaction to mk0.
+
+Therefore Temporal provides workflow-mediated consistency rather than pretending a distributed transaction exists.
+
+Rules:
+
+- Customer finalization occurs only after mandatory persistence effects complete.
+- Retry after a PostgreSQL write must reuse the same registration identity.
+- Retry after a MongoDB attachment commit must resolve the same logical attachment.
+- Audit append must have a stable deduplication/event identity when retried.
+- A permanent attachment failure cannot produce a successful Customer outcome.
+- Orphan/partial document effects must remain discoverable for reconciliation.
+
+---
+
+## 9. Future extension
+
+Only after mk0 is certified:
 
 ```text
 CTA
  ↓
 NestJS
  ↓
-Orchestration
- ├── Services Engine
- ├── Scheduler Engine
- ├── Persistence
- └── future integrations
+Temporal Orchestration
+ ├── Services Engine       FUTURE
+ ├── Scheduler Engine      FUTURE
+ ├── Integration Engine    FUTURE
+ └── Persistence
 ```
 
-The Scheduler must later use the TimeSlots rule:
-
-```text
-availability = WorkTeamScheduleRule
-             + WorkTeamScheduleOverride
-             - blocking ResourceReservation
-```
-
-and only `held`/`booked` reservations block capacity.
+The future Scheduler must respect the TimeSlots authority rule and use `ResourceReservation` for actual capacity locking.
 
 ---
 
-## 7. mk0 architectural success condition
-
-The architecture is proven when a clean environment can repeatedly execute:
+## 10. mk0 architecture success condition
 
 ```text
 valid Postman command
-→ 202 Accepted
-→ one Temporal Workflow
-→ one canonical Customer outcome
-→ complete application audit trail
-→ optional attachments persisted and referenced
-→ same idempotency request creates no duplicate
-→ restart/failure does not lose workflow progress
+→ NestJS accepts/maps
+→ Temporal durably starts RegisterNewCustomer
+→ exactly one PostgreSQL Customer registration
+→ MongoDB execution/audit evidence exists
+→ optional attachment documents are persisted/referenced
+→ retry does not duplicate business effects
+→ worker restart does not lose progress
+→ zero scheduling side effects
 ```
