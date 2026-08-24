@@ -9,32 +9,53 @@
     "frameworkRequired": false,
     "orchestration": "temporal-full-platform",
     "temporalRuntimeRequired": true,
-    "temporalRuntimePath": ["client", "service", "task-queue", "worker", "workflow", "activities"],
+    "temporalRuntimePath": ["client", "service", "task-queue", "worker", "workflow", "query", "update", "activities"],
     "businessPersistence": "postgresql",
-    "auditContextPersistence": "mongodb",
+    "interactionAuditPersistence": "mongodb",
     "attachmentPersistence": "attachment-store-technology-to-be-frozen-at-build-gate"
   },
+  "registrationPolicies": [
+    {
+      "policyId": "golden-registration-v1",
+      "policyVersion": "1",
+      "businessSlug": "golden-business",
+      "required": [
+        "customer.name",
+        "customer.contact.phoneOrEmail"
+      ],
+      "duplicatePolicy": {
+        "hardUnique": ["customer.document.type+customer.document.country+customer.document.value"],
+        "softMatch": ["customer.contact.phones[].normalized", "customer.contact.email"],
+        "nonUnique": ["customer.name"]
+      },
+      "documentRequired": false,
+      "attachmentsRequired": false
+    }
+  ],
   "cases": [
     {
       "id": "GD-001",
-      "name": "minimal-valid-customer",
-      "command": {
+      "name": "minimal-valid-customer-complete-at-start",
+      "start": {
+        "operation": "RegisterNewCustomer",
         "businessSlug": "golden-business",
-        "customer": {
-          "type": "person",
-          "name": "Ana Torres",
-          "contact": {"phones": [], "email": "ana.torres@example.test"}
+        "draft": {
+          "customer": {
+            "type": "person",
+            "name": "Ana Torres",
+            "contact": {"phones": [], "email": "ana.torres@example.test"}
+          }
         },
-        "attachments": [],
-        "request": {"idempotencyKey": "gd-001-register-ana"}
+        "request": {"idempotencyKey": "gd-001-session", "channel": "postman"}
       },
       "expected": {
-        "startAccepted": true,
+        "workflowStarted": true,
+        "policyId": "golden-registration-v1",
         "workflowTerminalStatus": "COMPLETED",
+        "terminalPhase": "CREATED",
+        "created": true,
         "postgresCustomerDelta": 1,
-        "mongoAuditPresent": true,
-        "committedAttachmentDelta": 0,
-        "postgresCustomerAttachmentReferenceCount": 0,
+        "mongoInteractionAuditPresent": true,
         "appointmentDelta": 0,
         "resourceReservationDelta": 0,
         "availabilitySlotMutationDelta": 0
@@ -43,38 +64,38 @@
     {
       "id": "GD-002",
       "name": "full-valid-customer",
-      "command": {
+      "start": {
+        "operation": "RegisterNewCustomer",
         "businessSlug": "golden-business",
-        "customer": {
-          "type": "person",
-          "name": "Luis Vega",
-          "document": {"type": "DNI", "value": "00000002", "country": "PE"},
-          "contact": {
-            "phones": [
-              {
-                "label": "principal",
-                "countryCode": "+51",
-                "number": "900000002",
-                "normalized": "51900000002",
-                "isWhatsapp": true,
-                "primary": true
-              }
-            ],
-            "email": "luis.vega@example.test"
-          },
-          "notes": "Synthetic golden customer"
+        "draft": {
+          "customer": {
+            "type": "person",
+            "name": "Luis Vega",
+            "document": {"type": "DNI", "value": "00000002", "country": "PE"},
+            "contact": {
+              "phones": [
+                {
+                  "label": "principal",
+                  "countryCode": "+51",
+                  "number": "900000002",
+                  "normalized": "51900000002",
+                  "isWhatsapp": true,
+                  "primary": true
+                }
+              ],
+              "email": "luis.vega@example.test"
+            },
+            "notes": "Synthetic golden customer"
+          }
         },
-        "attachments": [],
-        "request": {"idempotencyKey": "gd-002-register-luis"}
+        "request": {"idempotencyKey": "gd-002-session", "channel": "cli"}
       },
       "expected": {
-        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
+        "terminalPhase": "CREATED",
+        "created": true,
         "postgresCustomerDelta": 1,
-        "mongoAuditPresent": true,
-        "committedAttachmentDelta": 0,
-        "appointmentDelta": 0,
-        "resourceReservationDelta": 0
+        "mongoInteractionAuditPresent": true
       }
     },
     {
@@ -90,21 +111,24 @@
           }
         ]
       },
-      "command": {
+      "start": {
+        "operation": "RegisterNewCustomer",
         "businessSlug": "golden-business",
-        "customer": {
-          "type": "person",
-          "name": "Mara Rios",
-          "contact": {"phones": [], "email": "mara.rios@example.test"}
+        "draft": {
+          "customer": {
+            "type": "person",
+            "name": "Mara Rios",
+            "contact": {"phones": [], "email": "mara.rios@example.test"}
+          },
+          "attachments": [
+            {"ingressRef": "ing_gd003_a", "kind": "identity_document", "displayName": "Synthetic ID front"}
+          ]
         },
-        "attachments": [
-          {"ingressRef": "ing_gd003_a", "kind": "identity_document", "displayName": "Synthetic ID front"}
-        ],
-        "request": {"idempotencyKey": "gd-003-one-attachment"}
+        "request": {"idempotencyKey": "gd-003-session"}
       },
       "expected": {
-        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
+        "terminalPhase": "CREATED",
         "postgresCustomerDelta": 1,
         "committedAttachmentDelta": 1,
         "postgresCustomerAttachmentReferenceCount": 1,
@@ -120,21 +144,23 @@
           {"fixture": "synthetic-b", "ingressRef": "ing_gd004_b", "sha256": "TO_BE_FROZEN"}
         ]
       },
-      "command": {
+      "start": {
+        "operation": "RegisterNewCustomer",
         "businessSlug": "golden-business",
-        "customer": {
-          "type": "person",
-          "name": "Noa Diaz",
-          "contact": {"phones": [], "email": "noa.diaz@example.test"}
+        "draft": {
+          "customer": {
+            "type": "person",
+            "name": "Noa Diaz",
+            "contact": {"phones": [], "email": "noa.diaz@example.test"}
+          },
+          "attachments": [
+            {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A"},
+            {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B"}
+          ]
         },
-        "attachments": [
-          {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A"},
-          {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B"}
-        ],
-        "request": {"idempotencyKey": "gd-004-multiple-attachments"}
+        "request": {"idempotencyKey": "gd-004-session"}
       },
       "expected": {
-        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
         "committedAttachmentDelta": 2,
@@ -144,44 +170,46 @@
     },
     {
       "id": "GD-005",
-      "name": "exact-idempotent-replay",
+      "name": "exact-start-session-replay",
       "replayCase": "GD-001",
       "repetitions": 2,
       "expected": {
+        "sameWorkflowIdentity": true,
         "postgresCustomerDeltaAcrossAllRepetitions": 1,
-        "logicalRegistrationOutcomeCount": 1,
-        "duplicateAttachmentSideEffects": 0
+        "logicalRegistrationOutcomeCount": 1
       }
     },
     {
       "id": "GD-006",
-      "name": "idempotency-key-different-command-conflict",
-      "firstCase": "GD-001",
-      "secondCommandMutation": {"path": "customer.name", "value": "Different Person"},
-      "reuseFirstIdempotencyKey": true,
+      "name": "session-idempotency-immutable-start-conflict",
+      "firstStart": {
+        "operation": "RegisterNewCustomer",
+        "businessSlug": "golden-business",
+        "request": {"idempotencyKey": "gd-006-session"}
+      },
+      "secondStart": {
+        "operation": "RegisterNewCustomer",
+        "businessSlug": "different-business",
+        "request": {"idempotencyKey": "gd-006-session"}
+      },
       "expected": {
         "secondStartAccepted": false,
-        "secondErrorCode": "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND",
+        "secondErrorCode": "SESSION_IDEMPOTENCY_CONFLICT",
         "additionalPostgresCustomerDelta": 0
       }
     },
     {
       "id": "GD-007",
-      "name": "invalid-command-no-name",
-      "command": {
-        "businessSlug": "golden-business",
-        "customer": {
-          "type": "person",
-          "contact": {"phones": [], "email": "invalid@example.test"}
-        },
-        "attachments": [],
-        "request": {"idempotencyKey": "gd-007-invalid"}
+      "name": "invalid-start-missing-business-slug",
+      "start": {
+        "operation": "RegisterNewCustomer",
+        "draft": {"customer": {}},
+        "request": {"idempotencyKey": "gd-007-session"}
       },
       "expected": {
         "startAccepted": false,
         "workflowStarted": false,
-        "postgresCustomerDelta": 0,
-        "committedAttachmentDelta": 0
+        "postgresCustomerDelta": 0
       }
     },
     {
@@ -189,7 +217,7 @@
       "name": "transient-postgresql-customer-write-failure",
       "baseCase": "GD-001",
       "failureInjection": {
-        "target": "createCustomerRegistrationBase",
+        "target": "createCustomer",
         "classification": "POSTGRES_CUSTOMER_STORE_UNAVAILABLE",
         "attemptsToFail": 1
       },
@@ -227,23 +255,18 @@
       "expected": {
         "workflowTerminalStatus": "FAILED",
         "failureCode": "ATTACHMENT_INTEGRITY_MISMATCH",
-        "customerReportedAsSuccessful": false,
-        "validPostgresCustomerAttachmentReferenceCount": 0
+        "customerReportedAsSuccessful": false
       }
     },
     {
       "id": "GD-011",
-      "name": "worker-restart-after-customer-base",
+      "name": "worker-restart-while-running",
       "baseCase": "GD-001",
-      "failureInjection": {
-        "target": "temporal-worker",
-        "action": "restart",
-        "afterPhase": "PERSISTING_CUSTOMER_BASE"
-      },
+      "failureInjection": {"target": "temporal-worker", "action": "restart"},
       "expected": {
         "workflowTerminalStatus": "COMPLETED",
-        "postgresCustomerDelta": 1,
-        "acceptedCommandLost": false
+        "acceptedSessionLost": false,
+        "postgresCustomerDelta": 1
       }
     },
     {
@@ -251,7 +274,6 @@
       "name": "scheduling-isolation",
       "baseCase": "GD-002",
       "expected": {
-        "workflowTerminalStatus": "COMPLETED",
         "appointmentDelta": 0,
         "resourceReservationDelta": 0,
         "availabilitySlotMutationDelta": 0
@@ -260,31 +282,30 @@
     {
       "id": "GD-013",
       "name": "cta-disconnect-reconnect-continuity",
-      "baseCase": "GD-001",
+      "baseCase": "GD-015",
       "scenario": {
-        "after": "WORKFLOW_ACCEPTED",
+        "after": "WAITING_FOR_REQUIRED_DATA",
         "ctaAction": "disconnect-or-stop",
-        "temporalContinues": true,
-        "laterCtaAction": "reconnect-and-query-same-workflow-id"
+        "laterCtaAction": "reconnect-query-and-update-same-workflow-id"
       },
       "expected": {
-        "workflowTerminalStatus": "COMPLETED",
-        "acceptedCommandLost": false,
         "sameWorkflowIdentityObservedAfterReconnect": true,
-        "sameDurableOutcomeObservedAfterReconnect": true,
-        "postgresCustomerDelta": 1
+        "sameDurableDraftObservedAfterReconnect": true,
+        "acceptedSessionLost": false
       }
     },
     {
       "id": "GD-014",
       "name": "full-temporal-runtime-proof",
-      "baseCase": "GD-001",
+      "baseCase": "GD-016",
       "requiredRuntimePath": [
         "temporal-client",
         "temporal-service",
         "task-queue",
         "worker",
         "RegisterNewCustomer-workflow",
+        "GetRegistrationState-query",
+        "ProvideCustomerData-update",
         "persistence-activity"
       ],
       "expected": {
@@ -293,11 +314,121 @@
         "runIdObserved": true,
         "taskQueueExecutionObserved": true,
         "workerExecutionObserved": true,
+        "queryObserved": true,
+        "updateObserved": true,
         "activityExecutionObserved": true,
         "eventHistoryObserved": true,
-        "inProcessFakeOrchestrator": false,
+        "inProcessFakeOrchestrator": false
+      }
+    },
+    {
+      "id": "GD-015",
+      "name": "intent-only-start-waits-for-required-data",
+      "start": {
+        "operation": "RegisterNewCustomer",
+        "businessSlug": "golden-business",
+        "draft": {"customer": {}},
+        "request": {"idempotencyKey": "gd-015-session", "channel": "postman"}
+      },
+      "expected": {
+        "workflowStarted": true,
+        "phase": "WAITING_FOR_REQUIRED_DATA",
+        "policyId": "golden-registration-v1",
+        "missingFields": ["customer.name", "customer.contact.phoneOrEmail"],
+        "nextAction": "PROVIDE_CUSTOMER_DATA",
+        "postgresCustomerDelta": 0
+      }
+    },
+    {
+      "id": "GD-016",
+      "name": "multi-round-customer-data-updates",
+      "baseCase": "GD-015",
+      "updates": [
+        {
+          "updateName": "ProvideCustomerData",
+          "inputId": "gd-016-input-1",
+          "customerPatch": {"name": "Iris Sol"},
+          "expectedPhase": "WAITING_FOR_REQUIRED_DATA",
+          "expectedMissingFields": ["customer.contact.phoneOrEmail"]
+        },
+        {
+          "updateName": "ProvideCustomerData",
+          "inputId": "gd-016-input-2",
+          "customerPatch": {"contact": {"phones": [], "email": "iris.sol@example.test"}},
+          "expectedEventually": "CREATED"
+        }
+      ],
+      "expected": {
+        "sameWorkflowIdentityThroughout": true,
         "workflowTerminalStatus": "COMPLETED",
-        "postgresCustomerDelta": 1
+        "terminalPhase": "CREATED",
+        "postgresCustomerDelta": 1,
+        "mongoAcceptedInteractionCountMinimum": 2
+      }
+    },
+    {
+      "id": "GD-017",
+      "name": "hard-duplicate-resolves-existing-customer",
+      "preconditions": {
+        "existingCustomer": {
+          "businessSlug": "golden-business",
+          "name": "Existing DNI Customer",
+          "document": {"type": "DNI", "country": "PE", "value": "77777777"},
+          "contact": {"phones": [], "email": "existing@example.test"}
+        }
+      },
+      "start": {
+        "operation": "RegisterNewCustomer",
+        "businessSlug": "golden-business",
+        "draft": {
+          "customer": {
+            "name": "Another Display Name",
+            "document": {"type": "DNI", "country": "PE", "value": "77777777"},
+            "contact": {"phones": [], "email": "new-email@example.test"}
+          }
+        },
+        "request": {"idempotencyKey": "gd-017-session"}
+      },
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "terminalPhase": "ALREADY_EXISTS",
+        "created": false,
+        "existingCustomerIdReturned": true,
+        "additionalPostgresCustomerDelta": 0,
+        "duplicateClassification": "HARD_UNIQUE"
+      }
+    },
+    {
+      "id": "GD-018",
+      "name": "soft-duplicate-does-not-become-hard-rule",
+      "preconditions": {
+        "existingCustomer": {
+          "businessSlug": "golden-business",
+          "name": "Shared Phone Existing",
+          "contact": {
+            "phones": [{"normalized": "51911111111"}],
+            "email": "shared@example.test"
+          }
+        }
+      },
+      "start": {
+        "operation": "RegisterNewCustomer",
+        "businessSlug": "golden-business",
+        "draft": {
+          "customer": {
+            "name": "Different Person",
+            "contact": {
+              "phones": [{"normalized": "51911111111"}],
+              "email": "different@example.test"
+            }
+          }
+        },
+        "request": {"idempotencyKey": "gd-018-session"}
+      },
+      "expected": {
+        "duplicateClassification": "SOFT_MATCH",
+        "hardDuplicateRejected": false,
+        "policyDefinedResolutionRequired": true
       }
     }
   ]
