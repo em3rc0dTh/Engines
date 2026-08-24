@@ -6,29 +6,29 @@
 
 This directory is intentionally documentation-only.
 
-The user decision for mk0 is to design the architecture in detail before implementation. No NestJS application, Temporal worker, MongoDB repository, attachment database, Docker configuration, or Postman collection should be added here until the Build Authorization Gate in `../Plan/README.md` is closed.
+No NestJS app, Temporal worker, PostgreSQL schema, MongoDB implementation, Docker runtime or Postman collection is authorized until the mk0 documentation gates close.
 
 ## Future build target
 
-When authorized, the implementation must realize exactly this contract:
+When explicitly authorized, Build must realize only:
 
 ```text
-Postman CTA
-→ NestJS Boundary
-→ Orchestration Engine / Temporal
-→ Persistence
-   ├── Customer → MongoDB
-   ├── Audit    → MongoDB
-   └── Attachment content → local attachment database/store
+1. CTA / API
+   Postman → NestJS
+
+2. Orchestration
+   Temporal → RegisterNewCustomer
+
+3. Persistence
+   PostgreSQL → Customer + registration/idempotency truth
+   MongoDB    → execution/audit/context + optional attachments/documents
 ```
 
-First Workflow:
+Services Engine, Scheduler Engine, Integration Engine and Agent are not part of this Build target.
 
-`RegisterNewCustomer`
+## Expected future logical boundaries
 
-## Expected future code boundaries
-
-The following is a **logical target**, not a scaffold to create now:
+This is a conceptual package map, not code/scaffolding:
 
 ```text
 application-edge/
@@ -40,41 +40,47 @@ orchestration/
     activities/
 
 persistence/
+  postgres/
+    customer/
+    registration-command/
+    attachment-reference/
+
   mongo/
-    customers/
-    command-receipts/
     execution-audit/
-  attachments/
-    local-store/
+    workflow-context/
+    attachments/
 
 contracts/
   register-new-customer/
 ```
 
-## Build constraints already frozen
+## Frozen constraints
 
-- Postman never accesses persistence directly.
-- NestJS controllers do not directly execute the registration persistence sequence.
-- Temporal Workflow code contains no direct database/filesystem/network side effects.
-- Activities are retry-safe/idempotent.
-- Customer data and audit data remain distinct authorities.
-- Attachment bytes remain outside MongoDB Customer documents.
-- The public API exposes opaque attachment IDs, never host-local paths.
+- Postman never accesses databases directly.
+- NestJS never implements a second direct registration path.
+- Temporal owns durable sequencing.
+- Temporal Workflow code calls no PostgreSQL/MongoDB drivers directly.
+- Activities are retry-safe and idempotent.
+- PostgreSQL is canonical Customer/registration truth.
+- MongoDB audit/context is not Customer truth.
+- Optional attachment/document bytes do not become PostgreSQL Customer columns.
+- PostgreSQL contains opaque attachment references where business linkage is required.
+- Temporal's own internal persistence is isolated from application PostgreSQL schemas.
 - RegisterNewCustomer creates no Appointment or ResourceReservation.
-- Same idempotent command produces one registration outcome.
-- Tests and golden cases are written from Design contracts, not reverse-engineered from implementation behavior.
+- Tests and golden cases define success before implementation.
 
 ## Authorization record
 
 When Build is approved, update this file with:
 
 - approval date;
-- approved Design revision/commit;
+- approved Design commit;
 - approved Golden Dataset version;
-- selected attachment-store technology and ADR;
-- selected MongoDB deployment profile for local mk0;
-- Temporal development/runtime profile;
-- exact Build ticket sequence.
+- PostgreSQL application topology;
+- Temporal infrastructure topology;
+- MongoDB topology;
+- exact attachment implementation selected for MongoDB;
+- exact B0–B10 ticket sequence.
 
 Until then:
 
