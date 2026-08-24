@@ -3,17 +3,17 @@
   "workflowType": "RegisterNewCustomer",
   "syntheticDataOnly": true,
   "architectureProfile": {
-    "cta": "postman-via-nestjs",
+    "cta": "postman-or-cli-or-minimal-test-harness",
+    "frameworkRequired": false,
     "orchestration": "temporal",
     "businessPersistence": "postgresql",
     "auditContextPersistence": "mongodb",
-    "attachmentPersistence": "mongodb-implementation-to-be-frozen-at-build-gate"
+    "attachmentPersistence": "attachment-store-technology-to-be-frozen-at-build-gate"
   },
   "cases": [
     {
       "id": "GD-001",
       "name": "minimal-valid-customer",
-      "headers": {"Idempotency-Key": "gd-001-register-ana"},
       "command": {
         "businessSlug": "golden-business",
         "customer": {
@@ -21,10 +21,11 @@
           "name": "Ana Torres",
           "contact": {"phones": [], "email": "ana.torres@example.test"}
         },
-        "attachments": []
+        "attachments": [],
+        "request": {"idempotencyKey": "gd-001-register-ana"}
       },
       "expected": {
-        "httpStartStatus": 202,
+        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
         "mongoAuditPresent": true,
@@ -38,7 +39,6 @@
     {
       "id": "GD-002",
       "name": "full-valid-customer",
-      "headers": {"Idempotency-Key": "gd-002-register-luis"},
       "command": {
         "businessSlug": "golden-business",
         "customer": {
@@ -60,10 +60,11 @@
           },
           "notes": "Synthetic golden customer"
         },
-        "attachments": []
+        "attachments": [],
+        "request": {"idempotencyKey": "gd-002-register-luis"}
       },
       "expected": {
-        "httpStartStatus": 202,
+        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
         "mongoAuditPresent": true,
@@ -75,7 +76,6 @@
     {
       "id": "GD-003",
       "name": "one-attachment",
-      "headers": {"Idempotency-Key": "gd-003-one-attachment"},
       "preconditions": {
         "stagedAttachments": [
           {
@@ -95,23 +95,21 @@
         },
         "attachments": [
           {"ingressRef": "ing_gd003_a", "kind": "identity_document", "displayName": "Synthetic ID front"}
-        ]
+        ],
+        "request": {"idempotencyKey": "gd-003-one-attachment"}
       },
       "expected": {
-        "httpStartStatus": 202,
+        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
-        "mongoCommittedAttachmentDelta": 1,
+        "committedAttachmentDelta": 1,
         "postgresCustomerAttachmentReferenceCount": 1,
-        "binaryEmbeddedInPostgresCustomer": false,
-        "appointmentDelta": 0,
-        "resourceReservationDelta": 0
+        "binaryEmbeddedInPostgresCustomer": false
       }
     },
     {
       "id": "GD-004",
       "name": "multiple-attachments",
-      "headers": {"Idempotency-Key": "gd-004-multiple-attachments"},
       "preconditions": {
         "stagedAttachments": [
           {"fixture": "synthetic-a", "ingressRef": "ing_gd004_a", "sha256": "TO_BE_FROZEN"},
@@ -128,13 +126,14 @@
         "attachments": [
           {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A"},
           {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B"}
-        ]
+        ],
+        "request": {"idempotencyKey": "gd-004-multiple-attachments"}
       },
       "expected": {
-        "httpStartStatus": 202,
+        "startAccepted": true,
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
-        "mongoCommittedAttachmentDelta": 2,
+        "committedAttachmentDelta": 2,
         "postgresCustomerAttachmentReferenceCount": 2,
         "finalizeOnlyAfterAllAttachments": true
       }
@@ -157,28 +156,28 @@
       "secondCommandMutation": {"path": "customer.name", "value": "Different Person"},
       "reuseFirstIdempotencyKey": true,
       "expected": {
-        "secondHttpStatus": 409,
+        "secondStartAccepted": false,
         "secondErrorCode": "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND",
         "additionalPostgresCustomerDelta": 0
       }
     },
     {
       "id": "GD-007",
-      "name": "invalid-request-no-name",
-      "headers": {"Idempotency-Key": "gd-007-invalid"},
+      "name": "invalid-command-no-name",
       "command": {
         "businessSlug": "golden-business",
         "customer": {
           "type": "person",
           "contact": {"phones": [], "email": "invalid@example.test"}
         },
-        "attachments": []
+        "attachments": [],
+        "request": {"idempotencyKey": "gd-007-invalid"}
       },
       "expected": {
-        "httpStartStatus": 400,
+        "startAccepted": false,
         "workflowStarted": false,
         "postgresCustomerDelta": 0,
-        "mongoCommittedAttachmentDelta": 0
+        "committedAttachmentDelta": 0
       }
     },
     {
@@ -198,7 +197,7 @@
     },
     {
       "id": "GD-009",
-      "name": "transient-mongodb-attachment-failure",
+      "name": "transient-attachment-store-failure",
       "baseCase": "GD-003",
       "failureInjection": {
         "target": "commitAttachment",
@@ -208,7 +207,7 @@
       "expected": {
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
-        "mongoCommittedAttachmentDelta": 1,
+        "committedAttachmentDelta": 1,
         "customerFinalizedBeforeRecovery": false
       }
     },
@@ -232,7 +231,11 @@
       "id": "GD-011",
       "name": "worker-restart-after-customer-base",
       "baseCase": "GD-001",
-      "failureInjection": {"target": "temporal-worker", "action": "restart", "afterPhase": "PERSISTING_CUSTOMER_BASE"},
+      "failureInjection": {
+        "target": "temporal-worker",
+        "action": "restart",
+        "afterPhase": "PERSISTING_CUSTOMER_BASE"
+      },
       "expected": {
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
@@ -248,6 +251,24 @@
         "appointmentDelta": 0,
         "resourceReservationDelta": 0,
         "availabilitySlotMutationDelta": 0
+      }
+    },
+    {
+      "id": "GD-013",
+      "name": "cta-disconnect-reconnect-continuity",
+      "baseCase": "GD-001",
+      "scenario": {
+        "after": "WORKFLOW_ACCEPTED",
+        "ctaAction": "disconnect-or-stop",
+        "temporalContinues": true,
+        "laterCtaAction": "reconnect-and-query-same-workflow-id"
+      },
+      "expected": {
+        "workflowTerminalStatus": "COMPLETED",
+        "acceptedCommandLost": false,
+        "sameWorkflowIdentityObservedAfterReconnect": true,
+        "sameDurableOutcomeObservedAfterReconnect": true,
+        "postgresCustomerDelta": 1
       }
     }
   ]
