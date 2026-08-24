@@ -3,9 +3,13 @@
   "workflowType": "RegisterNewCustomer",
   "syntheticDataOnly": true,
   "architectureProfile": {
-    "cta": "postman-or-cli-or-minimal-test-harness",
+    "cta": "omnichannel-via-cta-adapter",
+    "initialCtaSenders": ["postman", "cli"],
+    "futureCtaSenders": ["form", "mcp", "whatsapp", "telegram", "api-webhook"],
     "frameworkRequired": false,
-    "orchestration": "temporal",
+    "orchestration": "temporal-full-platform",
+    "temporalRuntimeRequired": true,
+    "temporalRuntimePath": ["client", "service", "task-queue", "worker", "workflow", "activities"],
     "businessPersistence": "postgresql",
     "auditContextPersistence": "mongodb",
     "attachmentPersistence": "attachment-store-technology-to-be-frozen-at-build-gate"
@@ -268,6 +272,31 @@
         "acceptedCommandLost": false,
         "sameWorkflowIdentityObservedAfterReconnect": true,
         "sameDurableOutcomeObservedAfterReconnect": true,
+        "postgresCustomerDelta": 1
+      }
+    },
+    {
+      "id": "GD-014",
+      "name": "full-temporal-runtime-proof",
+      "baseCase": "GD-001",
+      "requiredRuntimePath": [
+        "temporal-client",
+        "temporal-service",
+        "task-queue",
+        "worker",
+        "RegisterNewCustomer-workflow",
+        "persistence-activity"
+      ],
+      "expected": {
+        "realTemporalServiceObserved": true,
+        "workflowIdObserved": true,
+        "runIdObserved": true,
+        "taskQueueExecutionObserved": true,
+        "workerExecutionObserved": true,
+        "activityExecutionObserved": true,
+        "eventHistoryObserved": true,
+        "inProcessFakeOrchestrator": false,
+        "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1
       }
     }
