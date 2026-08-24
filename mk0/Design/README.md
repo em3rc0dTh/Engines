@@ -2,6 +2,16 @@
 
 This folder freezes the design of the first stable vertical before code exists.
 
+## mk0 architecture scope
+
+```text
+CTA / API            → Postman + NestJS
+Orchestration Engine → Temporal
+Persistence          → PostgreSQL + MongoDB
+```
+
+Everything below must remain inside those first three architecture zones.
+
 ## Design package
 
 1. [`01-system-architecture.md`](01-system-architecture.md)
@@ -25,36 +35,35 @@ This folder freezes the design of the first stable vertical before code exists.
    - observability contract.
 
 4. [`04-persistence-boundaries.md`](04-persistence-boundaries.md)
-   - MongoDB customer authority;
-   - MongoDB audit authority;
-   - attachment authority;
-   - cross-store consistency;
-   - attachment integrity.
+   - PostgreSQL Customer/registration authority;
+   - MongoDB execution/audit/context authority;
+   - optional attachment/document authority;
+   - cross-store consistency.
 
 5. [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md)
-   - MongoDB physical collections for customer/idempotency/audit;
-   - SQLite local attachment database;
-   - attachment ingress staging;
-   - committed attachment BLOB semantics;
-   - crash-window recovery.
+   - logical PostgreSQL relational profile;
+   - logical MongoDB document/audit profile;
+   - optional attachment lifecycle;
+   - crash-window recovery;
+   - explicit separation from Temporal's own infrastructure persistence.
 
 ## Design acceptance gate
 
-Design is considered closed only when all statements below are true:
+Design is considered closed only when:
 
-- A Postman request has exactly one legal business-command entry path.
-- NestJS responsibility ends before durable sequencing begins.
-- The Temporal Workflow can be replayed without direct side effects in Workflow code.
-- Every business persistence side effect has an explicit Activity/port boundary.
-- Customer data and audit data have different MongoDB collections/contracts.
-- Attachment binary storage is SQLite-local and outside MongoDB Customer documents.
-- Staged attachment ingress cannot itself finalize a customer attachment.
-- Optional attachments have deterministic retry behavior.
-- Idempotency prevents duplicate customer creation.
+- Postman has exactly one legal entry through NestJS.
+- NestJS stops at the application/orchestration boundary.
+- Temporal owns durable `RegisterNewCustomer` sequencing.
+- Temporal Workflow code has no direct persistence side effects.
+- PostgreSQL is the canonical Customer + registration/idempotency authority.
+- MongoDB is the execution/audit/context/document authority.
+- Optional attachments are persisted without making PostgreSQL a binary-file store.
+- Cross-store failure/retry behavior is deterministic.
+- Idempotency prevents duplicate Customer creation.
 - `RegisterNewCustomer` cannot create scheduling entities implicitly.
-- Test cases can be derived from the design without looking at implementation.
-- The golden dataset can express all success, duplicate, invalid, attachment, and failure cases.
+- Tests can be derived from Design without looking at implementation.
+- Golden Dataset expectations match these authorities.
 
 ## Rule
 
-When implementation begins, code must conform to these documents. If runtime evidence forces a change, update Design first and record the reason in a quarry/mining artifact rather than silently drifting the code.
+No implementation is authorized by this Design package. When Build begins later, runtime evidence may force changes, but Design and quarry evidence must be updated before code silently diverges.
