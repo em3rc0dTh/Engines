@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`mining-site` records the evidence and explicit project decisions used to design mk0. Material is distilled into `quarries/`; Design must not rely on remembered assumptions.
+`mining-site` records the evidence and explicit project decisions used to design mk0. Design must not rely on remembered assumptions.
 
 ## MS-001 — VTKALL DataModel v3 / TimeSlots
 
@@ -12,19 +12,19 @@ Source:
 
 Role:
 
-- semantic baseline for Customer;
-- preserves the later scheduling distinction between Appointment and ResourceReservation;
-- keeps RegisterNewCustomer isolated from scheduling.
+- semantic baseline for `Customer`;
+- preserves the later Appointment vs ResourceReservation distinction;
+- keeps `RegisterNewCustomer` isolated from scheduling.
 
-Key facts:
+Key facts used by mk0:
 
-- Customer is a canonical business entity.
-- `Appointment` schedules a customer-facing appointment.
-- `ResourceReservation` blocks actual capacity.
-- availability is derived from schedule rules + overrides + blocking reservations.
-- default recommended micro-slot is 15 minutes.
-- only `held`/`booked` reservations block capacity.
-- `AvailabilitySlot` is legacy compatibility, not future authority.
+- Customer is a canonical business entity;
+- Customer includes business/type/name/document/contact/notes/status/timestamps semantics;
+- `ManagedEntity` is separate from Customer;
+- `Appointment` is customer-facing scheduling;
+- `ResourceReservation` blocks real capacity;
+- availability derives from schedule rules + overrides - blocking reservations;
+- `AvailabilitySlot` is legacy compatibility rather than future authority.
 
 Classification: `SOURCE_FACT`.
 
@@ -43,66 +43,65 @@ Role:
 Design consequence:
 
 - orchestration belongs to Temporal;
-- PostgreSQL/MongoDB side effects belong in Activities/adapters;
-- worker/process restart must not lose accepted workflow progress.
+- persistence side effects belong in Activities/adapters;
+- an accepted workflow survives CTA/worker/process lifetime changes.
 
-Classification: source + design consequence.
+Classification: `SOURCE_FACT` + derived `DESIGN_REQUIREMENT`.
 
-## MS-003 — NestJS documentation
+## MS-003 — Framework decision superseded, 2026-08-24
 
-Sources:
+Earlier drafts introduced NestJS as the CTA/application boundary.
 
-- https://docs.nestjs.com/controllers
-- https://docs.nestjs.com/providers
-- https://docs.nestjs.com/faq/request-lifecycle
+That is **superseded**.
 
-Role:
+Current project decision:
 
-- HTTP/application edge;
-- DTO/request lifecycle;
-- provider composition.
+> mk0 selects no application framework. Postman, CLI, or a minimal test harness may be used to prove the CTA → Temporal contract.
 
-Design consequence:
+NestJS/Express/Fastify or another framework may only be evaluated later as a replaceable adapter if required for ergonomics or external channels.
 
-NestJS maps the CTA to the orchestration contract; it does not own durable business sequencing.
+Classification: `PROJECT_DECISION`.
 
-## MS-004 — Project architecture decision, 2026-08-24
+## MS-004 — First architecture slice, corrected 2026-08-24
 
-First mk0 slice:
+Canonical mk0 slice:
 
 ```text
-CTA (Postman API)
-→ NestJS
-→ Orchestration Engine (Temporal)
+CTA / controlled entry
+→ Temporal Orchestration Engine
 → Persistence
+   ├── PostgreSQL
+   ├── MongoDB
+   └── optional AttachmentStore
 ```
 
-This supersedes the earlier mistaken interpretation that Services + Scheduler were the first implementation slice.
+Services Engine, Scheduler Engine, Integration Engine and Agent are outside the first slice.
 
 Classification: `PROJECT_DECISION`.
 
 ## MS-005 — Persistence clarification, 2026-08-24
 
-The third first-step zone uses:
-
-```text
-PostgreSQL + MongoDB
-```
-
-mk0 authority split:
+Authority split:
 
 - PostgreSQL = canonical Customer + registration/idempotency business truth;
-- MongoDB = execution/audit/workflow context and optional attachments/documents;
-- PostgreSQL stores opaque attachment references when needed;
-- SQLite is removed from mk0.
-
-Temporal may independently use PostgreSQL internally, but Temporal infrastructure persistence is not application Customer persistence.
+- MongoDB = execution/audit/workflow context;
+- attachments = separate persistence capability with opaque business reference back to PostgreSQL;
+- exact AttachmentStore technology remains a Build decision;
+- Temporal internal persistence is separate from application persistence even if it also uses PostgreSQL.
 
 Classification: `PROJECT_DECISION` + `DESIGN_DECISION`.
 
+## MS-006 — Continuity requirement, 2026-08-24
+
+The CTA must be able to start a workflow, disappear, reconnect and observe the same durable outcome.
+
+Continuity is therefore workflow durability and identity, not a permanently open network connection.
+
+Classification: `PROJECT_DECISION` + `DESIGN_REQUIREMENT`.
+
 ## Evidence handling rule
 
-Classify significant statements as:
+Classify significant statements as one of:
 
 - `SOURCE_FACT`
 - `PROJECT_DECISION`
