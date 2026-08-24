@@ -52,7 +52,8 @@ These names are design placeholders, not DDL.
 - Customer type/name/status;
 - approved document/contact data;
 - registration lifecycle/version metadata;
-- command/idempotency receipt;
+- business-scoped command/idempotency receipt;
+- normalized initial-start fingerprint or equivalent comparison evidence;
 - opaque attachment/document references;
 - transactional timestamps.
 
@@ -85,12 +86,27 @@ Logical uniqueness:
 (operation, business_slug, idempotency_key_hash)
 ```
 
+The same opaque idempotency key text under a different `business_slug` is a different business-scoped identity.
+
+The deterministic `command_fingerprint` represents the normalized material **initial start snapshot**, conceptually including:
+
+```text
+operation
+businessSlug
+schemaVersion
+normalized initial Customer draft
+normalized initial attachment ingress identities / expected integrity metadata
+```
+
+It excludes correlation/presentation/timestamp metadata that does not change business meaning.
+
 Rules:
 
-- same key + same fingerprint → same logical workflow/outcome;
-- same key + different fingerprint → conflict;
+- same business-scoped identity + same initial fingerprint → same logical Workflow/session/outcome;
+- same business-scoped identity + materially different initial fingerprint → `SESSION_IDEMPOTENCY_CONFLICT`;
+- later `ProvideCustomerData` Updates do not rewrite the original initial-start fingerprint;
 - raw key need not be persisted;
-- phone/email/document equality is not request idempotency.
+- phone/email/document equality is natural duplicate policy, not request/session idempotency.
 
 ## 4. MongoDB — execution/audit/context authority
 
@@ -107,18 +123,23 @@ workflow_context
 
 ### `execution_audit`
 
-Minimum conceptual milestones:
+Canonical success-gating logical milestones for mk0:
 
 ```text
-REGISTER_CUSTOMER_ACCEPTED
-REGISTER_CUSTOMER_VALIDATED
-IDEMPOTENCY_RESERVED
-CUSTOMER_BASE_PERSISTED
-ATTACHMENT_COMMITTED          when applicable
-CUSTOMER_ATTACHMENTS_LINKED   when applicable
-CUSTOMER_REGISTRATION_ACTIVE
-REGISTER_CUSTOMER_FAILED
+REGISTRATION_SESSION_STARTED
+REGISTRATION_POLICY_LOADED
+REQUIRED_DATA_REQUESTED          when the Workflow waits for policy-required data
+CUSTOMER_DATA_ACCEPTED           once per logically accepted external input
+DUPLICATE_CHECK_COMPLETED
+EXISTING_CUSTOMER_RESOLVED       for ALREADY_EXISTS
+CUSTOMER_CREATED                 for CREATED
+ATTACHMENT_COMMITTED             when applicable
+REGISTRATION_COMPLETED
 ```
+
+`REGISTRATION_FAILED` is recorded when the audit store is available and the Workflow fails. It cannot be a prerequisite for truthfully exposing a failure caused by MongoDB itself being unavailable.
+
+Additional diagnostic events are allowed, for example classified validation rejection, retry-attempt metadata, persistence/link milestones or timings, but those do not independently define successful business completion.
 
 Minimum event envelope:
 
@@ -137,11 +158,33 @@ metadata
 failure?
 ```
 
-MongoDB is an application audit/context projection. It is neither PostgreSQL Customer truth nor a verbatim copy of Temporal history.
+Required properties:
+
+- stable logical event identity;
+- retry-safe representation;
+- queryability by Workflow/correlation/customer where applicable;
+- no unrestricted request-body or binary duplication;
+- no role as PostgreSQL Customer truth;
+- no role as a verbatim replacement for Temporal Event History.
+
+### Success-gating rule
+
+A registration may not be reported as successful `CREATED` or successful `ALREADY_EXISTS` until all applicable required logical audit milestones have been durably represented.
+
+If MongoDB remains unavailable after the frozen retry/failure policy is exhausted:
+
+```text
+failureCode = MONGO_AUDIT_STORE_UNAVAILABLE
+successful registration outcome = forbidden
+```
+
+Temporal Event History remains the durable orchestration evidence for the failure.
 
 ### PII rule
 
-Do not persist unrestricted request bodies in audit/context. Prefer IDs, classifications, counts, hashes and safe state metadata.
+Do not persist unrestricted request bodies in audit/context. Prefer IDs, classifications, field names, counts, hashes and safe state metadata.
+
+mk0 Golden/Test data is synthetic. Complete production retention/encryption policy is a later production gate and does not authorize real Customer PII in mk0 fixtures.
 
 ## 5. AttachmentStore — separate optional authority
 
@@ -209,25 +252,39 @@ PostgreSQL, MongoDB and AttachmentStore do not share one application transaction
 
 Temporal coordinates the progression.
 
-### No attachments
+### New Customer without attachments
 
 ```text
-PostgreSQL command receipt
+PostgreSQL command receipt / start fingerprint
 → PostgreSQL Customer base
-→ MongoDB audit/context
-→ PostgreSQL finalization
+→ MongoDB required audit/context
+→ PostgreSQL registration finalization
+→ successful CREATED result
 ```
 
-### With attachments
+### New Customer with attachments
 
 ```text
-PostgreSQL command receipt
+PostgreSQL command receipt / start fingerprint
 → PostgreSQL Customer base
 → AttachmentStore commit(s)
 → PostgreSQL attachment reference(s)
-→ MongoDB audit/context
-→ PostgreSQL finalization
+→ MongoDB required audit/context
+→ PostgreSQL registration finalization
+→ successful CREATED result
 ```
+
+### Existing Customer / hard duplicate
+
+```text
+PostgreSQL command receipt / start fingerprint
+→ PostgreSQL duplicate lookup resolves existing Customer
+→ MongoDB DUPLICATE_CHECK_COMPLETED + EXISTING_CUSTOMER_RESOLVED + required audit
+→ PostgreSQL registration finalization
+→ successful ALREADY_EXISTS result
+```
+
+No second Customer is created on the existing-Customer path.
 
 ### Failure windows
 
@@ -243,17 +300,25 @@ Retry resolves the same logical attachment.
 
 Temporal retries the reference using the same attachment ID.
 
-**PostgreSQL reference succeeds; workflow completion acknowledgement lost**
+**MongoDB required audit write succeeds; acknowledgement lost**
 
-Finalization remains idempotent.
+Retry resolves/reuses the same logical audit milestone identity rather than creating an unintended duplicate event.
+
+**PostgreSQL reference/audit succeeds; Workflow/finalization acknowledgement lost**
+
+Finalization remains idempotent and recognizes already-satisfied preconditions.
 
 **Permanent attachment failure**
 
 Customer registration is not reported successfully finalized; partial attachment state remains discoverable for reconciliation.
 
-**MongoDB audit/context temporarily unavailable**
+**MongoDB required audit temporarily unavailable**
 
-Retry/failure behavior follows the frozen mandatory-audit policy; required evidence cannot silently disappear.
+Temporal retries according to Activity policy. Required evidence cannot silently disappear.
+
+**MongoDB required audit permanently unavailable / retries exhausted**
+
+Registration is not reported successful. Temporal exposes typed failure evidence; no false `REGISTRATION_COMPLETED` audit marker may be created.
 
 ## 9. Temporal internal persistence is separate
 
@@ -268,13 +333,17 @@ Never query/update Temporal internal tables as Customer business truth.
 ### PostgreSQL
 
 - unique Customer primary key;
-- unique registration idempotency tuple;
+- unique business-scoped registration idempotency tuple;
+- deterministic initial-start replay/conflict comparison;
 - one logical Customer-attachment reference per intended relation;
 - contact indexes only after duplicate/search policy is approved.
 
 ### MongoDB
 
-Support audit/context queries by workflow/correlation/customer and stable event identity for retry-safe milestones.
+- stable logical event identity for retry-safe milestones;
+- required audit queryability by Workflow/correlation/customer where applicable;
+- required success-gating milestones cannot be silently omitted;
+- diagnostic event detail cannot redefine Customer or Workflow truth.
 
 ### AttachmentStore
 
@@ -287,7 +356,7 @@ At minimum:
 ```text
 POSTGRES_CUSTOMER_STORE_UNAVAILABLE
 POSTGRES_CUSTOMER_WRITE_CONFLICT
-IDEMPOTENCY_CONFLICT
+SESSION_IDEMPOTENCY_CONFLICT
 MONGO_AUDIT_STORE_UNAVAILABLE
 MONGO_CONTEXT_STORE_UNAVAILABLE
 ATTACHMENT_INGRESS_NOT_FOUND
@@ -305,13 +374,18 @@ Persistence Design is accepted when:
 
 1. Customer truth → PostgreSQL.
 2. Registration/idempotency truth → PostgreSQL.
-3. Application audit/context → MongoDB.
-4. Binary/document objects → AttachmentStore when present.
-5. Attachment business reference → PostgreSQL.
-6. Workflow history → Temporal.
-7. Cross-store coordination → Temporal Workflow + Activities.
-8. Retry-safe Customer identity → registration/command identity.
-9. Retry-safe attachment identity → ingress/commit identity.
-10. No false success after permanent mandatory persistence failure.
-11. No unrestricted PII/raw request duplication in audit.
-12. Attachment technology remains replaceable without changing command/workflow business semantics.
+3. Session identity is business-scoped by `(operation, businessSlug, idempotencyKeyHash)`.
+4. The material initial start snapshot has deterministic replay/conflict semantics.
+5. Later Workflow Updates do not rewrite the original start fingerprint.
+6. Application audit/context → MongoDB.
+7. Canonical success-gating audit vocabulary and retry-safe logical identity are explicit.
+8. Successful registration is impossible after exhausted mandatory-audit persistence failure.
+9. Binary/document objects → AttachmentStore when present.
+10. Attachment business reference → PostgreSQL.
+11. Workflow history → Temporal.
+12. Cross-store coordination → Temporal Workflow + Activities.
+13. Retry-safe Customer identity → registration/command identity.
+14. Retry-safe attachment identity → ingress/commit identity.
+15. No false success after permanent mandatory persistence failure.
+16. No unrestricted PII/raw request duplication in audit.
+17. Attachment technology remains replaceable without changing command/workflow business semantics.
