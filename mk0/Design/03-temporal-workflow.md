@@ -2,7 +2,7 @@
 
 ## 1. Temporal role in mk0
 
-`Temporal` means the real Temporal orchestration platform: Temporal Service + durable Event History + Task Queues + Workers + Workflows + Activities + visibility/query capabilities.
+`Temporal` means the real Temporal orchestration platform: Temporal Service, durable Event History, Task Queues, Workers, Workflows, Activities, Workflow message passing, visibility and restart/retry semantics.
 
 mk0 must not reproduce Temporal with a custom local state machine.
 
@@ -10,48 +10,60 @@ The first Workflow type is:
 
 `RegisterNewCustomer`
 
+This Workflow is intentionally **long-running and interactive** when required Customer data is incomplete.
+
+## 2. Why interactive Temporal fits the architecture
+
+Temporal Workflows can behave as stateful services that receive Queries, Signals and Updates. For mk0:
+
+- **Query** reads the current registration state;
+- **Update** submits/changes registration data and returns a tracked result;
+- **Signal** remains available for future asynchronous channel events where a direct response is not required.
+
+The CTA therefore does not own a conversation state machine. Temporal owns it durably.
+
+Conceptual interaction:
+
+```text
+CTA starts RegisterNewCustomer
+→ Temporal loads policy
+→ Workflow determines missing fields
+→ Workflow waits durably
+→ CTA Query reads missing fields
+→ CTA Update provides data
+→ Workflow revalidates
+→ repeats until complete
+→ duplicate check
+→ persistence
+→ terminal result
+```
+
+A CTA can disappear for minutes, hours or longer while the Workflow remains the authority for that registration session.
+
+## 3. Workflow identity
+
 Recommended Workflow ID:
 
 ```text
-register-customer:{businessSlug}:{hash(Idempotency-Key)}
+register-customer:{businessSlug}:{hash(startIdempotencyKey)}
 ```
+
+The initial idempotency key identifies the **registration session/intent**, not a frozen complete Customer payload. This matters because the Customer draft evolves through later Updates.
 
 Goals:
 
-- deterministic identity;
 - duplicate-start resistance;
+- stable identity across CTA reconnects;
 - no raw idempotency key in ordinary logs;
-- business/tenant scoping through `businessSlug`.
+- tenant/business scoping through `businessSlug`.
 
-## 2. Temporal platform capabilities available to Engines
+Each later external input also carries a stable `inputId`/Update identity so repeated channel delivery does not produce duplicate logical interactions.
 
-The Orchestration Engine is designed around the full Temporal model:
-
-- durable Workflow Execution;
-- Event History / deterministic replay;
-- Task Queues;
-- Workers;
-- Activities for side effects;
-- retries, backoff and timeouts;
-- crash/restart recovery;
-- Queries for read-only Workflow state;
-- Signals for asynchronous external events when later required;
-- Updates for controlled synchronous Workflow mutations when later required;
-- Child Workflows when future decomposition needs them;
-- cancellation/compensation semantics when explicitly designed;
-- visibility/search metadata for operations;
-- Workflow versioning/replay compatibility.
-
-`RegisterNewCustomer` only needs a subset of these on day one, but it must run inside this complete architecture so future workflows do not require a replacement orchestrator.
-
-## 3. CTA to Temporal boundary
-
-All channels converge through the CTA Adapter contract.
+## 4. CTA to Temporal boundary
 
 ```text
 Postman / CLI / future channel
 → CTA Adapter
-→ canonical RegisterNewCustomer command
 → Temporal Client
 → Temporal Service
 → Task Queue
@@ -59,295 +71,351 @@ Postman / CLI / future channel
 → RegisterNewCustomer Workflow
 ```
 
-The CTA Adapter is not a Workflow engine.
+The CTA Adapter is replaceable and owns no durable business process state.
 
-A CLI may implement the adapter semantics directly with the official Temporal client/SDK.
+Postman may use a framework-free transport adapter. CLI may invoke the official Temporal client directly while preserving the same canonical message contract.
 
-For Postman, the preferred architecture is a transport-compatible CTA Adapter. Exposing Temporal-native protocol/payload details directly to every channel would create channel-to-orchestrator coupling that the platform diagram explicitly avoids.
+## 5. Workflow start input
 
-## 4. Workflow input
-
-The Workflow receives a normalized command envelope containing:
-
-- `businessSlug`;
-- Customer command data;
-- `commandFingerprint`;
-- correlation metadata;
-- opaque attachment ingress references when present;
-- schema/contract version;
-- safe channel/source metadata only when required.
-
-Large attachment bytes do not belong in ordinary Workflow input/history.
-
-## 5. Workflow state machine
+Start input may be incomplete:
 
 ```text
-ACCEPTED
+operation = RegisterNewCustomer
+businessSlug
+start idempotency identity
+correlation/channel metadata
+optional initial Customer draft
+schema version
+```
+
+Only the minimum envelope required to start a legal registration session must exist.
+
+Missing Customer name/contact/document fields are handled inside the durable Workflow according to the resolved policy rather than automatically rejecting the Workflow before start.
+
+## 6. Versioned RegistrationPolicy
+
+At the beginning of execution Temporal resolves a versioned registration policy through an Activity.
+
+Conceptual Activity:
+
+`loadRegistrationPolicy`
+
+The result contains the frozen rules for this execution:
+
+```text
+policyId
+policyVersion
+requiredCustomerFields
+normalizationRules
+duplicatePolicy
+attachmentPolicy
+completionRules
+```
+
+This policy is conceptually derived from the approved BusinessProfile/WorkflowProfile configuration or equivalent application configuration.
+
+Because the Activity result becomes part of the Workflow execution history, an already-running registration does not silently change requirements when configuration changes later.
+
+## 7. Workflow state machine
+
+```text
+STARTED
    ↓
-VALIDATING_COMMAND
+LOADING_REGISTRATION_POLICY      → config/profile Activity
    ↓
-RESERVING_IDEMPOTENCY       → PostgreSQL Activity
+COLLECTING_DATA
    ↓
-PERSISTING_CUSTOMER_BASE    → PostgreSQL Activity
+VALIDATING_DRAFT
+   ├── missing data ──────────────┐
+   │                              ▼
+   │                    WAITING_FOR_REQUIRED_DATA
+   │                              │
+   │                    ProvideCustomerData Update
+   │                              │
+   └──────────────────────────────┘
+   ↓ complete
+CHECKING_EXISTING_CUSTOMER        → PostgreSQL Activity
+   ├── hard duplicate ───────────→ ALREADY_EXISTS → COMPLETED
+   ├── soft duplicate requiring decision
+   │                              ↓
+   │                    WAITING_FOR_DUPLICATE_DECISION
+   │                              ↓ Update
+   └──────────────────────────────┐
+                                  ↓
+RESERVING_REGISTRATION            → PostgreSQL Activity
+   ↓
+PERSISTING_CUSTOMER               → PostgreSQL Activity
    ↓
 attachments requested?
    ├─ no ───────────────────────────────┐
    └─ yes                              │
         ↓                              │
-      PERSISTING_ATTACHMENTS  → AttachmentStore Activity
+      PERSISTING_ATTACHMENTS            → AttachmentStore Activity
         ↓                              │
-      LINKING_ATTACHMENTS     → PostgreSQL Activity
-        └──────────────────────────────┘
+      LINKING_ATTACHMENTS               → PostgreSQL Activity
+        └───────────────────────────────┘
                      ↓
-             PERSISTING_AUDIT_CONTEXT  → MongoDB Activity
+             PERSISTING_AUDIT_CONTEXT   → MongoDB Activity
                      ↓
-             FINALIZING_CUSTOMER       → PostgreSQL Activity
+             FINALIZING_CUSTOMER        → PostgreSQL Activity
                      ↓
-             COMPLETED
+             COMPLETED / CREATED
 ```
 
-Selected audit milestones may also be emitted earlier at accepted/validated/persisted phases as required by policy.
+The exact placement/frequency of audit Activities may be refined in Build, but accepted external interactions and major business milestones must be auditable.
 
-## 6. Task Queue and Worker boundary
+## 8. Query contract
 
-Build must use real Temporal Task Queue/Worker semantics.
+Required Query:
 
-Design-level rule:
+`GetRegistrationState`
+
+Safe projection includes:
+
+```text
+workflowId
+workflowStatus
+phase
+policyVersion
+knownFields
+missingFields
+validationErrors
+nextAction
+possibleDuplicate?
+customerId?
+created?
+correlationId
+failure?
+```
+
+Queries are read-only and must not execute database Activities.
+
+This Query is the primary mechanism for Postman/CLI to see **where the interaction currently is**.
+
+## 9. Update contract
+
+Required Update:
+
+`ProvideCustomerData`
+
+Purpose:
+
+- accept a structurally valid Customer patch;
+- normalize permitted values;
+- merge into the durable draft;
+- update known/missing fields;
+- return the latest safe registration projection;
+- ensure accepted interaction is included in the audit policy.
+
+Optional future Updates:
+
+```text
+ResolveDuplicateDecision
+ProvideAttachmentReference
+CorrectCustomerData
+CancelRegistration
+```
+
+Only explicitly designed Updates are accepted.
+
+## 10. Activity boundaries
+
+### `loadRegistrationPolicy` — application configuration/profile source
+
+Reads the versioned requirements for the current business/workflow.
+
+Must return a stable policy version for the execution.
+
+### `findExistingCustomer` — PostgreSQL
+
+Purpose:
+
+- query canonical Customer identity using policy-defined hard/soft duplicate keys;
+- return deterministic candidate classifications;
+- never create/update a Customer.
+
+The Workflow does not query PostgreSQL directly.
+
+### `reserveRegistration` — PostgreSQL
+
+Purpose:
+
+- bind the Workflow/session identity to one logical registration outcome;
+- make creation retry-safe;
+- tolerate Activity retry.
+
+### `createCustomer` — PostgreSQL
+
+Purpose:
+
+- persist the canonical TimeSlots-aligned Customer projection;
+- return a stable `customerId`;
+- recover existing side effect on retry rather than duplicate it.
+
+### `commitAttachment` — AttachmentStore, optional
+
+Resolves/commits attachment ingress and returns stable opaque attachment metadata.
+
+### `linkCustomerAttachments` — PostgreSQL, optional
+
+Links opaque attachment references to the business record idempotently.
+
+### `appendInteractionAudit` — MongoDB
+
+Records accepted CTA/Workflow interaction milestones with safe metadata.
+
+Examples:
+
+```text
+REGISTRATION_SESSION_STARTED
+REGISTRATION_POLICY_LOADED
+REQUIRED_DATA_REQUESTED
+CUSTOMER_DATA_ACCEPTED
+CUSTOMER_DATA_REJECTED_CLASSIFIED
+DUPLICATE_CHECK_COMPLETED
+EXISTING_CUSTOMER_RESOLVED
+CUSTOMER_CREATED
+ATTACHMENT_COMMITTED
+REGISTRATION_COMPLETED
+REGISTRATION_FAILED
+```
+
+### `finalizeCustomerRegistration` — PostgreSQL
+
+Verifies mandatory effects and marks the authoritative registration result final.
+
+## 11. Duplicate semantics
+
+Temporal orchestrates duplicate detection; PostgreSQL remains the source queried for Customer truth.
+
+The Workflow must not hard-code that phone, email or name is universally unique.
+
+The RegistrationPolicy classifies identifiers as:
+
+```text
+HARD_UNIQUE
+SOFT_MATCH
+NON_UNIQUE
+```
+
+Typical generic guidance:
+
+- verified business-scoped document ID may be hard unique if policy says so;
+- phone/email may be soft matches because families/organizations can share them;
+- name alone is never a hard uniqueness key.
+
+Hard duplicate terminal result:
+
+```text
+created = false
+phase = ALREADY_EXISTS
+customerId = existing customer
+```
+
+No second Customer is persisted.
+
+## 12. Interaction audit vs Temporal Event History
+
+Temporal Event History is the orchestration truth.
+
+MongoDB contains a separate application audit/interaction projection useful for business troubleshooting and future channel analytics.
+
+MongoDB should not blindly duplicate full Temporal history or unrestricted PII. Exact PII retention/encryption policy must be frozen before production; mk0 tests use synthetic data.
+
+## 13. Task Queues and Workers
+
+Build must use real Temporal Task Queue/Worker semantics:
 
 ```text
 Temporal Service
 → Task Queue
-→ registered Worker
-→ Workflow/Activity implementation
+→ Worker
+→ Workflow/Activity execution
 ```
 
-The exact number/names of Task Queues and Worker processes are Build decisions. mk0 may begin with a simple topology, but the design must preserve later separation by capability or operational scaling.
+The first topology may be simple, but must prove:
 
-Workers may restart or scale without changing the logical Workflow identity/outcome.
+- real Worker polling;
+- restart/resume;
+- Activity retry;
+- Workflow message handling;
+- Event History/visibility.
 
-## 7. Activity boundaries
+## 14. Retry and continuity
 
-### `reserveRegistrationCommand` — PostgreSQL
+Potential transient failures:
 
-Purpose:
+- PostgreSQL unavailable;
+- MongoDB unavailable;
+- AttachmentStore unavailable;
+- Activity acknowledgement lost after side effect;
+- Worker/process restart;
+- CTA disconnect.
 
-- persist/verify durable idempotency receipt;
-- compare command fingerprint;
-- return existing registration identity on valid replay;
-- reject same key with a different material command.
+Temporal owns durable recovery and retry execution.
 
-Must be idempotent.
+CTA retries must use stable start/input identities so duplicate starts or messages resolve safely.
 
-### `createCustomerRegistrationBase` — PostgreSQL
+## 15. Cross-store consistency
 
-Purpose:
+PostgreSQL, MongoDB and AttachmentStore do not share one atomic transaction.
 
-- create the canonical Customer registration identity/record;
-- recover the existing record when retried;
-- return stable `customerId`.
+Temporal coordinates the process.
 
-Must be idempotent against Workflow/command identity.
+A new Customer is reported `CREATED` only after mandatory persistence/finalization succeeds.
 
-### `commitAttachment` — AttachmentStore, optional
+An `ALREADY_EXISTS` result creates no second Customer.
 
-Purpose:
+Permanent attachment/persistence failure cannot be converted to success.
 
-- resolve an opaque ingress reference;
-- verify expected metadata/hash;
-- persist the attachment/document through the selected AttachmentStore implementation;
-- return stable opaque attachment metadata.
+Partial effects remain diagnosable/reconcilable rather than being hidden by ad-hoc destructive rollback.
 
-Must be idempotent by ingress/content/workflow identity.
+## 16. Visibility / laboratory observability
 
-### `linkCustomerAttachments` — PostgreSQL, optional
-
-Purpose:
-
-- persist opaque attachment references against the Customer/registration business record;
-- never copy raw binary content into the canonical Customer relation merely for convenience;
-- tolerate retry without duplicate references.
-
-### `appendExecutionAudit` — MongoDB
-
-Purpose:
-
-- persist selected application-level milestones;
-- preserve queryable correlation/workflow/customer evidence;
-- remain separate from Temporal Event History.
-
-### `finalizeCustomerRegistration` — PostgreSQL
-
-Purpose:
-
-- verify all mandatory registration effects;
-- mark the authoritative registration as successfully finalized;
-- tolerate retry without changing the logical outcome.
-
-## 8. Queries, Signals and Updates
-
-### Queries — required design capability
-
-The CTA must be able to inspect a safe Workflow projection without reading raw Temporal Event History.
-
-Query projection includes:
-
-- `workflowId`;
-- Workflow status;
-- current mk0 phase;
-- `customerId` if assigned;
-- requested/committed attachment counts;
-- correlation ID;
-- timestamps;
-- typed failure classification.
-
-### Signals / Updates — available, not forced into the first happy path
-
-`RegisterNewCustomer` does not need arbitrary external mutation to prove its basic path.
-
-However the Orchestration Engine must preserve Temporal Signals/Updates as first-class mechanisms for later workflows such as:
-
-- missing-information responses;
-- approval/correction steps;
-- asynchronous channel confirmations;
-- human-in-the-loop decisions;
-- reschedule/cancel operations.
-
-Do not invent ad-hoc polling/database flags when a future interaction is properly modeled as a Temporal interaction.
-
-## 9. Audit milestones — MongoDB
-
-Minimum mk0 set:
+mk0 uses three distinct evidence planes:
 
 ```text
-REGISTER_CUSTOMER_ACCEPTED
-REGISTER_CUSTOMER_VALIDATED
-IDEMPOTENCY_RESERVED
-CUSTOMER_BASE_PERSISTED
-ATTACHMENT_COMMITTED          optional / repeated
-CUSTOMER_ATTACHMENTS_LINKED   optional
-CUSTOMER_REGISTRATION_ACTIVE
-REGISTER_CUSTOMER_FAILED      terminal failure
+Temporal Web UI / CLI
+→ Workflow state, Event History, Task Queue, Worker, Activities, retries
+
+PostgreSQL
+→ canonical Customer and registration result
+
+MongoDB
+→ application interaction/audit projection
 ```
 
-Audit events contain identifiers/classifications and sanitized metadata, not unrestricted Customer request bodies.
+A later Engines control-room UI may combine these views, but mk0 does not need to build that UI to prove the architecture.
 
-Temporal Event History remains the orchestration history. MongoDB audit remains the application/business audit projection.
+## 17. Temporal infrastructure persistence is separate
 
-## 10. Retry semantics
+Temporal server persistence is infrastructure state.
 
-Potentially transient:
-
-- PostgreSQL temporarily unavailable;
-- MongoDB temporarily unavailable;
-- AttachmentStore temporarily unavailable;
-- Worker/process crash;
-- network interruption after side effect but before Activity completion is recorded.
-
-Normally permanent without changed command/environment:
-
-- invalid command schema;
-- expired/invalid attachment ingress reference;
-- attachment integrity mismatch;
-- same idempotency key with different fingerprint;
-- explicit business-policy rejection.
-
-Retry classification is typed at the Activity/application boundary.
-
-Temporal owns the retry execution. The CTA must not reproduce business retries.
-
-## 11. Idempotency requirements
-
-### PostgreSQL Customer
-
-A retried Activity cannot perform an unconditional new insert on every attempt. A stable registration/command identity must resolve the same logical Customer.
-
-### AttachmentStore object
-
-A retried commit after the object already persisted must return/recover the same logical attachment rather than create another because the first Activity acknowledgement was lost.
-
-### MongoDB audit
-
-A conceptual milestone needs a stable event/deduplication identity when Activity retries occur, unless separate retry-attempt records are intentionally part of the model.
-
-## 12. Cross-store consistency
-
-PostgreSQL, MongoDB and AttachmentStore do not share one application transaction.
-
-mk0 uses **Temporal-mediated workflow consistency**.
-
-A Customer is not reported successfully finalized until:
-
-1. the PostgreSQL Customer/registration record exists;
-2. every requested mandatory attachment/document is committed in AttachmentStore;
-3. PostgreSQL contains the expected attachment reference(s);
-4. required MongoDB audit/context milestones are persisted according to policy;
-5. finalization preconditions pass.
-
-Failure handling:
-
-- transient side-effect failure → Temporal retries;
-- permanent attachment failure → Workflow fails, Customer is not reported successful;
-- attachment committed but PostgreSQL link fails → retry/reconcile existing attachment;
-- PostgreSQL link succeeds but final Workflow acknowledgement is lost → idempotent finalization returns existing outcome.
-
-Deletion-based rollback is not the default. Durable partial evidence remains diagnosable/reconcilable.
-
-## 13. Temporal persistence is separate
-
-Temporal's own server persistence is an infrastructure concern.
-
-Even if the Temporal cluster uses PostgreSQL internally:
+Even when Temporal uses PostgreSQL internally:
 
 ```text
-Temporal infrastructure persistence
+Temporal infrastructure PostgreSQL
 ≠
-Engines application PostgreSQL Customer persistence
+Engines application PostgreSQL
 ```
 
-No Customer authority may migrate into or depend on Temporal internal tables.
+Never read/write Temporal internal tables as Customer business storage.
 
-## 14. Continuity proof
+## 18. Temporal gate
 
-The first release gate must prove:
+The design passes only when runtime tests can prove:
 
-```text
-CTA submits command
-→ Temporal returns durable Workflow identity
-→ CTA process/session disappears
-→ Worker may also restart during execution
-→ Temporal continues/resumes
-→ persistence completes once logically
-→ a later CTA session queries the same Workflow identity
-→ same final result is observed
-```
-
-This is the mk0 interpretation of continuous orchestration.
-
-## 15. Versioning
-
-At minimum preserve/version:
-
-- Workflow type;
-- command schema;
-- Workflow code/replay strategy;
-- PostgreSQL business schema;
-- MongoDB audit/context schema;
-- AttachmentStore reference schema;
-- Golden Dataset version.
-
-## 16. Temporal gate
-
-The design is accepted only if future tests prove:
-
-- a real Temporal Service/Worker/Task Queue path is used;
-- same command replay yields one PostgreSQL Customer;
-- Activity retry after side effect does not duplicate Customer/attachment;
-- Worker restart resumes execution;
-- CTA disconnect does not stop execution;
-- transient PostgreSQL failure retries;
-- transient MongoDB failure retries;
-- transient AttachmentStore failure retries;
-- permanent attachment integrity failure is deterministic;
-- Workflow code calls no persistence/network/file driver directly;
-- Workflow status remains queryable after failure/restart;
-- Customer is not finalized before mandatory effects complete.
+- real Temporal Service/Task Queue/Worker execution;
+- intent-only/partial registration can start and wait durably;
+- Query exposes missing fields/current phase;
+- Update adds Customer data to the same Workflow;
+- CTA disconnect/reconnect preserves the same Workflow state;
+- required fields are driven by a versioned policy;
+- duplicate lookup is performed through a PostgreSQL Activity;
+- hard duplicate yields existing Customer with no second insert;
+- new Customer creates exactly one PostgreSQL record;
+- accepted interactions are represented in MongoDB audit according to policy;
+- Worker restart resumes the same execution;
+- Activity retry after side effect does not duplicate business state;
+- optional attachments remain retry-safe;
+- zero scheduling side effects occur.
