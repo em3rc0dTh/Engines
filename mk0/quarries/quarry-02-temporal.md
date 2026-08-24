@@ -22,43 +22,57 @@ Classification: `SOURCE_FACT`.
 
 ### Temporal owns durable sequencing
 
-`RegisterNewCustomer` belongs in the Orchestration Engine, not in a NestJS controller.
+`RegisterNewCustomer` belongs in the Orchestration Engine, not in a NestJS controller or CTA-local state machine.
 
 Classification: `PROJECT_DECISION`.
 
-### PostgreSQL/MongoDB access belongs behind Activities
+### PostgreSQL/MongoDB/AttachmentStore access belongs behind Activities
 
-Application PostgreSQL writes and MongoDB writes are side effects. Workflow code coordinates them; Activities/adapters perform them.
+Application PostgreSQL writes, MongoDB writes and attachment-store operations are side effects. Workflow code coordinates them; Activities/adapters perform them.
 
 Classification: `DESIGN_DECISION`.
 
 ### Activities must tolerate retry
 
-A side effect can succeed while Activity completion acknowledgement is lost. Retry must not create a second Customer, audit milestone or logical attachment.
+A side effect can succeed while Activity completion acknowledgement is lost. Retry must not create a second Customer, registration outcome, required audit milestone or logical attachment.
 
 Classification: `DESIGN_REQUIREMENT`.
 
 ### Workflow input remains bounded
 
-Large optional attachment bytes should not become ordinary Temporal history payloads. The command uses an opaque ingress reference while a MongoDB-backed attachment capability owns the document object.
+Large optional attachment bytes should not become ordinary Temporal history payloads.
 
-Classification: `DESIGN_PROPOSAL` pending final Build-time payload/attachment implementation.
+The canonical interaction uses an opaque ingress/reference identity while a separate technology-neutral `AttachmentStore` capability owns binary/document object lifecycle.
 
-### Workflow identity reinforces idempotency
+The physical AttachmentStore technology remains a Build decision.
 
-Recommended ID:
+Classification: `DESIGN_DECISION` for the capability boundary + `BUILD_REQUIREMENT` for physical selection.
+
+### Workflow identity reinforces business-scoped idempotency
+
+Recommended Workflow ID:
 
 ```text
-register-customer:{businessSlug}:{hash(Idempotency-Key)}
+register-customer:{businessSlug}:{hash(idempotencyKey)}
 ```
 
-Classification: `DESIGN_PROPOSAL`.
+Authoritative session scope:
+
+```text
+(operation, businessSlug, idempotencyKeyHash)
+```
+
+The normalized material initial-start snapshot is fingerprinted for exact replay/conflict detection. Later `ProvideCustomerData` Updates use their own stable input identities and do not rewrite the original start fingerprint.
+
+Classification: `DESIGN_DECISION`.
 
 ### Temporal history is not MongoDB audit
 
-Temporal history is orchestration/runtime history. MongoDB `execution_audit` is an application-facing audit/context projection with its own schema/retention/PII policy.
+Temporal history is orchestration/runtime history. MongoDB `execution_audit` is an application-facing audit/context projection with its own schema and PII policy.
 
-Classification: `PROJECT_DECISION`.
+Applicable MongoDB success-gating milestones must be present before a registration can be reported successful; MongoDB still does not replace Temporal Event History.
+
+Classification: `PROJECT_DECISION` + `DESIGN_REQUIREMENT`.
 
 ### Temporal PostgreSQL is not Customer PostgreSQL
 
@@ -66,14 +80,23 @@ If Temporal uses PostgreSQL internally, that schema/database is infrastructure s
 
 Classification: `DESIGN_REQUIREMENT`.
 
+### Workflow replay compatibility is an invariant; the exact mechanism is Build-time
+
+A deployed Workflow change must preserve deterministic replay/version compatibility for executions whose Event History was created by an older implementation.
+
+The exact Temporal SDK/version and SDK-specific versioning mechanism are selected during authorized Build and must satisfy that invariant.
+
+Classification: `DESIGN_REQUIREMENT` + `BUILD_REQUIREMENT`.
+
 ## Open Build-time validations
 
-- exact Temporal TypeScript SDK version;
-- Workflow ID reuse policy;
+- exact Temporal SDK language/version;
+- Workflow ID reuse policy details allowed by the selected SDK/runtime;
 - Activity retry policy values;
 - Activity timeouts/heartbeats;
 - payload converter/codec choices;
 - local Temporal topology;
 - Temporal internal persistence topology/schema isolation;
 - visibility/search attribute strategy;
-- workflow versioning strategy.
+- SDK-specific workflow versioning/replay mechanism;
+- AttachmentStore physical technology when attachment cases are enabled.
