@@ -12,11 +12,9 @@ https://docs.temporal.io/
 
 ## Source facts relevant to mk0
 
-Temporal is designed for durable execution so workflows can resume after failures/restarts rather than relying on the lifetime of one HTTP request/process.
+Temporal provides durable execution so workflow progress can survive worker/process failures.
 
-Classification: `SOURCE_FACT`.
-
-Temporal distinguishes Workflow orchestration logic from side-effecting Activities.
+Temporal separates Workflow orchestration logic from side-effecting Activities.
 
 Classification: `SOURCE_FACT`.
 
@@ -24,31 +22,31 @@ Classification: `SOURCE_FACT`.
 
 ### Temporal owns durable sequencing
 
-The `RegisterNewCustomer` state machine belongs in the Orchestration Engine, not in a NestJS controller.
+`RegisterNewCustomer` belongs in the Orchestration Engine, not in a NestJS controller.
 
 Classification: `PROJECT_DECISION`.
 
-### Persistence belongs behind Activities
+### PostgreSQL/MongoDB access belongs behind Activities
 
-MongoDB writes and local attachment-store operations are side effects and therefore belong in Activities/adapters rather than Workflow code.
+Application PostgreSQL writes and MongoDB writes are side effects. Workflow code coordinates them; Activities/adapters perform them.
 
-Classification: `DESIGN_DECISION` grounded in Temporal workflow semantics.
+Classification: `DESIGN_DECISION`.
 
 ### Activities must tolerate retry
 
-A persistence Activity can perform its write and then lose its completion acknowledgement. Re-execution must not create a second customer/attachment.
+A side effect can succeed while Activity completion acknowledgement is lost. Retry must not create a second Customer, audit milestone or logical attachment.
 
 Classification: `DESIGN_REQUIREMENT`.
 
-### Workflow input should remain bounded
+### Workflow input remains bounded
 
-Large binary attachments should not be treated as ordinary Workflow input/history payloads. mk0 therefore introduces opaque attachment ingress references and a commit Activity.
+Large optional attachment bytes should not become ordinary Temporal history payloads. The command uses an opaque ingress reference while a MongoDB-backed attachment capability owns the document object.
 
-Classification: `DESIGN_PROPOSAL`, to be validated against final Build-time Temporal payload/converter choices.
+Classification: `DESIGN_PROPOSAL` pending final Build-time payload/attachment implementation.
 
-### Workflow identity should reinforce idempotency
+### Workflow identity reinforces idempotency
 
-Recommended Workflow ID:
+Recommended ID:
 
 ```text
 register-customer:{businessSlug}:{hash(Idempotency-Key)}
@@ -56,21 +54,26 @@ register-customer:{businessSlug}:{hash(Idempotency-Key)}
 
 Classification: `DESIGN_PROPOSAL`.
 
-### Temporal history is not the application audit database
+### Temporal history is not MongoDB audit
 
-Temporal history proves/orchestrates execution. The user requirement separately calls for a log in MongoDB. mk0 therefore treats the Mongo audit log as an application projection with its own retention/query/PII rules rather than copying the full Temporal history.
+Temporal history is orchestration/runtime history. MongoDB `execution_audit` is an application-facing audit/context projection with its own schema/retention/PII policy.
 
 Classification: `PROJECT_DECISION`.
 
+### Temporal PostgreSQL is not Customer PostgreSQL
+
+If Temporal uses PostgreSQL internally, that schema/database is infrastructure state. Engines application Customer/registration tables remain a distinct business authority.
+
+Classification: `DESIGN_REQUIREMENT`.
+
 ## Open Build-time validations
 
-- exact TypeScript SDK versions;
-- Workflow ID reuse policy chosen for completed/failed executions;
-- retry policy values by Activity;
-- timeouts/heartbeats for attachment operations;
-- payload codec/data converter choices;
-- local Temporal development topology;
+- exact Temporal TypeScript SDK version;
+- Workflow ID reuse policy;
+- Activity retry policy values;
+- Activity timeouts/heartbeats;
+- payload converter/codec choices;
+- local Temporal topology;
+- Temporal internal persistence topology/schema isolation;
 - visibility/search attribute strategy;
-- Workflow versioning strategy before production history exists.
-
-These remain `UNKNOWN` until Build planning selects exact runtime versions and profiles.
+- workflow versioning strategy.
