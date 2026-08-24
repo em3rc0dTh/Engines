@@ -91,49 +91,51 @@ Classification: `DESIGN_DECISION`.
 
 ---
 
-## DCD-003 — The evolving Customer draft is not the immutable start fingerprint
+## DCD-003 — The initial start snapshot is fingerprinted; later Updates are not
 
 ### Decision
 
-`RegisterNewCustomer` is an interactive session whose Customer draft changes through Updates. Therefore the mutable draft cannot be treated as the immutable idempotency fingerprint of the session.
+`RegisterNewCustomer` is an interactive session whose durable Customer draft changes through explicit Temporal Updates. Idempotency must distinguish a retry of the **same start request** from an attempt to reuse the same session identity for a materially different start.
 
-The immutable start fingerprint covers only start-envelope semantics that must not change for the same logical session, conceptually:
+The immutable start fingerprint therefore covers the normalized material snapshot supplied at Workflow start, conceptually:
 
 ```text
 operation
 businessSlug
 schemaVersion
+normalized initial Customer draft
+normalized initial attachment ingress identities / expected integrity metadata
 explicit immutable session options, if introduced later
 ```
 
-It excludes:
+It excludes transport/presentation metadata that does not change business meaning:
 
 ```text
-customer draft contents
-accepted ProvideCustomerData patches
 correlationId
 channel presentation metadata
 request timestamp
 ```
 
+Most importantly, the fingerprint is frozen from the **initial start snapshot**. Later accepted `ProvideCustomerData` Updates do not rewrite it.
+
 Rules:
 
 ```text
-same business + operation + idempotency key + compatible immutable fingerprint
+same business + operation + idempotency key + same initial-start fingerprint
 → resolve the same logical Workflow/session
 
-same business + operation + idempotency key + incompatible immutable fingerprint
+same business + operation + idempotency key + materially different initial-start fingerprint
 → SESSION_IDEMPOTENCY_CONFLICT
 
 same opaque key in a different business
 → different business-scoped idempotency identity
 ```
 
-Customer data changes must enter through the designed Temporal Update contract rather than by attempting to create a new meaning for the same start request.
+If a session has already started and Customer information must change or become more complete, that change enters through the designed Temporal Update contract rather than by reissuing the same start identity with a different initial payload.
 
 ### Golden Dataset consequence
 
-`GD-006` must test an immutable **same-business session-envelope conflict**, not reuse the same key under a different `businessSlug`.
+`GD-006` must test a **same-business, same-key, materially different initial start snapshot**. It must not treat reuse of the same opaque key under a different `businessSlug` as a conflict.
 
 Classification: `DESIGN_DECISION` + `TEST_REQUIREMENT`.
 
@@ -277,7 +279,7 @@ This is not permission for those layers to diverge. Any discovered conflict shou
 
 At minimum:
 
-- update Golden Dataset `GD-006` to the business-scoped immutable-envelope rule;
+- update Golden Dataset `GD-006` to the business-scoped same-session start-conflict rule;
 - remove remaining stale channel vocabulary from current mk0 artifacts;
 - ensure Test/Golden expectations encode the mandatory-audit success rule;
 - record the approved Design commit;
