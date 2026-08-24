@@ -2,11 +2,7 @@
 
 ## Purpose
 
-`mining-site` is the intake ledger for external/internal evidence used to design mk0.
-
-Material is mined here first, then distilled into `quarries/`. Design documents should depend on quarry conclusions or explicit new decisions, not on remembered assumptions.
-
----
+`mining-site` records the evidence and explicit project decisions used to design mk0. Material is distilled into `quarries/`; Design must not rely on remembered assumptions.
 
 ## MS-001 — VTKALL DataModel v3 / TimeSlots
 
@@ -14,32 +10,23 @@ Source:
 
 `em3rc0dTh/demo_test/DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`
 
-Repository URL:
+Role:
 
-https://github.com/em3rc0dTh/demo_test/blob/e3a122e866edb19eebdd023ccfb601f1d8a53b19/DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md
+- semantic baseline for Customer;
+- preserves the later scheduling distinction between Appointment and ResourceReservation;
+- keeps RegisterNewCustomer isolated from scheduling.
 
-Role in mk0:
+Key facts:
 
-- canonical baseline for `Customer` shape;
-- establishes `Case` as broader operational root in the larger model;
-- establishes WorkTeam/TimeSlots concepts for later scheduling;
-- establishes the critical distinction between Appointment and ResourceReservation.
+- Customer is a canonical business entity.
+- `Appointment` schedules a customer-facing appointment.
+- `ResourceReservation` blocks actual capacity.
+- availability is derived from schedule rules + overrides + blocking reservations.
+- default recommended micro-slot is 15 minutes.
+- only `held`/`booked` reservations block capacity.
+- `AvailabilitySlot` is legacy compatibility, not future authority.
 
-Key extracted facts:
-
-- Customer target shape separates personal/contact data from managed entities.
-- `Appointment` schedules the customer-facing appointment.
-- `ResourceReservation` blocks real team capacity.
-- availability derives from WorkTeam schedule rules + overrides + reservations.
-- default operational micro-slot is 15 minutes unless configured otherwise.
-- only reservation states `held` and `booked` block capacity.
-- `AvailabilitySlot` is legacy compatibility, not future source of truth.
-
-Use:
-
-**AUTHORITATIVE PROJECT BASELINE for mk0 business-model alignment**, subject to future project ADR changes.
-
----
+Classification: `SOURCE_FACT`.
 
 ## MS-002 — Temporal documentation
 
@@ -47,89 +34,81 @@ Source:
 
 https://docs.temporal.io/
 
-Role in mk0:
+Role:
 
 - durable workflow runtime;
-- crash/restart recovery model;
 - Workflow/Activity separation;
-- basis for first customer-onboarding workflow.
+- retry/restart model.
 
-Important design interpretation:
+Design consequence:
 
-- durable orchestration belongs in Temporal;
-- side-effecting persistence belongs in Activities;
-- accepted workflows must survive normal worker/process failure;
-- Activity implementations must tolerate retry.
+- orchestration belongs to Temporal;
+- PostgreSQL/MongoDB side effects belong in Activities/adapters;
+- worker/process restart must not lose accepted workflow progress.
 
-Use:
-
-**NORMATIVE PLATFORM DOCUMENTATION** for Temporal-specific implementation decisions during Build.
-
----
+Classification: source + design consequence.
 
 ## MS-003 — NestJS documentation
 
 Sources:
 
-https://docs.nestjs.com/controllers
+- https://docs.nestjs.com/controllers
+- https://docs.nestjs.com/providers
+- https://docs.nestjs.com/faq/request-lifecycle
 
-https://docs.nestjs.com/providers
+Role:
 
-https://docs.nestjs.com/faq/request-lifecycle
-
-Role in mk0:
-
-- HTTP controller boundary;
+- HTTP/application edge;
 - DTO/request lifecycle;
-- provider/module dependency structure;
-- application-edge composition.
+- provider composition.
 
-Important design interpretation:
+Design consequence:
 
-- controllers accept/map HTTP requests;
-- complex work is delegated through providers/services;
-- mk0 further narrows that responsibility by delegating durable sequencing to the Orchestration Engine.
+NestJS maps the CTA to the orchestration contract; it does not own durable business sequencing.
 
-Use:
+## MS-004 — Project architecture decision, 2026-08-24
 
-**NORMATIVE FRAMEWORK DOCUMENTATION** for NestJS-specific implementation decisions during Build.
-
----
-
-## MS-004 — User architecture decision, 2026-08-24
-
-Decision:
-
-The first mk0 slice is:
+First mk0 slice:
 
 ```text
 CTA (Postman API)
-→ Nest
-→ Orchestration Engine
+→ NestJS
+→ Orchestration Engine (Temporal)
 → Persistence
 ```
 
-Persistence requirements:
+This supersedes the earlier mistaken interpretation that Services + Scheduler were the first implementation slice.
 
-- register-client business data persisted;
-- log persisted in MongoDB;
-- attachments, if present, persisted in another local database/store.
+Classification: `PROJECT_DECISION`.
 
-Use:
+## MS-005 — Persistence clarification, 2026-08-24
 
-**PROJECT AUTHORITY / PRODUCT DECISION**.
+The third first-step zone uses:
 
-This decision supersedes the earlier interpretation that Services Engine + Scheduler Engine were the first implemented slice.
+```text
+PostgreSQL + MongoDB
+```
 
----
+mk0 authority split:
+
+- PostgreSQL = canonical Customer + registration/idempotency business truth;
+- MongoDB = execution/audit/workflow context and optional attachments/documents;
+- PostgreSQL stores opaque attachment references when needed;
+- SQLite is removed from mk0.
+
+Temporal may independently use PostgreSQL internally, but Temporal infrastructure persistence is not application Customer persistence.
+
+Classification: `PROJECT_DECISION` + `DESIGN_DECISION`.
 
 ## Evidence handling rule
 
-Every quarry should identify whether a statement is:
+Classify significant statements as:
 
-- `SOURCE_FACT` — directly supported by source;
-- `PROJECT_DECISION` — explicitly decided for Engines/mk0;
-- `DESIGN_PROPOSAL` — proposed and still gateable;
-- `UNKNOWN` — not yet resolved.
+- `SOURCE_FACT`
+- `PROJECT_DECISION`
+- `DESIGN_DECISION`
+- `DESIGN_PROPOSAL`
+- `DESIGN_REQUIREMENT`
+- `UNKNOWN`
 
-Do not silently convert `DESIGN_PROPOSAL` into `SOURCE_FACT`.
+Never convert a proposal into source/project truth without an explicit decision.
