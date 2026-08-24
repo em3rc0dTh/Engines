@@ -25,7 +25,7 @@ FULL TEMPORAL ORCHESTRATION ENGINE
    Worker
    Activities
    durable Event History
-   retry/recovery/query semantics
+   retry/recovery/query/update semantics
         ↓
 Persistence Activities
    ├── PostgreSQL → Customer + registration/idempotency truth
@@ -53,9 +53,9 @@ The channel and adapter remain replaceable.
 Postman
 CLI
 Form later
-MCP later
 WhatsApp later
 Telegram later
+API/Webhook later
 ...
     ↓
 CTA Adapter
@@ -66,6 +66,8 @@ Temporal
 A CLI may be the first executable CTA Adapter because it can speak to Temporal through the official client/SDK without introducing a web framework.
 
 Postman can be proven through a thin transport-compatible CTA Adapter. That adapter remains transport only and cannot own orchestration or persistence sequencing.
+
+A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal, producing durable waiting/Update behavior when required.
 
 ## Expected logical boundaries
 
@@ -105,15 +107,20 @@ This is conceptual and does not authorize scaffolding yet.
 
 - no web framework dependency in the architecture;
 - all channels converge on one CTA Adapter contract;
-- CTA validates structural input before Temporal start;
+- CTA validates structural/session input before Temporal start, not final Customer completeness;
 - CTA/adapter never writes business persistence directly;
 - full Temporal owns durable sequencing/retries/recovery;
 - real Task Queue/Worker semantics are required;
 - Workflow code calls no DB/file/network driver directly;
 - Activities are retry-safe/idempotent;
+- registration session identity is business-scoped by `(operation, businessSlug, idempotencyKeyHash)`;
+- normalized material initial-start input is fingerprinted for exact replay/conflict detection;
+- later `ProvideCustomerData` Updates evolve Workflow state without rewriting the initial-start fingerprint;
 - PostgreSQL is canonical Customer + registration/idempotency truth;
 - Customer persistence follows approved DataModel v3 / TimeSlots semantics;
 - MongoDB stores execution/audit/workflow context, not a shadow Customer truth;
+- required MongoDB success-gating milestones must exist before `CREATED` or `ALREADY_EXISTS` is reported as successful;
+- exhausted mandatory-audit failure cannot be converted into success;
 - attachments use a separate persistence contract;
 - CTA disconnect must not stop an accepted Workflow;
 - Worker restart must not lose accepted Workflow progress;
