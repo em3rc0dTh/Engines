@@ -27,20 +27,28 @@ This folder freezes the design of the first stable vertical before code exists.
 4. [`04-persistence-boundaries.md`](04-persistence-boundaries.md)
    - MongoDB customer authority;
    - MongoDB audit authority;
-   - local attachment-store authority;
+   - attachment authority;
    - cross-store consistency;
    - attachment integrity.
+
+5. [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md)
+   - MongoDB physical collections for customer/idempotency/audit;
+   - SQLite local attachment database;
+   - attachment ingress staging;
+   - committed attachment BLOB semantics;
+   - crash-window recovery.
 
 ## Design acceptance gate
 
 Design is considered closed only when all statements below are true:
 
-- A Postman request has exactly one legal entry path.
+- A Postman request has exactly one legal business-command entry path.
 - NestJS responsibility ends before durable sequencing begins.
 - The Temporal Workflow can be replayed without direct side effects in Workflow code.
-- Every persistence side effect has an explicit Activity/port boundary.
-- Customer data and audit data have different collections/contracts.
-- Attachment binary storage is outside MongoDB customer documents.
+- Every business persistence side effect has an explicit Activity/port boundary.
+- Customer data and audit data have different MongoDB collections/contracts.
+- Attachment binary storage is SQLite-local and outside MongoDB Customer documents.
+- Staged attachment ingress cannot itself finalize a customer attachment.
 - Optional attachments have deterministic retry behavior.
 - Idempotency prevents duplicate customer creation.
 - `RegisterNewCustomer` cannot create scheduling entities implicitly.
