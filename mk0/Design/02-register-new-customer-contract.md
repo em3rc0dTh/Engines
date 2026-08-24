@@ -1,295 +1,352 @@
 # 02 — Register New Customer Contract
 
-## 1. Canonical command
+## 1. Canonical intent
 
 `RegisterNewCustomer`
 
-The command is transport-agnostic. Postman, CLI, a tiny test harness, or a future API adapter must all map into this same command shape.
+The CTA is replaceable. Postman and CLI are the mk0 laboratory callers; forms, MCP, WhatsApp, Telegram, web/mobile clients and other channels may later map into the same interaction contract.
 
-mk0 does **not** require HTTP, NestJS, REST, gRPC gateway code, or any application framework.
+The important boundary is not HTTP. It is:
 
-## 2. Command envelope
+```text
+channel input
+→ CTA Adapter
+→ Temporal-managed RegisterNewCustomer
+→ persistence Activities
+```
+
+No application framework is required by this contract.
+
+## 2. Interactive workflow decision
+
+`RegisterNewCustomer` is a **durable interactive workflow**, not only a one-shot command.
+
+It may start with only enough information to identify the requested operation and business context. Missing Customer data is then collected while the Temporal Workflow remains alive.
+
+Example:
+
+```text
+CTA: I want to register a customer
+Temporal state: WAITING_FOR_REQUIRED_DATA
+Temporal projection: missing = [customer.name, customer.contact]
+
+CTA: provides name + phone
+Temporal: validates/merges data
+Temporal: required data complete
+Temporal: checks existing-customer policy
+Temporal: persists or returns existing-customer outcome
+```
+
+This behavior is intentionally compatible with future conversational CTAs without requiring an Agent.
+
+## 3. Start envelope
+
+The Workflow start payload is a **registration session/intent envelope**, not necessarily a complete Customer.
 
 Conceptual input:
 
 ```json
 {
+  "operation": "RegisterNewCustomer",
   "businessSlug": "example-business",
-  "customer": {
-    "type": "person",
-    "name": "Ana Torres",
-    "document": {
-      "type": "DNI",
-      "value": "12345678",
-      "country": "PE"
-    },
-    "contact": {
-      "phones": [
-        {
-          "label": "principal",
-          "countryCode": "+51",
-          "number": "955000111",
-          "normalized": "51955000111",
-          "isWhatsapp": true,
-          "primary": true
-        }
-      ],
-      "email": "ana@example.com"
-    },
-    "notes": "Optional business note"
+  "draft": {
+    "customer": {}
   },
-  "attachments": [
-    {
-      "ingressRef": "ing_01...",
-      "kind": "identity_document",
-      "displayName": "DNI front"
-    }
-  ],
   "request": {
     "idempotencyKey": "caller-generated-opaque-key",
-    "correlationId": "optional-caller-correlation"
-  }
+    "correlationId": "optional-caller-correlation",
+    "channel": "postman"
+  },
+  "schemaVersion": "mk0.register-customer.v0"
 }
 ```
 
-A transport adapter may map `idempotencyKey` from a header or CLI flag, but inside the canonical command contract the semantic value is explicit.
+Minimum **start** requirements:
 
-## 3. Data-model relationship
+- operation is recognizable;
+- `businessSlug` exists;
+- session/request idempotency identity exists;
+- envelope is structurally valid.
 
-The Customer payload follows the approved DataModel v3 / TimeSlots Customer semantics:
+Missing Customer business fields do **not** automatically prevent Workflow start. They cause a durable waiting state.
 
-- `businessSlug`;
-- `type`;
-- `name`;
-- `document` metadata;
-- `contact.phones`;
-- `contact.email`;
-- optional model-supported WhatsApp/business metadata when explicitly known;
-- `notes` when provided.
+## 4. Registration policy
 
-Workflow/control fields such as idempotency identity, correlation ID, workflow ID, ingress reference and execution phase are not Customer domain fields unless Design explicitly maps them to technical registration metadata.
+The Workflow must not invent its own universal list of required fields.
 
-## 4. Required input — mk0 proposal
+The approved DataModel v3 / TimeSlots source defines the Customer shape and describes `BusinessProfile` as the place that answers what fields a business asks for. mk0 therefore introduces a versioned **RegistrationPolicy** concept, logically derived from the active BusinessProfile/WorkflowProfile or an equivalent approved configuration.
 
-Always required:
-
-- `businessSlug`;
-- `customer.type`;
-- `customer.name`;
-- `request.idempotencyKey`.
-
-Contact rule:
-
-- at least one usable phone or email locator.
-
-Optional:
-
-- document;
-- additional phones;
-- email when phone exists;
-- notes;
-- attachments.
-
-Forbidden in this command:
-
-- Appointment fields;
-- ResourceReservation fields;
-- availability/time-slot mutation fields;
-- service execution fields;
-- quote/work-order fields;
-- AI-generated facts presented as Customer truth.
-
-## 5. Pre-start validation
-
-The CTA adapter/harness must reject structurally unusable commands before starting Temporal.
-
-Examples:
+A resolved policy contains conceptually:
 
 ```text
-INVALID_COMMAND_ENVELOPE
-MISSING_BUSINESS_SLUG
-MISSING_CUSTOMER_TYPE
-MISSING_CUSTOMER_NAME
-MISSING_IDEMPOTENCY_KEY
-MISSING_CONTACT_LOCATOR
-INVALID_ATTACHMENT_REFERENCE_SHAPE
-FORBIDDEN_SCHEDULING_FIELD
+policyId
+policyVersion
+businessSlug
+requiredCustomerFields
+normalizationRules
+duplicatePolicy
+attachmentPolicy
+completionRules
 ```
 
-A pre-start rejection produces:
+Example mk0 policy may require:
 
 ```text
-workflowStarted = false
-Customer delta = 0
-attachment committed delta = 0
+customer.name
+AND at least one of:
+  customer.contact.phones[]
+  customer.contact.email
 ```
 
-The exact UI/HTTP/CLI representation of the error is adapter-specific and is not part of the core architecture.
+Document may be optional in one business and required in another. `lastName` and `address` are not invented as mandatory canonical fields unless the data model/profile is explicitly extended to include them.
 
-## 6. Normalization
+The Workflow uses one resolved/versioned policy for the execution so a configuration change cannot silently redefine an already-running registration.
 
-Normalization must be deterministic and testable.
+## 5. Customer data relationship
 
-### Name
-
-- trim leading/trailing whitespace;
-- preserve meaningful display spelling/case;
-- derive comparison-normalized data separately if required.
-
-### Phone
-
-- preserve display components;
-- derive normalized international digits only when enough context exists;
-- never silently invent missing country context.
-
-### Email
-
-- trim whitespace;
-- normalize comparison casing where valid.
-
-### Document
-
-- trim value;
-- preserve explicit type/country;
-- authenticity verification is outside mk0.
-
-### Attachments
-
-- `ingressRef` is opaque;
-- caller never supplies a final storage path;
-- integrity metadata is server/system computed or independently verified before commitment.
-
-## 7. Idempotency contract
-
-Conceptual Workflow ID:
+The draft/final Customer follows the approved TimeSlots Customer semantics:
 
 ```text
-register-customer:{businessSlug}:{hash(idempotencyKey)}
+Customer
+├── businessSlug
+├── type
+├── name
+├── document?   { type, value, country }
+├── contact
+│   ├── phones[]
+│   └── email?
+├── whatsapp?   model-supported when known
+├── metrics?    business-derived only
+├── notes?
+├── status
+├── createdAt
+└── updatedAt
 ```
 
-A deterministic command fingerprint is generated from the normalized material command.
+Workflow/session metadata is not Customer domain data.
 
-Material input includes:
+`RegisterNewCustomer` cannot implicitly create `Appointment`, `ResourceReservation`, availability mutations, quotes, work orders or service execution.
 
-- businessSlug;
-- normalized Customer payload;
-- normalized attachment ingress identities/expected integrity metadata.
+## 6. Interaction contract
 
-It excludes:
+### 6.1 Query — `GetRegistrationState`
 
-- correlation ID;
-- request timestamp;
-- adapter-specific transport metadata.
+Read-only projection from the running Workflow.
 
-### Same idempotency key + same fingerprint
-
-Return/observe the existing logical registration outcome. Do not create another Customer.
-
-### Same idempotency key + different fingerprint
-
-Reject as:
-
-`IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_COMMAND`
-
-No second logical workflow/customer may be created for the changed command.
-
-Natural duplicate-person policy is separate from idempotent replay and is not invented by mk0.
-
-## 8. Temporal start contract
-
-Successful CTA submission means only:
-
-> Temporal durably accepted the `RegisterNewCustomer` workflow identity.
-
-Conceptual acceptance projection:
+Example waiting state:
 
 ```json
 {
   "workflowId": "register-customer:example-business:...",
-  "workflowType": "RegisterNewCustomer",
-  "correlationId": "corr_01...",
-  "status": "ACCEPTED"
-}
-```
-
-The CTA may receive this through CLI output, Postman/gRPC response, a minimal adapter, or another test surface. `202 Accepted` is only an HTTP mapping if HTTP is later used; it is **not** a core requirement.
-
-## 9. Workflow query/result contract
-
-In-progress projection:
-
-```json
-{
-  "workflowId": "...",
   "status": "RUNNING",
-  "phase": "PERSISTING_CUSTOMER_BASE",
-  "correlationId": "...",
+  "phase": "WAITING_FOR_REQUIRED_DATA",
+  "policyVersion": "customer-registration-v1",
+  "knownFields": ["customer.name"],
+  "missingFields": ["customer.contact.phoneOrEmail"],
+  "nextAction": "PROVIDE_CUSTOMER_DATA",
   "customerId": null,
-  "failure": null
+  "result": null
 }
 ```
 
-Successful projection:
+### 6.2 Update — `ProvideCustomerData`
+
+A tracked mutation sent to the same Workflow identity.
+
+Conceptual payload:
 
 ```json
 {
-  "workflowId": "...",
-  "status": "COMPLETED",
-  "phase": "COMPLETED",
-  "customerId": "cus_01...",
-  "attachments": [
-    {
-      "attachmentId": "att_01...",
-      "kind": "identity_document",
-      "sha256": "..."
+  "inputId": "input_002",
+  "customerPatch": {
+    "name": "Ana Torres",
+    "contact": {
+      "phones": [
+        {
+          "countryCode": "+51",
+          "number": "955000111"
+        }
+      ]
     }
-  ],
-  "failure": null
+  }
 }
 ```
 
-Failed projection includes a typed failure classification, not raw stack traces, credentials, database internals or unrestricted PII.
+The update:
 
-## 10. Persistence output contract
+- validates the patch shape;
+- normalizes allowed fields;
+- merges it into the durable registration draft;
+- records the accepted interaction through the audit Activity policy;
+- returns the new safe state projection.
 
-A successful workflow must prove:
+Each accepted external input has a stable `inputId`/Update identity so channel retries do not create duplicate logical interactions.
+
+### 6.3 Future interaction messages
+
+The same pattern can later support:
+
+- correction of a field;
+- duplicate-resolution decision;
+- attachment provision;
+- approval;
+- cancellation when explicitly designed.
+
+Postman/CLI do not own these business states; they only send/query Temporal messages.
+
+## 7. Workflow progression
+
+```text
+STARTED
+  ↓
+LOADING_REGISTRATION_POLICY
+  ↓
+COLLECTING_DATA
+  ├── missing → WAITING_FOR_REQUIRED_DATA
+  │               ↑              │
+  │               └─ ProvideCustomerData Update
+  │                              ↓
+  └────────────────────── REVALIDATE_DRAFT
+                                 ↓
+                      REQUIRED_DATA_COMPLETE
+                                 ↓
+                       CHECKING_EXISTING_CUSTOMER
+                          ┌──────┴───────┐
+                          │              │
+                    existing         new
+                          │              │
+                          ▼              ▼
+                 ALREADY_EXISTS     PERSISTING_CUSTOMER
+                                         ↓
+                                 PERSISTING_ATTACHMENTS?
+                                         ↓
+                                 PERSISTING_AUDIT_CONTEXT
+                                         ↓
+                                     COMPLETED
+```
+
+## 8. Existing-customer / duplicate policy
+
+Idempotent replay and natural duplicate detection are different concerns.
+
+### Session idempotency
+
+The start `idempotencyKey` identifies the registration attempt/session. Repeating the same start must resolve the same logical Workflow rather than create another registration session.
+
+### Natural duplicate detection
+
+The RegistrationPolicy defines which identifiers are:
+
+- `HARD_UNIQUE` — blocks creation and resolves to an existing-customer outcome;
+- `SOFT_MATCH` — creates a possible-duplicate state/warning and may require an explicit decision;
+- `NON_UNIQUE` — never used alone to reject creation.
+
+Generic mk0 guidance:
+
+- an explicitly unique document identifier may be `HARD_UNIQUE` within a business when policy says so;
+- phone/email should not be universally assumed hard-unique because real businesses may legitimately share them;
+- name matching is never sufficient by itself for hard duplicate rejection.
+
+The exact duplicate rule is frozen per RegistrationPolicy, not guessed by the Workflow.
+
+## 9. Existing-customer outcomes
+
+Hard duplicate example:
+
+```json
+{
+  "status": "COMPLETED",
+  "phase": "ALREADY_EXISTS",
+  "created": false,
+  "customerId": "cus_existing_001",
+  "reason": "HARD_UNIQUE_IDENTIFIER_MATCH"
+}
+```
+
+No second Customer is created.
+
+New-customer example:
+
+```json
+{
+  "status": "COMPLETED",
+  "phase": "CREATED",
+  "created": true,
+  "customerId": "cus_002"
+}
+```
+
+## 10. Persistence outputs
 
 ### PostgreSQL
 
-- exactly one canonical Customer registration;
-- exactly one logical registration/idempotency receipt;
-- normalized approved Customer data;
-- attachment references when applicable;
-- final successful registration state only after mandatory effects complete.
+Canonical business authority:
+
+- Customer;
+- contacts/documents according to approved projection;
+- registration/session identity;
+- final registration result;
+- attachment references where applicable.
 
 ### MongoDB
 
-- required execution/audit milestones;
-- workflow/application context required by Design;
-- no unrestricted duplicate Customer shadow document.
+Application interaction/audit authority:
+
+- workflow accepted;
+- policy loaded/version;
+- required-data request(s);
+- accepted input interaction(s);
+- duplicate-check outcome classification;
+- persistence milestones;
+- final outcome/failure classification.
+
+Do not copy unrestricted secrets or raw binary payloads. Customer PII retention in interaction records must follow an explicit policy; tests use synthetic data.
 
 ### AttachmentStore
 
-When attachments exist:
+Optional actual binary/document content with stable opaque IDs and integrity metadata.
 
-- stable committed attachment identity;
-- integrity metadata;
-- retrievable content/object;
-- no duplicate logical attachment on Activity retry.
+## 11. CTA rendering rule
 
-## 11. Contract success criteria
+Temporal does not need to know whether the caller is Postman, CLI, WhatsApp or Telegram.
+
+It exposes canonical state such as:
+
+```text
+missingFields
+nextAction
+validationErrors
+possibleDuplicate
+result
+```
+
+The CTA Adapter renders that state for its channel:
+
+```text
+Temporal: missingFields = [customer.name, customer.contact.phoneOrEmail]
+
+Postman → JSON
+CLI     → terminal text
+WhatsApp→ human-readable message
+Form    → highlighted required fields
+MCP     → structured tool result
+```
+
+This is how Temporal can effectively "ask for missing information" without coupling Workflow logic to a user interface.
+
+## 12. Contract success criteria
 
 A conforming mk0 implementation proves:
 
-1. minimal valid Customer can be registered;
-2. full valid Customer can be registered;
-3. optional attachments can be persisted/referenced;
-4. same key + same command is idempotent;
-5. same key + different command conflicts;
-6. invalid structural input starts no workflow;
-7. CTA disconnect/reconnect does not lose accepted workflow progress;
-8. workflow failure remains queryable;
-9. PostgreSQL result follows approved TimeSlots Customer semantics;
-10. required MongoDB audit/context exists;
-11. no persistence internals leak into the caller contract;
+1. intent-only/partial registration can durably start;
+2. Workflow exposes exactly which policy-required data is missing;
+3. CTA can submit additional data to the same Workflow;
+4. accepted inputs survive CTA disconnect/reconnect;
+5. full valid draft advances automatically;
+6. duplicate lookup occurs through an Activity, not direct Workflow database access;
+7. hard duplicate creates no second Customer;
+8. new Customer creates exactly one canonical PostgreSQL record;
+9. MongoDB contains the required interaction/audit trail;
+10. optional attachments persist through AttachmentStore and are referenced safely;
+11. Worker restart/retry does not duplicate the logical registration;
 12. zero scheduling side effects occur.
