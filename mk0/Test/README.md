@@ -5,46 +5,56 @@
 Tests are specified before Build so implementation cannot redefine success.
 
 ```text
-T0 — contract/normalization
-T1 — NestJS CTA/API boundary
+T0 — command/normalization
+T1 — CTA controlled-entry validation
 T2 — Temporal workflow
 T3 — PostgreSQL persistence
 T4 — MongoDB persistence
-T5 — full Postman → NestJS → Temporal → PostgreSQL/MongoDB runtime
+T5 — AttachmentStore persistence when enabled
+T6 — full CTA → Temporal → persistence runtime
 ```
 
-## T0 — Contract tests
+No web framework test layer is required.
+
+## T0 — Command tests
 
 Must prove:
 
-- deterministic Customer normalization;
+- deterministic TimeSlots-aligned Customer normalization;
 - material command fingerprint stability;
-- correlation metadata excluded from fingerprint;
+- correlation excluded from material fingerprint;
 - same logical command → same fingerprint;
-- material command change → different fingerprint;
-- attachment ingress identities included correctly when present;
-- no Appointment/ResourceReservation fields enter `RegisterNewCustomer`.
+- material change → different fingerprint;
+- optional attachment identities included correctly;
+- no scheduling fields accepted.
 
-## T1 — NestJS API tests
+## T1 — CTA controlled-entry tests
 
 Accept:
 
 - minimal valid Customer;
 - full valid Customer;
-- optional valid attachment ingress reference(s);
-- caller correlation ID;
-- server-generated correlation ID.
+- valid optional attachment ingress references;
+- explicit idempotency identity;
+- optional correlation identity.
 
-Reject before workflow start:
+Reject before Workflow start:
 
-- missing `Idempotency-Key`;
-- malformed body;
-- missing required Customer fields;
-- invalid attachment ingress reference;
-- unsupported/oversized attachment ingress according to later frozen limits;
-- scheduling fields in the registration command.
+- malformed command envelope;
+- missing businessSlug;
+- missing Customer type/name;
+- missing idempotency identity;
+- missing usable contact locator under frozen contract;
+- malformed attachment reference;
+- forbidden scheduling/service fields.
 
-Successful durable start must return `202 Accepted`; no 202 is valid if Temporal did not accept the workflow.
+For every rejected command prove:
+
+```text
+workflowStarted = false
+PostgreSQL Customer delta = 0
+committed attachment delta = 0
+```
 
 ## T2 — Temporal tests
 
@@ -54,7 +64,7 @@ Happy path:
 accept
 → reserve idempotency
 → persist Customer in PostgreSQL
-→ append MongoDB audit/context
+→ persist required MongoDB audit/context
 → finalize
 ```
 
@@ -62,144 +72,138 @@ Attachment path:
 
 ```text
 accept
-→ persist Customer base in PostgreSQL
-→ commit attachment(s) in MongoDB
+→ persist Customer base
+→ commit attachment(s) through AttachmentStore
 → link reference(s) in PostgreSQL
-→ append audit/context
+→ append audit/context in MongoDB
 → finalize
 ```
 
-Failure injection must cover:
+Failure injection covers:
 
-- failure before PostgreSQL side effect;
-- Activity failure after PostgreSQL side effect but before acknowledgement;
-- failure before MongoDB attachment side effect;
-- Activity failure after MongoDB attachment side effect but before acknowledgement;
-- failure after PostgreSQL attachment link but before workflow completion;
+- before PostgreSQL side effect;
+- after PostgreSQL side effect but before Activity acknowledgement;
+- before MongoDB side effect;
+- after MongoDB side effect but before acknowledgement;
+- before/after attachment commit;
+- after attachment reference link but before final workflow completion;
 - worker restart between Activities.
 
-Expected: no duplicate Customer and no duplicate logical attachment/reference.
+Expected: one logical Customer, one logical registration, no duplicate logical attachment/reference.
 
-## T3 — PostgreSQL integration tests
+## T3 — PostgreSQL integration
 
-### Customer/registration
+Prove:
 
-- create one Customer registration exactly once;
-- retrieve Customer by ID;
-- repeat same registration identity returns same logical Customer;
-- command/idempotency uniqueness works;
+- Customer projection matches approved TimeSlots Customer semantics;
+- one registration identity creates one Customer;
+- idempotency uniqueness works;
 - same key/different fingerprint conflicts;
-- Customer attachment reference linking is idempotent;
-- finalization refuses to succeed when mandatory attachment references are missing;
-- no scheduling tables/entities are mutated by registration.
+- attachment reference linking is idempotent;
+- finalization fails when mandatory effects are absent;
+- no Appointment/ResourceReservation/availability mutation occurs.
 
-### Temporal separation
+## T4 — MongoDB integration
 
-Prove application Customer queries do not depend on Temporal internal persistence tables/schemas.
+Prove:
 
-## T4 — MongoDB integration tests
+- required audit milestones persist;
+- stable event identity prevents retry duplication;
+- query by workflow/correlation/customer works;
+- routine audit/context does not contain unrestricted request bodies, secrets, raw attachment bytes or unnecessary PII;
+- MongoDB does not become a shadow canonical Customer store.
 
-### Audit/context
+## T5 — AttachmentStore integration
 
-- append required milestone;
-- stable event identity protects against retry duplication;
-- query by workflow/correlation/customer;
-- no unrestricted request body/raw PII/binary blob in routine audit events.
-
-### Optional attachments/documents
-
-Once the exact MongoDB implementation is chosen, prove:
+Once physical technology is selected, prove:
 
 - stage/resolve ingress;
-- commit attachment/document;
-- verify SHA-256/length;
-- retry commit returns same logical attachment;
-- expired ingress is rejected;
-- corrupt/mismatched content is detected;
-- committed object remains recoverable after downstream PostgreSQL-link failure;
-- orphan/reconciliation candidates are discoverable.
+- commit stable attachment identity;
+- SHA-256/length integrity;
+- content retrieval/streaming;
+- retry after commit returns same logical object;
+- expired ingress rejection;
+- corruption/hash mismatch detection;
+- orphan/reconciliation discovery;
+- no storage internals leak into caller contract.
 
-## T5 — Full runtime scenarios
+## T6 — Full runtime scenarios
 
 ### R-001 Minimal registration
 
 ```text
-Postman → NestJS → Temporal → PostgreSQL + MongoDB audit
+CTA → Temporal → PostgreSQL + MongoDB
 ```
 
 Proof:
 
-- 202;
+- Temporal durably accepts workflow;
 - workflow completes;
-- one PostgreSQL Customer exists;
-- MongoDB audit milestones exist;
-- Customer GET returns canonical business result.
+- exactly one PostgreSQL Customer exists;
+- MongoDB required audit/context exists;
+- final query returns same Customer identity.
 
 ### R-002 Registration with attachments
 
 Proof:
 
-- attachment ingress accepted;
-- workflow starts;
-- attachment commits in MongoDB;
-- PostgreSQL stores reference only;
-- hashes/metadata match;
+- staged attachment referenced safely;
+- attachment commits through AttachmentStore;
+- PostgreSQL stores business reference only;
+- integrity metadata matches;
 - workflow completes.
 
-### R-003 Exact client replay
+### R-003 Exact replay
 
-Same command + same key.
+Same command + same idempotency key.
 
-Proof:
-
-- one Customer;
-- one logical registration outcome;
-- no duplicate logical attachments.
+Proof: one Customer and one logical registration outcome.
 
 ### R-004 Idempotency conflict
 
 Same key + materially changed command.
 
-Proof:
-
-- 409;
-- no second Customer or changed-command side effect.
+Proof: changed command rejected; no second Customer.
 
 ### R-005 PostgreSQL temporary outage
 
-Proof:
-
-- accepted workflow remains durable;
-- Activity retries after recovery;
-- exactly one Customer.
+Proof: Temporal retries and completes after recovery with one Customer.
 
 ### R-006 MongoDB temporary outage
 
+Proof: no false success; retry/recovery follows mandatory audit/context policy.
+
+### R-007 AttachmentStore temporary outage
+
+Proof: no false finalization; completes after transient recovery.
+
+### R-008 Attachment integrity failure
+
+Proof: typed permanent failure and diagnosable partial state.
+
+### R-009 Temporal worker restart
+
+Proof: accepted workflow resumes without duplicate business effects.
+
+### R-010 CTA disconnect/reconnect
+
+Sequence:
+
+```text
+CTA starts workflow
+→ workflowId is received
+→ CTA process/session stops
+→ Temporal continues
+→ CTA reconnects later
+→ query same workflowId
+→ observe same durable final outcome
+```
+
+This is the required continuity proof.
+
+### R-011 Scheduling isolation
+
 Proof:
-
-- workflow remains correct/retryable;
-- no false successful finalization;
-- completes after recovery for transient failure.
-
-### R-007 Attachment integrity error
-
-Proof:
-
-- typed permanent failure;
-- Customer not falsely finalized;
-- MongoDB/PostgreSQL partial state remains diagnosable.
-
-### R-008 Temporal worker restart
-
-Proof:
-
-- accepted workflow resumes;
-- no business duplication;
-- final state correct.
-
-### R-009 Scheduling isolation
-
-Proof after successful registration:
 
 - Appointment delta = 0;
 - ResourceReservation delta = 0;
@@ -211,16 +215,16 @@ Capture:
 
 - git commit SHA;
 - Golden Dataset case ID;
-- Postman request identifier;
+- CTA command fixture;
 - safe idempotency test key/hash;
-- HTTP response;
 - Temporal workflow ID/run ID;
 - final workflow status;
 - PostgreSQL Customer ID/verification;
-- relevant MongoDB audit/context evidence;
-- attachment metadata/hash when applicable;
-- scheduling non-effect assertion.
+- MongoDB audit/context evidence;
+- attachment metadata/hash where applicable;
+- CTA reconnect proof for continuity case;
+- zero-scheduling assertion.
 
 ## Release gate
 
-mk0 is not stable because unit tests are green. It is stable only when mandatory golden cases pass through the complete first-three-zone runtime with expected results.
+mk0 is stable only when mandatory Golden Dataset cases pass through the complete CTA → Temporal → persistence runtime and match predeclared outcomes.
