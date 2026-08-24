@@ -95,10 +95,12 @@ The adapter is the stable boundary around external channels.
 
 - receive source-specific input;
 - identify source/channel and correlation context;
-- validate transport structure;
+- validate transport/session structure;
 - normalize into a canonical operation/message;
 - start, query or update the appropriate Temporal Workflow;
 - stage/reference attachments safely when required.
+
+The CTA does **not** require final Customer completeness before a legal registration session starts. A legal partial/intent-only start enters Temporal; the resolved `RegistrationPolicy` then determines missing Customer data and may put the Workflow into `WAITING_FOR_REQUIRED_DATA`.
 
 ### Outbound responsibility
 
@@ -180,6 +182,18 @@ The Customer semantics follow `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
 
 `RegisterNewCustomer` is **not** the permanent definition of Engines.
 
+### Registration session identity
+
+mk0 freezes registration session idempotency as:
+
+```text
+(operation, businessSlug, idempotencyKeyHash)
+```
+
+The normalized material **initial start snapshot** is fingerprinted. Exact replay resolves the same logical Workflow/session; the same business-scoped session identity with a materially different initial fingerprint is a `SESSION_IDEMPOTENCY_CONFLICT` and creates no second business effect.
+
+Later `ProvideCustomerData` Updates evolve durable Workflow state without rewriting the original start fingerprint.
+
 ## Persistence authority
 
 ### PostgreSQL
@@ -190,7 +204,8 @@ For the first Workflow:
 
 - Customer;
 - contacts/documents as approved by model;
-- registration/session identity;
+- business-scoped registration/session identity;
+- initial-start fingerprint and replay/conflict outcome;
 - duplicate/creation outcome required by business truth;
 - attachment references.
 
@@ -205,6 +220,8 @@ Flexible application interaction/audit/context evidence:
 - failures/classifications.
 
 MongoDB is not a replacement for Temporal Event History or PostgreSQL business truth.
+
+For mk0 success, the applicable success-gating logical audit milestones must be durably represented before `CREATED` or `ALREADY_EXISTS` is reported as successful. Exhausted failure to persist required audit evidence cannot be converted into success.
 
 ### AttachmentStore
 
@@ -225,7 +242,7 @@ PostgreSQL
 → final canonical business data
 
 MongoDB
-→ application interaction/audit/context evidence
+→ required application interaction/audit/context evidence
 
 AttachmentStore
 → binary/document evidence when applicable
@@ -246,6 +263,10 @@ Later a dedicated Engines control plane may combine these views, but mk0 does no
 9. Outbound responses/notifications reuse channel adapters rather than embedding channel SDK logic in Workflow code.
 10. `RegisterNewCustomer` is the first proof workflow, not the final workflow catalog.
 11. Future workflows must be addable without redesigning the CTA → Temporal → Activities architecture.
+12. Registration session idempotency is business-scoped; exact start replay and conflicting start reuse are deterministic.
+13. Later Workflow Updates do not redefine the immutable material start snapshot.
+14. Mandatory audit evidence is a precondition for successful registration outcome; silent audit loss is not success.
+15. Workflow changes must preserve Temporal deterministic replay/version compatibility; exact SDK mechanisms are selected during authorized Build.
 
 ## Non-goals for mk0
 
@@ -277,3 +298,5 @@ RUNTIME TEST
 ```
 
 `Build/` remains documentation-only until these gates are approved.
+
+Current material gate status and the distinction between pre-Build invariants vs Build-time implementation choices are tracked in [`Plan/mk0-gate-status.md`](Plan/mk0-gate-status.md).
