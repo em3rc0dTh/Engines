@@ -6,44 +6,68 @@
 
 **mk0 — documentation-first foundation**
 
-mk0 intentionally contains **no production implementation** yet. Its job is to freeze the first real operational spine before choosing application frameworks.
+mk0 intentionally contains **no production implementation** yet. Its job is to freeze the first real operational spine before choosing application frameworks or channel-specific products.
 
 ## mk0 scope — first three architecture zones
 
 ```text
-1. CTA / ENTRY
-   Postman or CLI/test harness
-      ↓ validated command
+1. CTA / OMNICHANNEL ENTRY
+   Postman / CLI now
+   Form / MCP / WhatsApp / Telegram / API / Webhook later
+                 ↓
+             CTA Adapter
+                 ↓ canonical command
 
 2. ORCHESTRATION ENGINE
-   Temporal
-      ↓ RegisterNewCustomer Workflow + Activities
+   Full Temporal platform
+   ├── workflow routing
+   ├── Workflow Library
+   ├── durable Workflow Execution
+   ├── Activities
+   ├── Task Queues / Workers
+   ├── retries / timeouts / recovery
+   ├── Queries / Signals / Updates when required
+   └── visibility / durable history
+                 ↓
+      RegisterNewCustomer first workflow
 
-3. PERSISTENCE
-   PostgreSQL → canonical Customer + registration/idempotency truth
-   MongoDB    → execution/audit/workflow context
-   Attachment store → separate persistence capability when binary attachments exist
+3. PERSISTENCE / STORAGE
+   PostgreSQL     → canonical Customer + registration/idempotency truth
+   MongoDB        → execution/audit/workflow context
+   AttachmentStore → binary/document objects when present
 ```
 
 Canonical first path:
 
 ```text
-CTA/Postman or CLI
-→ Temporal RegisterNewCustomer
-→ PostgreSQL + MongoDB + optional attachment persistence
+CTA channel
+→ CTA Adapter
+→ Temporal Orchestration Engine
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
 
-**No web/application framework is part of mk0 architecture.** NestJS, Express, Fastify or any later HTTP layer may be evaluated only as a future CTA adapter. They are not required to prove mk0.
+**No NestJS, Express, Fastify or other web/application framework is part of mk0 architecture.** A future HTTP adapter may use a framework, but the framework remains replaceable and outside the orchestration authority.
+
+## Architectural meaning of the CTA Adapter
+
+The CTA Adapter is a contract boundary, not a chosen framework.
+
+It converts channel-specific input into the same canonical command. Today the sender can be Postman or CLI. Later the sender can be a form, MCP client/server, WhatsApp message, Telegram message, mobile app, voice channel, API/webhook or another future channel.
+
+All channels must converge on the same orchestration contract instead of creating channel-specific business workflows.
 
 ## What mk0 must prove
 
-- the CTA can repeatedly submit a controlled input command;
-- malformed/unsafe input is rejected before it can create business side effects;
-- Temporal durably accepts and orchestrates the workflow;
-- Temporal produces the persistence inputs required to register a Customer according to the approved DataModel v3 / TimeSlots semantics;
-- PostgreSQL persists the canonical Customer and registration/idempotency state;
-- MongoDB persists the required execution/audit/context evidence;
-- attachments, when present, are persisted through a separate attachment capability and referenced safely from business data;
+- controlled input can enter from the CTA boundary;
+- structurally invalid input is rejected before business side effects;
+- the accepted command starts the full Temporal-managed workflow;
+- Temporal durably owns state, retries, worker recovery and workflow progress;
+- the first Workflow is `RegisterNewCustomer`;
+- the workflow follows the approved DataModel v3 / TimeSlots Customer semantics;
+- PostgreSQL persists canonical Customer and registration/idempotency state;
+- MongoDB persists required execution/audit/context evidence;
+- attachments, when present, are persisted through a separate attachment capability and safely referenced from business data;
+- CTA disconnect/reconnect does not interrupt an accepted workflow;
 - retries/restarts do not duplicate Customers, logs or logical attachments;
 - the final outcome is queryable and auditable.
 
@@ -51,7 +75,7 @@ CTA/Postman or CLI
 
 > **Register New Customer**
 
-Postman is only the first test CTA. A CLI or another future channel may invoke the same command contract. No caller may bypass Temporal to write business persistence directly.
+The CTA does not register the Customer itself. It submits the controlled command. Temporal manages the workflow and Activities that produce the persistence effects.
 
 ## Data-model baseline
 
@@ -63,10 +87,10 @@ For the first workflow the relevant concern is `Customer`. `RegisterNewCustomer`
 
 - **PostgreSQL**: canonical Customer + registration/idempotency truth.
 - **MongoDB**: application execution/audit/workflow context.
-- **Attachment persistence**: separate capability when attachments exist; exact technology is a Build decision.
-- **Temporal**: durable sequencing, not Customer truth.
+- **AttachmentStore**: separate binary/document persistence capability; physical technology remains a Build decision.
+- **Temporal**: orchestration authority and durable execution history, not Customer truth.
 
-Temporal may use its own infrastructure database. That persistence is isolated from the application business databases.
+Temporal may use its own infrastructure database. That persistence is isolated from the Engines application business databases.
 
 ## Repository structure
 
@@ -74,4 +98,4 @@ See [`mk0/README.md`](mk0/README.md).
 
 ## Build rule
 
-**No framework and no production implementation is selected until Design, Plan, Test contract and Golden Dataset gates are approved.**
+**No application framework and no production implementation is selected until Design, Plan, Test contract and Golden Dataset gates are approved.**
