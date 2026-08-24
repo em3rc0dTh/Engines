@@ -4,7 +4,7 @@
 
 `RegisterNewCustomer`
 
-The CTA is replaceable. Postman and CLI are the mk0 laboratory callers; forms, MCP, WhatsApp, Telegram, web/mobile clients and other channels may later map into the same interaction contract.
+The CTA is replaceable. Postman and CLI are the mk0 laboratory callers; forms, WhatsApp, Telegram, web/mobile clients and other channels may later map into the same interaction contract.
 
 The important boundary is not HTTP. It is:
 
@@ -329,7 +329,6 @@ Postman → JSON
 CLI     → terminal text
 WhatsApp→ human-readable message
 Form    → highlighted required fields
-MCP     → structured tool result
 ```
 
 This is how Temporal can effectively "ask for missing information" without coupling Workflow logic to a user interface.
