@@ -6,67 +6,67 @@
 
 **mk0 — documentation-first foundation**
 
-mk0 intentionally contains **no production implementation** yet. Its purpose is to freeze architecture, contracts, data authority, Temporal workflow semantics, persistence boundaries, Postman/API behavior, tests, evidence sources, and the golden dataset before the first stable build.
+mk0 intentionally contains **no production implementation** yet. Its job is to freeze the first real operational spine before choosing application frameworks.
 
 ## mk0 scope — first three architecture zones
 
-mk0 focuses only on the first three areas of the target architecture:
-
 ```text
-1. CTA / API
-   Postman
-      ↓ HTTP
-   NestJS boundary
+1. CTA / ENTRY
+   Postman or CLI/test harness
+      ↓ validated command
 
 2. ORCHESTRATION ENGINE
    Temporal
-      ↓
-   RegisterNewCustomer
+      ↓ RegisterNewCustomer Workflow + Activities
 
 3. PERSISTENCE
-   PostgreSQL → canonical business/customer truth
+   PostgreSQL → canonical Customer + registration/idempotency truth
    MongoDB    → execution/audit/workflow context
-                + attachment/document persistence when present
+   Attachment store → separate persistence capability when binary attachments exist
 ```
 
-The first end-to-end path is therefore:
+Canonical first path:
 
 ```text
-Postman
-→ NestJS
+CTA/Postman or CLI
 → Temporal RegisterNewCustomer
-→ PostgreSQL + MongoDB
+→ PostgreSQL + MongoDB + optional attachment persistence
 ```
 
-Services Engine, Scheduler Engine, Integration Engine and Agent are intentionally outside the first mk0 build slice.
+**No web/application framework is part of mk0 architecture.** NestJS, Express, Fastify or any later HTTP layer may be evaluated only as a future CTA adapter. They are not required to prove mk0.
+
+## What mk0 must prove
+
+- the CTA can repeatedly submit a controlled input command;
+- malformed/unsafe input is rejected before it can create business side effects;
+- Temporal durably accepts and orchestrates the workflow;
+- Temporal produces the persistence inputs required to register a Customer according to the approved DataModel v3 / TimeSlots semantics;
+- PostgreSQL persists the canonical Customer and registration/idempotency state;
+- MongoDB persists the required execution/audit/context evidence;
+- attachments, when present, are persisted through a separate attachment capability and referenced safely from business data;
+- retries/restarts do not duplicate Customers, logs or logical attachments;
+- the final outcome is queryable and auditable.
 
 ## First workflow
 
 > **Register New Customer**
 
-Postman is only the first CTA. A future Agent, web UI, WhatsApp channel, or another client must enter through the same API/application contract instead of bypassing NestJS or writing directly to persistence.
-
-## Persistence authority
-
-- **PostgreSQL** is the source of truth for the registered Customer and transactional registration/idempotency state.
-- **MongoDB** stores application execution/audit records, workflow context/documents, and mk0 attachment/document content when attachments are present.
-- PostgreSQL stores only the durable attachment/document references required by the business record; it does not become a binary-file store.
-- Temporal coordinates writes across both stores. Neither database is the workflow engine.
-
-Temporal may use its own persistence internally depending on deployment. That infrastructure persistence is separate from the mk0 application PostgreSQL business authority.
+Postman is only the first test CTA. A CLI or another future channel may invoke the same command contract. No caller may bypass Temporal to write business persistence directly.
 
 ## Data-model baseline
 
-mk0 uses the existing **DataModel v3 / TimeSlots** model as its canonical business-model baseline.
+mk0 uses **DataModel v3 / TimeSlots** as the canonical business-model baseline.
 
-For the first workflow, the relevant concern is `Customer`.
+For the first workflow the relevant concern is `Customer`. `RegisterNewCustomer` creates no `Appointment`, `ResourceReservation`, availability mutation, service execution or scheduling side effect.
 
-Important boundary:
+## Persistence authority
 
-- `Appointment` represents the customer-facing appointment/intention.
-- `ResourceReservation` represents the real capacity lock.
-- Register New Customer creates neither by default.
-- Scheduling will be introduced only through an explicit later workflow/capability.
+- **PostgreSQL**: canonical Customer + registration/idempotency truth.
+- **MongoDB**: application execution/audit/workflow context.
+- **Attachment persistence**: separate capability when attachments exist; exact technology is a Build decision.
+- **Temporal**: durable sequencing, not Customer truth.
+
+Temporal may use its own infrastructure database. That persistence is isolated from the application business databases.
 
 ## Repository structure
 
@@ -74,4 +74,4 @@ See [`mk0/README.md`](mk0/README.md).
 
 ## Build rule
 
-**No implementation begins until Design, Plan, Test contract, and Golden Dataset gates are approved.**
+**No framework and no production implementation is selected until Design, Plan, Test contract and Golden Dataset gates are approved.**
