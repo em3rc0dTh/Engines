@@ -2,159 +2,122 @@
 
 ## Status
 
-**PROJECT REQUIREMENT CAPTURED / mk0 TECHNOLOGY DECIDED**
+**PROJECT REQUIREMENT CAPTURED / mk0 AUTHORITY DECIDED / PHYSICAL MONGO MECHANISM OPEN**
 
 ## Project requirement
 
-When RegisterNewCustomer includes attachments:
+The first persistence zone uses PostgreSQL + MongoDB.
 
-- customer business data is persisted in MongoDB;
-- application/workflow log is persisted in MongoDB;
-- attachment binary content is persisted in another local database.
+For RegisterNewCustomer:
+
+- Customer/registration business truth → PostgreSQL;
+- execution/audit/workflow context → MongoDB;
+- optional attachments/documents → MongoDB persistence capability;
+- business attachment reference → PostgreSQL.
 
 Classification: `PROJECT_DECISION`.
 
----
+## Why MongoDB owns the optional attachment/document capability
 
-## Design decision
-
-For mk0 the separate local attachment database is:
-
-> **SQLite**, behind an `AttachmentStore` infrastructure contract.
+This keeps the first mk0 persistence zone within the selected two technologies while maintaining a clear separation between relational business truth and document/binary lifecycle concerns.
 
 Classification: `DESIGN_DECISION`.
-
-This does not make SQLite part of the public API or permanent product identity. A later store can replace it if it preserves the contract and attachment identities/migration path.
-
----
 
 ## Two truths
 
-### Binary truth — SQLite
+### Document/object truth — MongoDB capability
 
 Owns:
 
-- staged and committed bytes;
-- integrity hash;
-- size;
+- staged/committed content;
+- content hash;
+- byte length;
 - media type;
-- opaque storage identity;
-- storage lifecycle state.
+- opaque attachment identity;
+- document lifecycle/reconciliation metadata.
 
-### Business reference truth — MongoDB Customer
+### Business reference truth — PostgreSQL
 
 Owns:
 
-- opaque attachment ID;
+- `customerId`;
+- opaque `attachmentId`;
 - attachment kind/role;
 - display metadata;
-- integrity hash;
-- committed timestamp.
+- hash/length facts needed for verification;
+- committed timestamp/link state.
 
-MongoDB Customer documents do not embed the binary content.
+PostgreSQL does not become the raw binary store.
 
----
+## Exact MongoDB mechanism remains open
 
-## Required SQLite properties
+The Design does not yet freeze GridFS or another MongoDB-backed representation.
 
-The implementation must satisfy:
+Build must compare the implementation options against this contract:
 
 1. opaque stable IDs;
-2. binary-safe writes;
-3. atomic row/object commit where possible;
-4. SHA-256 integrity verification;
-5. idempotent Activity retry semantics;
-6. content read/stream capability;
-7. metadata query;
-8. staged/orphan discovery;
+2. binary/document-safe writes;
+3. SHA-256 integrity verification;
+4. retry-idempotent commit;
+5. stream/read capability;
+6. metadata query;
+7. staged ingress TTL;
+8. orphan/reconciliation discovery;
 9. explicit retention/cleanup;
 10. crash recovery;
-11. reasonable local development ergonomics;
-12. migration/export path.
-
----
+11. reasonable local mk0 operation;
+12. future migration/export path.
 
 ## Binary ingress design
 
-Temporal coordinates commitment, but its Workflow history is not the binary transport/store.
-
-mk0 uses:
-
 ```text
-HTTP binary ingress
-→ SQLite attachment_ingress / STAGED
+HTTP attachment ingress
+→ MongoDB STAGED object
 → opaque ingressRef
 → Temporal command contains ingressRef
-→ Activity resolves ingressRef
-→ SQLite attachments / COMMITTED
+→ commitAttachment Activity
+→ MongoDB COMMITTED object
 → attachmentId + hash
-→ MongoDB customer reference
+→ PostgreSQL Customer attachment reference
 ```
 
-Classification: `DESIGN_DECISION`.
-
-The staging write is transport data-plane persistence. It does not make the attachment a committed Customer attachment and cannot finalize Customer registration.
-
----
+The staging write is technical data-plane persistence. It cannot itself mark the Customer registration successful.
 
 ## Failure windows to test
 
-### F1 — staged, no workflow
+### F1 — staged, workflow never starts
 
-Expected:
+Expected: ingress expires/cleans up later; no PostgreSQL Customer side effect from the abandoned registration command.
 
-- staged row expires/cleans up later;
-- no Customer side effect.
+### F2 — PostgreSQL Customer base exists, MongoDB unavailable
 
-### F2 — customer base persisted, SQLite unavailable
+Expected: Activity retries; Customer is not falsely finalized.
 
-Expected:
+### F3 — MongoDB attachment commits, Activity acknowledgement is lost
 
-- Activity retries;
-- Customer is not finalized early.
+Expected: retry returns/reuses the same logical attachment identity.
 
-### F3 — SQLite attachment committed, Activity completion lost
+### F4 — MongoDB attachment commits, PostgreSQL reference fails
 
-Expected:
+Expected: retry links the existing attachment; no duplicate document object is required.
 
-- retry resolves the same committed attachment identity;
-- no accidental duplicate logical attachment.
+### F5 — integrity/hash mismatch
 
-### F4 — SQLite committed, Mongo reference fails
+Expected: permanent typed failure; mismatched content is not linked as valid; no successful Customer finalization.
 
-Expected:
+### F6 — terminal workflow failure after partial attachment commits
 
-- retry links existing attachment;
-- committed object remains discoverable.
-
-### F5 — hash mismatch
-
-Expected:
-
-- permanent typed failure;
-- no false registration success;
-- mismatched content is not linked as valid.
-
-### F6 — workflow terminally fails after partial attachment commits
-
-Expected:
-
-- committed orphan candidates are discoverable;
-- cleanup is explicit/reconcilable, not silent deletion during retry.
-
----
+Expected: committed orphan candidates remain discoverable and are handled by explicit reconciliation/retention policy.
 
 ## Remaining Build choices
 
-Still intentionally open:
-
-- Node SQLite driver/library;
-- migration library;
+- exact MongoDB binary/document mechanism;
+- driver/ODM/library;
 - maximum attachment size/count;
-- BLOB streaming strategy;
+- streaming strategy;
 - encryption-at-rest requirements;
-- backup/retention profile;
 - ingress TTL;
-- cleanup/reconciliation cadence.
+- retention/reconciliation cadence;
+- backup profile.
 
-Those choices must not change the Design contract above.
+These choices may refine implementation but cannot change the authority boundary without a new Design decision.
