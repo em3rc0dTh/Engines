@@ -61,14 +61,17 @@ Deliverables:
 - policy-driven required fields;
 - `GetRegistrationState` Query contract;
 - `ProvideCustomerData` Update contract;
-- input/update identity and retry semantics;
+- business-scoped session identity `(operation, businessSlug, idempotencyKeyHash)`;
+- normalized initial-start fingerprint semantics;
+- same-session conflicting-start behavior;
+- later Update identity and retry semantics independent from the frozen start fingerprint;
 - normalization rules;
 - duplicate classification policy (`HARD_UNIQUE`, `SOFT_MATCH`, `NON_UNIQUE`);
 - terminal `CREATED` vs `ALREADY_EXISTS` outcomes;
 - optional attachment ingress/reference contract;
 - channel-neutral state/response projection.
 
-Pass when Postman and CLI can conduct the same multi-step registration without business logic living in either CTA.
+Pass when Postman and CLI can conduct the same multi-step registration without business logic living in either CTA, and a repeated start can be distinguished deterministically from later Workflow Updates.
 
 ## M3 — Temporal orchestration lock
 
@@ -98,6 +101,8 @@ Pass when missing-information collection, duplicate detection and persistence ar
 
 - Customer projection from DataModel v3 / TimeSlots;
 - registration/session relation;
+- business-scoped idempotency tuple;
+- immutable initial-start fingerprint storage/comparison;
 - policy-defined duplicate lookup rules;
 - attachment-reference relation;
 - finalization invariants.
@@ -107,6 +112,9 @@ Pass when missing-information collection, duplicate detection and persistence ar
 - interaction/audit event contract;
 - Workflow context contract;
 - event deduplication identity;
+- explicit success-gating audit milestones;
+- rule that missing required audit cannot be reported as successful registration;
+- typed failure behavior when the audit store is unavailable beyond retry policy;
 - PII/logging/retention rules;
 - query/index requirements.
 
@@ -126,10 +134,15 @@ Must cover:
 - Query missing fields;
 - multi-round ProvideCustomerData Updates;
 - repeated Update delivery/idempotency;
+- exact start replay with same initial fingerprint;
+- same-business/same-key conflicting initial-start snapshot;
+- cross-business opaque-key reuse does not collide;
 - policy version lock;
 - hard duplicate existing-Customer result;
 - soft duplicate behavior;
 - new Customer creation;
+- success-gating MongoDB audit evidence;
+- no successful completion when required audit cannot be persisted;
 - Task Queue/Worker execution proof;
 - CTA disconnect/reconnect while waiting;
 - Worker restart while waiting;
@@ -146,7 +159,7 @@ Minimum cases include:
 - GD-003 Customer with one attachment;
 - GD-004 multiple attachments;
 - GD-005 exact start/session replay;
-- GD-006 session idempotency conflict;
+- GD-006 same-business same-session conflicting initial start snapshot;
 - GD-007 invalid start envelope/no Workflow;
 - GD-008 transient PostgreSQL failure/recovery;
 - GD-009 transient attachment persistence failure/recovery;
@@ -159,6 +172,13 @@ Minimum cases include:
 - GD-016 multi-round data collection through Updates;
 - GD-017 policy-defined hard duplicate → ALREADY_EXISTS / no second Customer;
 - GD-018 policy-defined soft duplicate → non-silent possible-duplicate outcome.
+
+The Golden Dataset profile must additionally encode:
+
+- business-scoped idempotency;
+- frozen initial-start fingerprint vs later Updates;
+- mandatory audit-before-success expectations;
+- current CTA proof surfaces without silently expanding deferred channels.
 
 ## BUILD AUTHORIZATION GATE
 
@@ -194,9 +214,10 @@ Postman or CLI starts RegisterNewCustomer intent
 → Temporal orchestrates duplicate lookup
 → ALREADY_EXISTS or CREATED deterministically
 → PostgreSQL shows canonical Customer result
-→ MongoDB shows interaction/audit history
+→ MongoDB shows all required success-gating interaction/audit evidence
 → Temporal Web UI shows the orchestration path
 → CTA/Worker restart does not lose durable state
+→ retries never create a second logical Customer, input, audit milestone or attachment
 ```
 
 Only after this is certified should another workflow/engine slice or application framework be selected.
