@@ -35,7 +35,8 @@ It preserves transactional authority for:
 - one canonical Customer registration;
 - Customer business/contact/document fields from the approved TimeSlots contract;
 - registration state/version;
-- idempotency command receipt;
+- business-scoped idempotency command receipt;
+- normalized material initial-start fingerprint / replay-conflict evidence;
 - final opaque references to optional attachments/documents.
 
 Possible conceptual relations:
@@ -62,13 +63,29 @@ workflow_context
 
 It must not become a shadow copy of the canonical PostgreSQL Customer.
 
-Typical audit/context data includes:
+Canonical success-gating logical audit milestones are:
+
+```text
+REGISTRATION_SESSION_STARTED
+REGISTRATION_POLICY_LOADED
+REQUIRED_DATA_REQUESTED          when applicable
+CUSTOMER_DATA_ACCEPTED           per logically accepted external input
+DUPLICATE_CHECK_COMPLETED
+EXISTING_CUSTOMER_RESOLVED       for ALREADY_EXISTS
+CUSTOMER_CREATED                 for CREATED
+ATTACHMENT_COMMITTED             when applicable
+REGISTRATION_COMPLETED
+```
+
+Additional diagnostic events may contain:
 
 - workflow/correlation/customer IDs;
 - phase/milestone classifications;
 - Activity attempt/outcome metadata where useful;
 - sanitized failure classifications;
 - safe counts/hashes/context required for diagnosis.
+
+A registration cannot be reported successful while an applicable success-gating logical audit milestone is missing.
 
 ## 3. AttachmentStore role
 
@@ -136,7 +153,27 @@ Logical unique key:
 (operation, business_slug, idempotency_key_hash)
 ```
 
-This identity must remain stable across CTA retries and Temporal Activity retries.
+The same opaque key under a different `business_slug` does not collide solely on key text.
+
+`command_fingerprint` represents the normalized material **initial start snapshot**, including conceptually:
+
+```text
+operation
+businessSlug
+schemaVersion
+normalized initial Customer draft
+normalized initial attachment ingress identities / expected integrity metadata
+```
+
+Exact replay with the same business-scoped identity + same fingerprint resolves the same logical session.
+
+Same business-scoped identity + materially different initial fingerprint produces:
+
+```text
+SESSION_IDEMPOTENCY_CONFLICT
+```
+
+Later `ProvideCustomerData` Updates do not rewrite the original start fingerprint.
 
 ## 6. MongoDB audit profile
 
@@ -159,12 +196,22 @@ failure?
 
 Required properties:
 
-- stable conceptual event identity;
+- stable conceptual/logical event identity;
 - queryable by workflow/correlation/customer;
+- retry-safe success-gating milestone representation;
 - no unrestricted request-body duplication;
 - no attachment binary payloads in routine audit;
 - no secrets/credentials;
 - no role as canonical Customer truth.
+
+If required audit remains unavailable after the frozen retry policy is exhausted:
+
+```text
+failureCode = MONGO_AUDIT_STORE_UNAVAILABLE
+successful registration outcome = forbidden
+```
+
+Temporal Event History remains the durable orchestration evidence for that failure.
 
 ## 7. PostgreSQL attachment reference profile
 
@@ -197,13 +244,21 @@ Retry resolves the same logical attachment through ingress/commit identity.
 
 Temporal retries the PostgreSQL link with the same opaque attachment ID.
 
-### PostgreSQL reference exists; final acknowledgement lost
+### Required MongoDB audit milestone persisted; acknowledgement lost
+
+Retry resolves/reuses the same logical milestone identity rather than producing uncontrolled duplicates.
+
+### PostgreSQL reference/audit exists; final acknowledgement lost
 
 Finalization is idempotent and recognizes already-satisfied preconditions.
 
 ### MongoDB audit/context temporarily unavailable
 
 Required milestones retry according to explicit policy. Diagnostic-only detail must not create uncontrolled workflow failure.
+
+### MongoDB required audit unavailable after retry exhaustion
+
+No successful `CREATED` or successful `ALREADY_EXISTS` result is allowed. Temporal exposes typed failure state.
 
 ## 9. Temporal infrastructure isolation
 
@@ -234,10 +289,13 @@ No application business logic depends on Temporal internal DB tables.
 - CTA: Postman/CLI/minimal test harness; no framework required.
 - Orchestration: Temporal.
 - Customer/registration persistence: PostgreSQL.
-- Audit/workflow context: MongoDB.
+- Registration idempotency: business-scoped tuple + deterministic initial-start fingerprint.
+- Audit/workflow context: MongoDB with explicit success-gating logical milestones.
 - Attachments: separate `AttachmentStore` contract; physical technology open until Build.
 - SQLite: not preselected.
 - NestJS/application framework: not part of mk0 architecture baseline.
 - Services/Scheduler/Integration/Agent: outside first mk0 slice.
 
 Exact drivers, ORM/ODM, database names, migrations, credentials, attachment technology, limits and deployment topology are Build decisions.
+
+Complete production PII retention/encryption/backup policy is a later production gate. mk0 continues to use synthetic fixtures and forbids unrestricted real Customer PII in test/audit data.
