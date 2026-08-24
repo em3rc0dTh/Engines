@@ -2,182 +2,214 @@
 
 ## Purpose
 
-mk0 is the first design baseline of `Engines`.
+mk0 is the first architecture baseline of `Engines`.
 
-It exists to make the first operational path unambiguous **before coding**.
+It exists to prove one continuous operational chain before choosing a web framework, UI, Agent, Services Engine or Scheduler.
 
-## Scope lock — only the first three architecture zones
+## Scope lock — first three architecture zones only
 
 ```text
-1. CTA / API
-   Postman
-      ↓
-   NestJS API boundary
+1. CTA / ENTRY
+   Postman or CLI/test harness
+      ↓ controlled input
 
 2. ORCHESTRATION ENGINE
    Temporal
-      ↓
-   RegisterNewCustomer
+      ↓ RegisterNewCustomer
 
 3. PERSISTENCE
    PostgreSQL
    MongoDB
+   Optional attachment persistence capability
 ```
 
-The complete mk0 path is:
+Canonical path:
 
 ```text
-Postman
-  ↓ HTTP/API
-NestJS
-  ↓ start/query command
-Temporal Orchestration Engine
-  ↓ Activities
-Persistence
-  ├── PostgreSQL / Customer + registration truth
-  └── MongoDB / execution audit + workflow context + attachments/documents
+CTA/Postman or CLI
+        ↓
+Temporal RegisterNewCustomer
+        ↓
+Activities / persistence ports
+        ├── PostgreSQL: Customer + registration/idempotency truth
+        ├── MongoDB: execution/audit/workflow context
+        └── Attachment store: binary/document objects when present
 ```
 
-No Services Engine, Scheduler Engine, Integration Engine or Agent implementation belongs to this first slice.
+There is **no mandatory application framework in mk0**. A future HTTP adapter may be added later, but it cannot become orchestration authority or bypass Temporal.
 
-## First workflow
+## What “continuous connection” means in mk0
 
-Canonical name:
+mk0 does not require one permanently open socket. It must prove a continuous operational contract:
 
-`RegisterNewCustomer`
+```text
+CTA submits valid command
+→ command is accepted exactly once
+→ Temporal owns durable progress
+→ CTA can query/observe the workflow
+→ persistence effects complete
+→ final Customer outcome is queryable
+```
 
-Business outcome:
+The CTA may disconnect and reconnect without losing the accepted workflow. Temporal durability is the continuity mechanism.
 
-> A valid command produces exactly one durable Customer registration for the same idempotency request, persists the Customer transactionally, preserves an application execution trail, and persists/references optional attachments when they exist.
+## 1. CTA / controlled entry
 
-## 1. CTA / API — Postman + NestJS
+The first CTA can be:
 
-Postman is the first caller, not business authority.
+- Postman;
+- a CLI command;
+- a tiny test harness/client using the Temporal client contract.
 
-NestJS owns the application edge:
+Its responsibilities are intentionally narrow:
 
-- HTTP route/versioning;
-- DTO and transport validation;
-- normalization;
-- correlation metadata;
-- `Idempotency-Key` acceptance;
-- optional attachment ingress;
-- starting/querying the Temporal workflow;
-- mapping typed outcomes to HTTP responses.
+- construct `RegisterNewCustomer` input;
+- validate the transport/input envelope before submission;
+- provide an idempotency key;
+- optionally provide correlation metadata;
+- stage/identify attachments when required;
+- start the Temporal workflow;
+- query the workflow/result.
 
-NestJS must not become the durable workflow engine and must not implement a second direct-to-database registration path.
+The CTA does **not**:
+
+- write PostgreSQL directly;
+- write MongoDB directly;
+- execute registration steps itself;
+- retry business side effects itself;
+- infer scheduling or services.
 
 ## 2. Orchestration Engine — Temporal
 
-Temporal owns durable process sequencing:
+Temporal owns the durable state machine:
 
 ```text
 ACCEPTED
-→ VALIDATED
-→ IDEMPOTENCY_RESERVED
-→ CUSTOMER_PERSISTED
-→ optional ATTACHMENTS_PERSISTED
-→ REFERENCES_LINKED
-→ FINALIZED
+→ VALIDATING_COMMAND
+→ RESERVING_IDEMPOTENCY
+→ PERSISTING_CUSTOMER_BASE
+→ PERSISTING_ATTACHMENTS      optional
+→ LINKING_ATTACHMENTS         optional
+→ PERSISTING_AUDIT/CONTEXT
+→ FINALIZING_CUSTOMER
 → COMPLETED
 ```
 
-Workflow code coordinates. Side-effecting PostgreSQL/MongoDB operations happen through Activities/adapters.
+Workflow code coordinates only. Database/network/file side effects belong to Activities/adapters.
 
-Temporal is not the source of truth for Customer business data. Its own infrastructure persistence, if PostgreSQL is used by a Temporal deployment, is separate from the application's PostgreSQL business schema.
+The workflow must survive worker/process restart and Activity acknowledgement loss without duplicating the logical registration.
 
-## 3. Persistence — PostgreSQL + MongoDB
+## 3. Persistence
 
-### PostgreSQL — canonical business authority
+### PostgreSQL — canonical Customer authority
 
 PostgreSQL answers:
 
-> What Customer was registered and what is the transactional state of that registration?
+> What Customer was registered, under which registration command, and what is the authoritative transactional state?
 
-mk0 places here, conceptually:
+It owns conceptually:
 
-- Customer identity/business record;
-- normalized contact/document fields required by the approved Customer contract;
-- registration/idempotency receipt;
+- Customer identity;
+- Customer fields projected from the approved TimeSlots data model;
+- normalized contact/document data required by the contract;
 - registration state/version;
-- opaque attachment/document references when applicable.
+- idempotency receipt;
+- opaque attachment references when attachments exist.
 
-### MongoDB — execution/document authority
+### MongoDB — execution/audit/context authority
 
 MongoDB answers:
 
-> What application execution/audit/context evidence exists, and which optional document/attachment objects were persisted for this workflow?
+> What application execution evidence and workflow context must be retained around this registration?
 
-mk0 places here, conceptually:
+It owns conceptually:
 
 - `execution_audit` events;
 - workflow/application context documents;
-- optional staged/committed attachment/document metadata/content behind an attachment persistence contract.
+- sanitized failure classifications;
+- optional document metadata if that belongs to the chosen attachment design.
 
-MongoDB audit is **not** a replacement for Temporal Event History, and MongoDB is **not** the canonical Customer store in mk0.
+MongoDB is not a shadow Customer database and does not replace Temporal Event History.
 
-### Cross-store rule
+### Attachment persistence — separate capability
 
-PostgreSQL and MongoDB do not share one transaction. Temporal therefore mediates consistency:
+Attachments are optional and must remain separate from the canonical Customer relational data.
 
-- a Customer is not reported as successfully finalized until every mandatory effect has completed;
-- retries must not create a second Customer;
-- retries must not create duplicate logical attachments;
-- if MongoDB succeeds and PostgreSQL linking/finalization fails, the workflow must recover/reconcile instead of pretending atomic rollback;
-- failures remain observable.
+Design rule:
 
-## Data-model baseline — TimeSlots
+```text
+binary/document object → AttachmentStore capability
+opaque attachmentId + integrity metadata → PostgreSQL business reference
+```
 
-mk0 uses `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md` as the semantic baseline.
+The physical technology is intentionally **not selected yet**. It may later be MongoDB/GridFS, PostgreSQL-backed object metadata plus local/object storage, or another local persistence mechanism, provided the contract remains stable.
 
-For this first workflow we only use the `Customer` concern.
+Large binary objects must not be placed directly into ordinary Temporal Workflow history payloads.
 
-The scheduling distinction is preserved for later slices:
+## First workflow — RegisterNewCustomer
+
+The workflow must transform the accepted command into explicit persistence inputs that follow the approved Customer semantics from `DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`.
+
+At minimum the design recognizes:
+
+```text
+Customer
+├── businessSlug
+├── type
+├── name
+├── document            optional
+├── contact
+│   ├── phones[]
+│   └── email
+├── whatsapp            model-supported / optional
+├── metrics             business-derived only
+├── notes               optional
+├── status
+├── createdAt
+└── updatedAt
+```
+
+mk0 must not invent unknown Customer facts just to fill the model.
+
+## TimeSlots boundary preserved
 
 ```text
 Appointment = customer-facing scheduling record
 ResourceReservation = real operational capacity lock
 ```
 
-`RegisterNewCustomer` creates neither.
+`RegisterNewCustomer` creates neither and mutates no availability state.
 
 ## Core invariants
 
-1. Postman calls only the NestJS API.
-2. Postman never writes directly to PostgreSQL or MongoDB.
-3. NestJS does not contain durable workflow sequencing.
-4. Temporal owns `RegisterNewCustomer` sequencing.
-5. Temporal Workflow code performs no direct PostgreSQL/MongoDB/network/filesystem side effects.
-6. Side effects live behind Activities/adapters.
-7. PostgreSQL is canonical Customer/registration truth.
-8. MongoDB is execution/audit/context/document persistence, not Customer authority.
-9. Same idempotency key + same material command yields one registration outcome.
-10. Same idempotency key + different material command is rejected.
-11. Optional attachments cannot produce a false successful Customer finalization.
-12. PostgreSQL stores opaque attachment references rather than becoming a binary content store.
-13. Audit/context records do not become Customer truth.
-14. PII/secrets are not copied indiscriminately into audit logs.
-15. RegisterNewCustomer creates no Appointment, ResourceReservation or scheduling mutation.
-16. Future CTAs must reuse the same application contract.
+1. CTA submits one controlled command contract.
+2. Invalid structural input creates no workflow/business side effect.
+3. No CTA writes databases directly.
+4. Temporal owns durable sequencing.
+5. Workflow code performs no direct persistence/network/file side effects.
+6. Activities/adapters are retry-safe and idempotent.
+7. PostgreSQL is canonical Customer + registration/idempotency truth.
+8. MongoDB is execution/audit/context authority, not Customer authority.
+9. Attachments use a separate persistence contract.
+10. Same key + same material command yields one registration outcome.
+11. Same key + different material command is rejected.
+12. A requested mandatory attachment cannot be skipped while reporting success.
+13. Failure remains observable; no silent fallback converts failure into success.
+14. PII/secrets are not copied indiscriminately into audit/context logs.
+15. RegisterNewCustomer creates zero scheduling side effects.
+16. Future CTA adapters reuse this contract instead of creating alternate business paths.
 
-## Folder map
+## Non-goals for mk0
 
-```text
-mk0/
-├── Brainstorming/
-├── Design/
-│   ├── 01-system-architecture.md
-│   ├── 02-register-new-customer-contract.md
-│   ├── 03-temporal-workflow.md
-│   ├── 04-persistence-boundaries.md
-│   └── 05-mk0-persistence-profile.md
-├── Plan/
-├── Build/
-├── Test/
-├── mining-site/
-├── quarries/
-└── golden-dataset/
-```
+- NestJS or any other web framework;
+- frontend;
+- Agent;
+- Services Engine;
+- Scheduler Engine;
+- Integration Engine;
+- appointment booking;
+- service execution;
+- production authentication architecture.
 
 ## Gate order
 
@@ -199,4 +231,4 @@ BUILD
 RUNTIME TEST
 ```
 
-`Build/` remains documentation-only until the gates are approved.
+`Build/` remains documentation-only until these gates are approved.
