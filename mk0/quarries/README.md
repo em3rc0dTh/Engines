@@ -6,16 +6,18 @@ Quarries are distilled evidence packages. `mining-site` records sources and proj
 
 - `quarry-01-timeslot-data-model.md` — Customer + TimeSlots semantic boundaries.
 - `quarry-02-temporal.md` — durable orchestration, Activities, retry and infrastructure-persistence isolation.
-- `quarry-03-nestjs-boundary.md` — Postman/NestJS CTA and application-edge responsibility.
-- `quarry-04-attachment-persistence.md` — PostgreSQL reference + MongoDB attachment/document persistence boundary.
+- `quarry-03-cta-entry-boundary.md` — framework-agnostic CTA, controlled input and Temporal start/query boundary.
+- `quarry-04-attachment-persistence.md` — attachment persistence contract and cross-store consistency.
 
 ## mk0 scope reminder
 
 ```text
-Postman/NestJS
+Postman | CLI | minimal test harness
 → Temporal
-→ PostgreSQL + MongoDB
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
+
+No application framework is part of the mk0 architecture baseline.
 
 Services, Scheduler, Integration and Agent are outside this first slice.
 
