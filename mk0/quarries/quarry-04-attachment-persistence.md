@@ -2,7 +2,7 @@
 
 ## Status
 
-**PROJECT REQUIREMENT CAPTURED / TECHNOLOGY OPEN**
+**PROJECT REQUIREMENT CAPTURED / mk0 TECHNOLOGY DECIDED**
 
 ## Project requirement
 
@@ -10,29 +10,40 @@ When RegisterNewCustomer includes attachments:
 
 - customer business data is persisted in MongoDB;
 - application/workflow log is persisted in MongoDB;
-- attachment binary content is persisted in another local database/store.
+- attachment binary content is persisted in another local database.
 
 Classification: `PROJECT_DECISION`.
 
 ---
 
-## Design interpretation
+## Design decision
 
-Attachments require two different truths:
+For mk0 the separate local attachment database is:
 
-### Binary truth
+> **SQLite**, behind an `AttachmentStore` infrastructure contract.
 
-Owned by the local attachment database/store:
+Classification: `DESIGN_DECISION`.
 
-- bytes;
+This does not make SQLite part of the public API or permanent product identity. A later store can replace it if it preserves the contract and attachment identities/migration path.
+
+---
+
+## Two truths
+
+### Binary truth — SQLite
+
+Owns:
+
+- staged and committed bytes;
 - integrity hash;
 - size;
 - media type;
-- opaque storage identity.
+- opaque storage identity;
+- storage lifecycle state.
 
-### Business reference truth
+### Business reference truth — MongoDB Customer
 
-Owned by the MongoDB Customer record:
+Owns:
 
 - opaque attachment ID;
 - attachment kind/role;
@@ -40,116 +51,91 @@ Owned by the MongoDB Customer record:
 - integrity hash;
 - committed timestamp.
 
-MongoDB should not embed the binary content in the Customer document.
-
-Classification: `DESIGN_DECISION`.
+MongoDB Customer documents do not embed the binary content.
 
 ---
 
-## Why technology remains open
+## Required SQLite properties
 
-The user specified a separate local database, but not which one.
+The implementation must satisfy:
 
-Selecting SQLite, filesystem+index, embedded object DB, or another technology before the contract is frozen would make the storage engine drive the architecture.
-
-mk0 instead freezes the required interface first.
-
-Classification: `DESIGN_DECISION`.
-
----
-
-## Required local-store properties
-
-A Build candidate must be evaluated against:
-
-1. deterministic opaque IDs;
+1. opaque stable IDs;
 2. binary-safe writes;
-3. atomic commit of one attachment object where possible;
-4. integrity hashing;
-5. idempotent retry semantics;
-6. ability to read/stream content;
+3. atomic row/object commit where possible;
+4. SHA-256 integrity verification;
+5. idempotent Activity retry semantics;
+6. content read/stream capability;
 7. metadata query;
-8. orphan/staged-data discovery;
-9. explicit cleanup/retention;
+8. staged/orphan discovery;
+9. explicit retention/cleanup;
 10. crash recovery;
 11. reasonable local development ergonomics;
 12. migration/export path.
 
 ---
 
-## Binary ingress problem
+## Binary ingress design
 
-Temporal should coordinate attachment persistence, but Workflow payload/history should not become the binary storage channel.
+Temporal coordinates commitment, but its Workflow history is not the binary transport/store.
 
-Therefore mk0 proposes an ingress lifecycle:
+mk0 uses:
 
 ```text
 HTTP binary ingress
+→ SQLite attachment_ingress / STAGED
 → opaque ingressRef
 → Temporal command contains ingressRef
 → Activity resolves ingressRef
-→ local attachment store commit
+→ SQLite attachments / COMMITTED
 → attachmentId + hash
 → MongoDB customer reference
 ```
 
-Classification: `DESIGN_PROPOSAL`.
+Classification: `DESIGN_DECISION`.
 
-The exact ingress staging technology must be selected during Build planning.
+The staging write is transport data-plane persistence. It does not make the attachment a committed Customer attachment and cannot finalize Customer registration.
 
 ---
 
 ## Failure windows to test
 
-### F1
-
-Ingress accepted, Workflow never starts.
+### F1 — staged, no workflow
 
 Expected:
 
-- staged object expires/cleans up later;
+- staged row expires/cleans up later;
 - no Customer side effect.
 
-### F2
-
-Customer base persisted, attachment commit fails transiently.
+### F2 — customer base persisted, SQLite unavailable
 
 Expected:
 
-- workflow retries;
-- customer not finalized early.
+- Activity retries;
+- Customer is not finalized early.
 
-### F3
-
-Attachment committed, Activity completion lost.
+### F3 — SQLite attachment committed, Activity completion lost
 
 Expected:
 
-- retry resolves same committed object;
+- retry resolves the same committed attachment identity;
 - no accidental duplicate logical attachment.
 
-### F4
-
-Attachment committed, Mongo link fails.
+### F4 — SQLite committed, Mongo reference fails
 
 Expected:
 
 - retry links existing attachment;
 - committed object remains discoverable.
 
-### F5
-
-Hash mismatch.
+### F5 — hash mismatch
 
 Expected:
 
 - permanent typed failure;
-- no false success;
-- corrupt/mismatched content not linked as valid.
+- no false registration success;
+- mismatched content is not linked as valid.
 
-### F6
-
-Workflow fails permanently after one of several attachments commits.
+### F6 — workflow terminally fails after partial attachment commits
 
 Expected:
 
@@ -158,10 +144,17 @@ Expected:
 
 ---
 
-## Open decision for Build gate
+## Remaining Build choices
 
-Choose and record the local attachment-store technology in an ADR only after comparing candidates against this contract.
+Still intentionally open:
 
-Until then:
+- Node SQLite driver/library;
+- migration library;
+- maximum attachment size/count;
+- BLOB streaming strategy;
+- encryption-at-rest requirements;
+- backup/retention profile;
+- ingress TTL;
+- cleanup/reconciliation cadence.
 
-> `AttachmentStore` is a capability contract, not a product name.
+Those choices must not change the Design contract above.
