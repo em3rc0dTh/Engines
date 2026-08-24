@@ -5,7 +5,7 @@
   "architectureProfile": {
     "cta": "omnichannel-via-cta-adapter",
     "initialCtaSenders": ["postman", "cli"],
-    "futureCtaSenders": ["form", "mcp", "whatsapp", "telegram", "api-webhook"],
+    "futureCtaSenders": ["form", "whatsapp", "telegram", "api-webhook"],
     "frameworkRequired": false,
     "orchestration": "temporal-full-platform",
     "temporalRuntimeRequired": true,
@@ -13,6 +13,37 @@
     "businessPersistence": "postgresql",
     "interactionAuditPersistence": "mongodb",
     "attachmentPersistence": "attachment-store-technology-to-be-frozen-at-build-gate"
+  },
+  "idempotencyProfile": {
+    "scope": ["operation", "businessSlug", "idempotencyKeyHash"],
+    "startFingerprintIncludes": [
+      "operation",
+      "businessSlug",
+      "schemaVersion",
+      "normalizedInitialCustomerDraft",
+      "normalizedInitialAttachmentIngressIdentity"
+    ],
+    "startFingerprintExcludes": [
+      "correlationId",
+      "channelPresentationMetadata",
+      "requestTimestamp",
+      "laterProvideCustomerDataUpdates"
+    ],
+    "crossBusinessOpaqueKeyReuseIsConflict": false
+  },
+  "auditProfile": {
+    "successGatingMilestones": [
+      "REGISTRATION_SESSION_STARTED",
+      "REGISTRATION_POLICY_LOADED",
+      "REQUIRED_DATA_REQUESTED_WHEN_APPLICABLE",
+      "CUSTOMER_DATA_ACCEPTED_PER_LOGICAL_INPUT",
+      "DUPLICATE_CHECK_COMPLETED",
+      "EXISTING_CUSTOMER_RESOLVED_OR_CUSTOMER_CREATED",
+      "ATTACHMENT_COMMITTED_WHEN_APPLICABLE",
+      "REGISTRATION_COMPLETED"
+    ],
+    "successAllowedWithMissingRequiredAudit": false,
+    "mongoAuditStoreExhaustedFailureCode": "MONGO_AUDIT_STORE_UNAVAILABLE"
   },
   "registrationPolicies": [
     {
@@ -56,6 +87,7 @@
         "created": true,
         "postgresCustomerDelta": 1,
         "mongoInteractionAuditPresent": true,
+        "mandatoryAuditCompleteBeforeSuccess": true,
         "appointmentDelta": 0,
         "resourceReservationDelta": 0,
         "availabilitySlotMutationDelta": 0
@@ -95,7 +127,8 @@
         "terminalPhase": "CREATED",
         "created": true,
         "postgresCustomerDelta": 1,
-        "mongoInteractionAuditPresent": true
+        "mongoInteractionAuditPresent": true,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -132,7 +165,8 @@
         "postgresCustomerDelta": 1,
         "committedAttachmentDelta": 1,
         "postgresCustomerAttachmentReferenceCount": 1,
-        "binaryEmbeddedInPostgresCustomer": false
+        "binaryEmbeddedInPostgresCustomer": false,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -165,7 +199,8 @@
         "postgresCustomerDelta": 1,
         "committedAttachmentDelta": 2,
         "postgresCustomerAttachmentReferenceCount": 2,
-        "finalizeOnlyAfterAllAttachments": true
+        "finalizeOnlyAfterAllAttachments": true,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -181,18 +216,32 @@
     },
     {
       "id": "GD-006",
-      "name": "session-idempotency-immutable-start-conflict",
+      "name": "same-business-session-idempotency-start-conflict",
       "firstStart": {
         "operation": "RegisterNewCustomer",
         "businessSlug": "golden-business",
+        "schemaVersion": "mk0.register-customer.v0",
+        "draft": {
+          "customer": {
+            "name": "Initial Snapshot A"
+          }
+        },
         "request": {"idempotencyKey": "gd-006-session"}
       },
       "secondStart": {
         "operation": "RegisterNewCustomer",
-        "businessSlug": "different-business",
+        "businessSlug": "golden-business",
+        "schemaVersion": "mk0.register-customer.v0",
+        "draft": {
+          "customer": {
+            "name": "Materially Different Initial Snapshot B"
+          }
+        },
         "request": {"idempotencyKey": "gd-006-session"}
       },
       "expected": {
+        "sameBusinessScopedSessionIdentity": true,
+        "initialStartFingerprintConflict": true,
         "secondStartAccepted": false,
         "secondErrorCode": "SESSION_IDEMPOTENCY_CONFLICT",
         "additionalPostgresCustomerDelta": 0
@@ -224,7 +273,8 @@
       "expected": {
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
-        "activityRetryObserved": true
+        "activityRetryObserved": true,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -240,7 +290,8 @@
         "workflowTerminalStatus": "COMPLETED",
         "postgresCustomerDelta": 1,
         "committedAttachmentDelta": 1,
-        "customerFinalizedBeforeRecovery": false
+        "customerFinalizedBeforeRecovery": false,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -266,7 +317,8 @@
       "expected": {
         "workflowTerminalStatus": "COMPLETED",
         "acceptedSessionLost": false,
-        "postgresCustomerDelta": 1
+        "postgresCustomerDelta": 1,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -363,7 +415,8 @@
         "workflowTerminalStatus": "COMPLETED",
         "terminalPhase": "CREATED",
         "postgresCustomerDelta": 1,
-        "mongoAcceptedInteractionCountMinimum": 2
+        "mongoAcceptedInteractionCountMinimum": 2,
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
@@ -395,7 +448,8 @@
         "created": false,
         "existingCustomerIdReturned": true,
         "additionalPostgresCustomerDelta": 0,
-        "duplicateClassification": "HARD_UNIQUE"
+        "duplicateClassification": "HARD_UNIQUE",
+        "mandatoryAuditCompleteBeforeSuccess": true
       }
     },
     {
