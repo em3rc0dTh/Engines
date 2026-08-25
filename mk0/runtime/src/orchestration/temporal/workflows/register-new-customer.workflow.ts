@@ -23,7 +23,11 @@ import {
   type RegistrationStateProjection,
 } from '../../../contracts/register-new-customer/index.js';
 import type { StagedAttachmentMetadata } from '../../../persistence/attachments/attachment-store.types.js';
-import type { AttachmentStoreActivities } from '../activities/attachment-store.types.js';
+import type {
+  AttachmentStoreActivities,
+  CommitAttachmentActivityResult,
+  ResolveAttachmentIngressResult,
+} from '../activities/attachment-store.types.js';
 import type {
   MongoRegistrationAuditActivities,
   RegistrationAuditEventInput,
@@ -344,7 +348,7 @@ export async function registerNewCustomerWorkflow(
     }
     seenIngressRefs.add(attachment.ingressRef);
 
-    let resolved;
+    let resolved: ResolveAttachmentIngressResult;
     try {
       resolved = await attachmentStore.resolveAttachmentIngress({ ingressRef: attachment.ingressRef });
     } catch (error) {
@@ -441,7 +445,7 @@ export async function registerNewCustomerWorkflow(
         failAttachment('ATTACHMENT_INGRESS_NOT_FOUND', attachment.ingressRef);
       }
 
-      let committed;
+      let committed: CommitAttachmentActivityResult;
       try {
         committed = await attachmentStore.commitAttachment({
           ingressRef: attachment.ingressRef,
