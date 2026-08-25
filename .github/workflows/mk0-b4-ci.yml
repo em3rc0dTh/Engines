@@ -1,0 +1,399 @@
+name: mk0 B4 interactive registration certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b4-interactive-registration-workflow
+    paths:
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/src/cta/**'
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b4-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/src/cta/**'
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b4-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b4-interactive-registration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 contracts
+        run: npm run test:b1
+
+      - name: Regress B3 CTA
+        run: npm run test:b3
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-b4-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-b4-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b4-temporal.log
+          exit 1
+
+      - name: Verify Temporal Web UI
+        run: curl --fail --retry 10 --retry-delay 1 http://localhost:8233/ >/dev/null
+
+      - name: Start registration Worker one
+        run: |
+          npm run worker:b4 > /tmp/mk0-b4-worker-1.log 2>&1 &
+          echo $! > /tmp/mk0-b4-worker-1.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B4_WORKER_STARTED' /tmp/mk0-b4-worker-1.log; then
+              cat /tmp/mk0-b4-worker-1.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b4-worker-1.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b4-worker-1.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b4-worker-1.log
+          exit 1
+
+      - name: Start intent-only registration through CLI CTA and Temporal port
+        id: start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b4-interactive-001","correlationId":"b4-correlation-001"}' \
+            | tee /tmp/mk0-b4-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b4-start.log | tail -1)"
+          test -n "$LINE"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "$JSON" | jq -e '.ok == true and .ctaStatus == "READY_FOR_ORCHESTRATION" and .channel == "cli"' >/dev/null
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Query durable waiting state
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          for i in $(seq 1 30); do
+            if npm run b4:interact -- query > /tmp/mk0-b4-initial-state.log 2>&1; then
+              if grep -q 'B4_STATE' /tmp/mk0-b4-initial-state.log; then break; fi
+            fi
+            sleep 0.2
+          done
+          cat /tmp/mk0-b4-initial-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b4-initial-state.log | tail -1)"
+          test -n "$LINE"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e '
+            .ok == true and
+            .state.workflowStatus == "RUNNING" and
+            .state.phase == "WAITING_FOR_REQUIRED_DATA" and
+            .state.nextAction == "PROVIDE_CUSTOMER_DATA" and
+            (.state.missingFields | index("customer.name")) != null and
+            (.state.missingFields | index("customer.contact.phoneOrEmail")) != null and
+            (.state.result == null) and
+            (.state.created == null)
+          ' >/dev/null
+
+      - name: Provide first Customer data Update
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- update '{"inputId":"b4-name-1","customerPatch":{"name":"  Ada Lovelace  "}}' \
+            | tee /tmp/mk0-b4-update-name.log
+          LINE="$(grep 'B4_UPDATE' /tmp/mk0-b4-update-name.log | tail -1)"
+          JSON="${LINE#B4_UPDATE }"
+          echo "$JSON" | jq -e '
+            .ok == true and
+            .result.ok == true and
+            .result.duplicateInput == false and
+            .result.state.phase == "WAITING_FOR_REQUIRED_DATA" and
+            (.result.state.knownFields | index("customer.name")) != null and
+            (.result.state.missingFields | index("customer.contact.phoneOrEmail")) != null
+          ' >/dev/null
+
+      - name: Abruptly kill registration Worker one
+        run: |
+          PID="$(cat /tmp/mk0-b4-worker-1.pid)"
+          kill -KILL "$PID"
+          for i in $(seq 1 20); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "B4_WORKER_ONE_CONFIRMED_DEAD pid=$PID"
+              exit 0
+            fi
+            sleep 0.1
+          done
+          exit 1
+
+      - name: Confirm Workflow remains visible while Worker is absent
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          temporal workflow describe --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json \
+            | tee /tmp/mk0-b4-no-worker-describe.json
+          grep -Eqi 'RUNNING|WorkflowExecutionStatusRunning|WORKFLOW_EXECUTION_STATUS_RUNNING' /tmp/mk0-b4-no-worker-describe.json
+
+      - name: Start registration Worker two
+        run: |
+          npm run worker:b4 > /tmp/mk0-b4-worker-2.log 2>&1 &
+          echo $! > /tmp/mk0-b4-worker-2.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B4_WORKER_STARTED' /tmp/mk0-b4-worker-2.log; then
+              cat /tmp/mk0-b4-worker-2.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b4-worker-2.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b4-worker-2.log
+              exit 1
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Query replayed state after Worker replacement
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- query | tee /tmp/mk0-b4-after-restart.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b4-after-restart.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e '
+            .state.phase == "WAITING_FOR_REQUIRED_DATA" and
+            (.state.knownFields | index("customer.name")) != null and
+            (.state.missingFields | index("customer.contact.phoneOrEmail")) != null
+          ' >/dev/null
+
+      - name: Replay same inputId with different data and require deduplication
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- update '{"inputId":"b4-name-1","customerPatch":{"contact":{"email":"should-not-apply@example.com"}}}' \
+            | tee /tmp/mk0-b4-update-duplicate.log
+          LINE="$(grep 'B4_UPDATE' /tmp/mk0-b4-update-duplicate.log | tail -1)"
+          JSON="${LINE#B4_UPDATE }"
+          echo "$JSON" | jq -e '
+            .result.ok == true and
+            .result.duplicateInput == true and
+            .result.state.phase == "WAITING_FOR_REQUIRED_DATA" and
+            (.result.state.missingFields | index("customer.contact.phoneOrEmail")) != null
+          ' >/dev/null
+
+      - name: Provide second Update and reach required-data-complete
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- update '{"inputId":"b4-email-2","customerPatch":{"contact":{"email":" ADA@EXAMPLE.COM "}}}' \
+            | tee /tmp/mk0-b4-update-email.log
+          LINE="$(grep 'B4_UPDATE' /tmp/mk0-b4-update-email.log | tail -1)"
+          JSON="${LINE#B4_UPDATE }"
+          echo "$JSON" | jq -e '
+            .result.ok == true and
+            .result.duplicateInput == false and
+            .result.state.workflowStatus == "RUNNING" and
+            .result.state.phase == "REQUIRED_DATA_COMPLETE" and
+            .result.state.nextAction == "NONE" and
+            (.result.state.missingFields | length) == 0 and
+            (.result.state.result == null) and
+            (.result.state.created == null)
+          ' >/dev/null
+
+      - name: Reconnect and Query same exact durable state
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- query | tee /tmp/mk0-b4-final-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b4-final-state.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e --arg workflowId "$B4_WORKFLOW_ID" '
+            .state.workflowId == $workflowId and
+            .state.workflowStatus == "RUNNING" and
+            .state.phase == "REQUIRED_DATA_COMPLETE" and
+            (.state.missingFields | length) == 0 and
+            (.state.result == null) and
+            (.state.created == null)
+          ' >/dev/null
+
+      - name: Capture Event History before proof termination
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json \
+            | tee /tmp/mk0-b4-history-before-terminate.json
+          grep -Eqi 'UPDATE_ACCEPTED|WORKFLOW_EXECUTION_UPDATE_ACCEPTED|ProvideCustomerData' /tmp/mk0-b4-history-before-terminate.json
+          grep -Eqi 'UPDATE_COMPLETED|WORKFLOW_EXECUTION_UPDATE_COMPLETED|ProvideCustomerData' /tmp/mk0-b4-history-before-terminate.json
+
+      - name: Assert B4 has no persistence success or side effects
+        run: |
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          test ! -d src/attachments
+          if grep -n -E "from ['\"](pg|mongodb)" src/orchestration/temporal/workflows/register-new-customer.workflow.ts; then
+            echo 'B4 Workflow must not import persistence drivers'
+            exit 1
+          fi
+          if grep -q "phase = 'CREATED'\|phase = 'ALREADY_EXISTS'" src/orchestration/temporal/workflows/register-new-customer.workflow.ts; then
+            echo 'B4 must not claim persistence terminal outcomes'
+            exit 1
+          fi
+          echo 'B4_NO_FAKE_PERSISTENCE_SUCCESS'
+
+      - name: Terminate laboratory Workflow after evidence capture
+        env:
+          B4_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: npm run b4:interact -- terminate | tee /tmp/mk0-b4-terminate.log
+
+      - name: Capture final terminated history
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json \
+            | tee /tmp/mk0-b4-history-final.json
+          grep -Eqi 'TERMINATED|WORKFLOW_EXECUTION_TERMINATED' /tmp/mk0-b4-history-final.json
+
+      - name: Create structured B4 evidence
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          mkdir -p evidence/ci/b4
+          WORKER_ONE_PID="$(cat /tmp/mk0-b4-worker-1.pid)"
+          WORKER_TWO_PID="$(cat /tmp/mk0-b4-worker-2.pid)"
+          test "$WORKER_ONE_PID" != "$WORKER_TWO_PID"
+
+          jq -n \
+            --arg schemaVersion 'mk0.b4.evidence.v1' \
+            --arg repository '${{ github.repository }}' \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --arg workflowId "$WORKFLOW_ID" \
+            --arg runId "$RUN_ID" \
+            --arg workerOnePid "$WORKER_ONE_PID" \
+            --arg workerTwoPid "$WORKER_TWO_PID" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $githubRunId},
+              temporal: {workflowId: $workflowId, runId: $runId, taskQueue: "engines-mk0-registration"},
+              workerReplacement: {firstPid: $workerOnePid, firstTermination: "SIGKILL", secondPid: $workerTwoPid},
+              assertions: {
+                b1Regression: "PASS",
+                b3Regression: "PASS",
+                cliToTemporalStart: "PASS",
+                intentOnlyWaiting: "PASS",
+                queryMissingFields: "PASS",
+                firstUpdateAccepted: "PASS",
+                workerRestartPreservedDraftState: "PASS",
+                repeatedInputIdDeduplicated: "PASS",
+                secondUpdateCompletedRequiredData: "PASS",
+                sameWorkflowIdAndRunId: "PASS",
+                reconnectQueryStable: "PASS",
+                updateHistoryCaptured: "PASS",
+                noCreatedOrAlreadyExistsClaim: "PASS",
+                noPersistenceSideEffects: "PASS",
+                proofExecutionTerminatedAfterEvidence: "PASS"
+              }
+            }' > evidence/ci/b4/b4-interactive-registration-evidence.json
+
+          cp /tmp/mk0-b4-start.log evidence/ci/b4/start.log
+          cp /tmp/mk0-b4-initial-state.log evidence/ci/b4/initial-state.log
+          cp /tmp/mk0-b4-update-name.log evidence/ci/b4/update-name.log
+          cp /tmp/mk0-b4-no-worker-describe.json evidence/ci/b4/no-worker-describe.json
+          cp /tmp/mk0-b4-after-restart.log evidence/ci/b4/after-restart.log
+          cp /tmp/mk0-b4-update-duplicate.log evidence/ci/b4/update-duplicate.log
+          cp /tmp/mk0-b4-update-email.log evidence/ci/b4/update-email.log
+          cp /tmp/mk0-b4-final-state.log evidence/ci/b4/final-state.log
+          cp /tmp/mk0-b4-history-before-terminate.json evidence/ci/b4/history-before-terminate.json
+          cp /tmp/mk0-b4-history-final.json evidence/ci/b4/history-final.json
+          cp /tmp/mk0-b4-worker-1.log evidence/ci/b4/worker-1.log
+          cp /tmp/mk0-b4-worker-2.log evidence/ci/b4/worker-2.log
+          cat evidence/ci/b4/b4-interactive-registration-evidence.json
+
+      - name: Upload B4 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b4-interactive-registration-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/b4/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo '--- Temporal ---'
+          cat /tmp/mk0-b4-temporal.log || true
+          echo '--- Worker 1 ---'
+          cat /tmp/mk0-b4-worker-1.log || true
+          echo '--- Start ---'
+          cat /tmp/mk0-b4-start.log || true
+          echo '--- Initial state ---'
+          cat /tmp/mk0-b4-initial-state.log || true
+          echo '--- Name update ---'
+          cat /tmp/mk0-b4-update-name.log || true
+          echo '--- Worker 2 ---'
+          cat /tmp/mk0-b4-worker-2.log || true
+          echo '--- Duplicate update ---'
+          cat /tmp/mk0-b4-update-duplicate.log || true
+          echo '--- Email update ---'
+          cat /tmp/mk0-b4-update-email.log || true
+          echo '--- Final state ---'
+          cat /tmp/mk0-b4-final-state.log || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/mk0-b4-worker-1.pid ]; then kill -KILL "$(cat /tmp/mk0-b4-worker-1.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b4-worker-2.pid ]; then kill -KILL "$(cat /tmp/mk0-b4-worker-2.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b4-temporal.pid ]; then kill "$(cat /tmp/mk0-b4-temporal.pid)" 2>/dev/null || true; fi
