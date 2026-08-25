@@ -67,7 +67,7 @@ jobs:
             .envelope.request.idempotencyKey == "b3-smoke-intent" and
             .envelope.request.correlationId == "b3-corr" and
             .envelope.request.channel == "cli" and
-            .envelope.draft == {}
+            .envelope.draft.customer == {}
           ' >/dev/null
 
       - name: CLI smoke full Customer input
