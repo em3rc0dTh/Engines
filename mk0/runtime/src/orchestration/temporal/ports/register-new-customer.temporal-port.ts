@@ -69,6 +69,7 @@ export class TemporalRegisterNewCustomerPort implements RegisterNewCustomerOrche
     try {
       const handle = await this.client.workflow.start(registerNewCustomerWorkflow, {
         workflowId,
+        workflowIdReusePolicy: 'REJECT_DUPLICATE',
         taskQueue: this.taskQueue,
         args: [envelope],
       });
