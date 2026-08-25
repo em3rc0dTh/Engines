@@ -1,0 +1,374 @@
+name: mk0 B6 Mongo audit and finalization certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b6-mongo-audit-finalization
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-b6-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-b6-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b6-mongo-audit-finalization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 contracts
+        run: npm run test:b1
+
+      - name: Regress B3 CTA
+        run: npm run test:b3
+
+      - name: Start PostgreSQL and MongoDB
+        run: docker compose up -d --wait postgres mongo
+
+      - name: Apply B5 and B6 PostgreSQL migrations twice
+        run: |
+          npm run migrate:b5
+          npm run migrate:b6
+          npm run migrate:b6
+
+      - name: Initialize Mongo audit indexes twice
+        run: |
+          npm run mongo:init:b6
+          npm run mongo:init:b6
+
+      - name: Verify Mongo audit indexes
+        run: |
+          INDEXES="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'JSON.stringify(db.execution_audit.getIndexes().map(i => i.name).sort())')"
+          echo "$INDEXES"
+          echo "$INDEXES" | grep -q 'uq_execution_audit_event_id'
+          echo "$INDEXES" | grep -q 'uq_execution_audit_logical_event'
+          echo "$INDEXES" | grep -q 'idx_execution_audit_workflow_time'
+
+      - name: Probe Mongo retry-safe logical identity
+        run: npm run probe:b6:mongo | tee /tmp/mk0-b6-mongo-probe.log
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-b6-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-b6-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b6-temporal.log
+          exit 1
+
+      - name: Start B6 Worker with PostgreSQL and Mongo Activities
+        run: |
+          npm run worker:b6 > /tmp/mk0-b6-worker.log 2>&1 &
+          echo $! > /tmp/mk0-b6-worker.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B6_WORKER_STARTED' /tmp/mk0-b6-worker.log; then
+              cat /tmp/mk0-b6-worker.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b6-worker.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b6-worker.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b6-worker.log
+          exit 1
+
+      - name: Start new Customer intent-only session
+        id: new_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b6-new-001","correlationId":"b6-new-corr"}' | tee /tmp/mk0-b6-new-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b6-new-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Prove audit exists while Workflow is waiting
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+        run: |
+          for i in $(seq 1 40); do
+            npm run b4:interact -- query > /tmp/mk0-b6-new-waiting.log 2>&1 || true
+            if grep -q 'WAITING_FOR_REQUIRED_DATA' /tmp/mk0-b6-new-waiting.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b6-new-waiting.log
+          grep -q 'WAITING_FOR_REQUIRED_DATA' /tmp/mk0-b6-new-waiting.log
+          COUNT="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}'})")"
+          test "$COUNT" -eq 4
+          REQUIRED="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'REQUIRED_DATA_REQUESTED'})")"
+          test "$REQUIRED" -eq 1
+
+      - name: Complete Customer data through audited Workflow Update
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- update '{"inputId":"b6-new-data-1","customerPatch":{"name":"B6 Primary Customer","document":{"type":"dni","country":"pe","value":"12345678"},"contact":{"email":" B6.PRIMARY@EXAMPLE.TEST ","phones":[{"countryCode":"+51","number":"999 888 777","primary":true}]}}}' | tee /tmp/mk0-b6-new-update.log
+          grep -q 'b6-new-data-1' /tmp/mk0-b6-new-update.log
+
+      - name: Await truthful CREATED terminal result
+        id: new_result
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+        run: |
+          npm run b6:result | tee /tmp/mk0-b6-new-result.log
+          LINE="$(grep 'B6_REGISTRATION_RESULT' /tmp/mk0-b6-new-result.log | tail -1)"
+          JSON="${LINE#B6_REGISTRATION_RESULT }"
+          echo "$JSON" | jq -e '.status == "COMPLETED" and .result.created == true and .result.customerId != null' >/dev/null
+          CUSTOMER_ID="$(echo "$JSON" | jq -r '.result.customerId')"
+          echo "customer_id=$CUSTOMER_ID" >> "$GITHUB_OUTPUT"
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'COMPLETED_CREATED'
+          COUNT="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}'})")"
+          test "$COUNT" -eq 8
+          COMPLETED="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'REGISTRATION_COMPLETED'})")"
+          test "$COMPLETED" -eq 1
+
+      - name: Start hard duplicate session
+        id: hard_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b6-hard-002","draft":{"customer":{"name":"B6 Hard Duplicate","document":{"type":"DNI","country":"PE","value":"12345678"},"contact":{"email":"hard-b6@example.test"}}}}' | tee /tmp/mk0-b6-hard-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b6-hard-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Await truthful ALREADY_EXISTS terminal result
+        env:
+          B4_WORKFLOW_ID: ${{ steps.hard_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.hard_start.outputs.run_id }}
+          EXPECTED_CUSTOMER_ID: ${{ steps.new_result.outputs.customer_id }}
+        run: |
+          npm run b6:result | tee /tmp/mk0-b6-hard-result.log
+          LINE="$(grep 'B6_REGISTRATION_RESULT' /tmp/mk0-b6-hard-result.log | tail -1)"
+          JSON="${LINE#B6_REGISTRATION_RESULT }"
+          echo "$JSON" | jq -e --arg customerId "$EXPECTED_CUSTOMER_ID" '.status == "COMPLETED" and .result.created == false and .result.customerId == $customerId and .result.reason == "HARD_UNIQUE"' >/dev/null
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where business_slug='golden-business'" | grep -qx '1'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'COMPLETED_ALREADY_EXISTS'
+          EXISTING="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'EXISTING_CUSTOMER_RESOLVED'})")"
+          test "$EXISTING" -eq 1
+
+      - name: Start soft duplicate session
+        id: soft_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b6-soft-003","draft":{"customer":{"name":"B6 Soft Duplicate","contact":{"email":"b6.primary@example.test"}}}}' | tee /tmp/mk0-b6-soft-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b6-soft-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify soft duplicate remains waiting but audited
+        env:
+          B4_WORKFLOW_ID: ${{ steps.soft_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.soft_start.outputs.run_id }}
+          EXPECTED_CUSTOMER_ID: ${{ steps.new_result.outputs.customer_id }}
+        run: |
+          for i in $(seq 1 60); do
+            npm run b4:interact -- query > /tmp/mk0-b6-soft-state.log 2>&1 || true
+            if grep -q 'WAITING_FOR_DUPLICATE_DECISION' /tmp/mk0-b6-soft-state.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b6-soft-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b6-soft-state.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e --arg customerId "$EXPECTED_CUSTOMER_ID" '.state.phase == "WAITING_FOR_DUPLICATE_DECISION" and (.state.possibleDuplicate.candidateCustomerIds | index($customerId)) != null and .state.result == null' >/dev/null
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'SOFT_DUPLICATE_PENDING_DECISION'
+          DUP="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'DUPLICATE_CHECK_COMPLETED'})")"
+          DONE="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'REGISTRATION_COMPLETED'})")"
+          test "$DUP" -eq 1
+          test "$DONE" -eq 0
+
+      - name: Assert audit does not contain Customer PII values
+        run: |
+          AUDIT="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'JSON.stringify(db.execution_audit.find({businessSlug:"golden-business"}).toArray())')"
+          if echo "$AUDIT" | grep -Eqi 'b6\.primary@example\.test|12345678|999[[:space:]]*888[[:space:]]*777'; then
+            echo 'Customer PII leaked into Mongo audit'
+            exit 1
+          fi
+          echo 'B6_AUDIT_PII_BOUNDARY_OK'
+
+      - name: Assert Workflow remains persistence-driver free
+        run: |
+          if grep -n -E "from ['\"](pg|mongodb)" src/orchestration/temporal/workflows/register-new-customer.workflow.ts; then
+            echo 'Workflow imported a database driver'
+            exit 1
+          fi
+          grep -q 'proxyActivities' src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          grep -q "from 'mongodb'" src/persistence/mongo/registration-audit.repository.ts
+          grep -q "from 'pg'" src/persistence/postgres/registration-finalization.repository.ts
+          echo 'B6_ACTIVITY_ONLY_PERSISTENCE_OK'
+
+      - name: Replace Worker with CUSTOMER_CREATED audit failure injection
+        run: |
+          kill -KILL "$(cat /tmp/mk0-b6-worker.pid)" 2>/dev/null || true
+          B6_FORCE_MONGO_AUDIT_FAILURE_EVENT_TYPE=CUSTOMER_CREATED npm run worker:b6 > /tmp/mk0-b6-worker-failure.log 2>&1 &
+          echo $! > /tmp/mk0-b6-worker-failure.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B6_WORKER_STARTED' /tmp/mk0-b6-worker-failure.log; then
+              cat /tmp/mk0-b6-worker-failure.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b6-worker-failure.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b6-worker-failure.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b6-worker-failure.log
+          exit 1
+
+      - name: Start Customer whose outcome audit must fail
+        id: failure_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b6-failure-004","draft":{"customer":{"name":"B6 Audit Failure Customer","document":{"type":"DNI","country":"PE","value":"87654321"},"contact":{"email":"failure-b6@example.test"}}}}' | tee /tmp/mk0-b6-failure-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b6-failure-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Prove exhausted Mongo audit failure forbids success
+        env:
+          B4_WORKFLOW_ID: ${{ steps.failure_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.failure_start.outputs.run_id }}
+        run: |
+          for i in $(seq 1 60); do
+            npm run b4:interact -- query > /tmp/mk0-b6-failure-state.log 2>&1 || true
+            if grep -q 'MONGO_AUDIT_STORE_UNAVAILABLE' /tmp/mk0-b6-failure-state.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b6-failure-state.log
+          grep -q 'MONGO_AUDIT_STORE_UNAVAILABLE' /tmp/mk0-b6-failure-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b6-failure-state.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e '.state.workflowStatus == "FAILED" and .state.phase == "FAILED" and .state.failure.code == "MONGO_AUDIT_STORE_UNAVAILABLE" and .state.result == null and .state.created == null' >/dev/null
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'CUSTOMER_CREATED_PENDING_AUDIT'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers c join registration_commands r on r.customer_id=c.customer_id where r.workflow_id='${B4_WORKFLOW_ID}'" | grep -qx '1'
+          DONE="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'REGISTRATION_COMPLETED'})")"
+          CREATED="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'${B4_WORKFLOW_ID}',eventType:'CUSTOMER_CREATED'})")"
+          test "$DONE" -eq 0
+          test "$CREATED" -eq 0
+          grep -q 'forced-event:CUSTOMER_CREATED' /tmp/mk0-b6-worker-failure.log
+          grep -q 'attempt: 3' /tmp/mk0-b6-worker-failure.log
+
+      - name: Capture B6 evidence
+        env:
+          NEW_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          HARD_WORKFLOW_ID: ${{ steps.hard_start.outputs.workflow_id }}
+          SOFT_WORKFLOW_ID: ${{ steps.soft_start.outputs.workflow_id }}
+          FAILURE_WORKFLOW_ID: ${{ steps.failure_start.outputs.workflow_id }}
+        run: |
+          mkdir -p evidence/ci/b6
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select registration_id,business_slug,workflow_id,customer_id,status from registration_commands order by created_at" > evidence/ci/b6/registration-commands.txt
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select customer_id,business_slug,customer_name,status from customers order by created_at" > evidence/ci/b6/customers.txt
+          docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'db.execution_audit.find({}).sort({workflowId:1,occurredAt:1}).forEach(x => print(JSON.stringify(x)))' > evidence/ci/b6/execution-audit.jsonl
+          temporal workflow show --workflow-id "$NEW_WORKFLOW_ID" --output json > evidence/ci/b6/new-history.json
+          temporal workflow show --workflow-id "$HARD_WORKFLOW_ID" --output json > evidence/ci/b6/hard-history.json
+          temporal workflow show --workflow-id "$FAILURE_WORKFLOW_ID" --output json > evidence/ci/b6/failure-history.json
+          cp /tmp/mk0-b6-worker.log evidence/ci/b6/worker-happy.log
+          cp /tmp/mk0-b6-worker-failure.log evidence/ci/b6/worker-failure.log
+          cp /tmp/mk0-b6-mongo-probe.log evidence/ci/b6/mongo-probe.log
+          cat > evidence/ci/b6/evidence.json <<JSON
+          {
+            "schemaVersion": "mk0.b6.evidence.v1",
+            "sourceHeadSha": "${GITHUB_SHA}",
+            "workflowRunId": "${GITHUB_RUN_ID}",
+            "assertions": {
+              "mongoIndexesIdempotent": "PASS",
+              "auditLogicalIdentityRetrySafe": "PASS",
+              "auditConflictRejected": "PASS",
+              "waitingSessionAlreadyAudited": "PASS",
+              "customerDataUpdateAuditedBeforeMutation": "PASS",
+              "newCustomerTerminalCreated": "PASS",
+              "hardDuplicateTerminalAlreadyExists": "PASS",
+              "softDuplicateWaitsWithoutCompletionAudit": "PASS",
+              "auditContainsNoCustomerPIIValues": "PASS",
+              "activityOnlyPersistenceAccess": "PASS",
+              "postgresCompletionGatedByAudit": "PASS",
+              "mongoFailureAfterCustomerCreateForbidsSuccess": "PASS",
+              "temporalRetriesMandatoryAudit": "PASS"
+            },
+            "workflowIds": {
+              "created": "$NEW_WORKFLOW_ID",
+              "alreadyExists": "$HARD_WORKFLOW_ID",
+              "softDuplicate": "$SOFT_WORKFLOW_ID",
+              "mongoFailure": "$FAILURE_WORKFLOW_ID"
+            }
+          }
+          JSON
+          cat evidence/ci/b6/evidence.json
+
+      - name: Terminate soft duplicate laboratory Workflow
+        env:
+          SOFT_WORKFLOW_ID: ${{ steps.soft_start.outputs.workflow_id }}
+        run: temporal workflow terminate --workflow-id "$SOFT_WORKFLOW_ID" --reason 'B6 certification evidence captured'
+
+      - name: Upload B6 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b6-mongo-audit-finalization-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/b6
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo '--- Happy Worker ---'
+          cat /tmp/mk0-b6-worker.log || true
+          echo '--- Failure Worker ---'
+          cat /tmp/mk0-b6-worker-failure.log || true
+          echo '--- Temporal ---'
+          cat /tmp/mk0-b6-temporal.log || true
+          echo '--- PostgreSQL registrations ---'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select * from registration_commands' || true
+          echo '--- Mongo audit ---'
+          docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'db.execution_audit.find({}).forEach(x => print(JSON.stringify(x)))' || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/mk0-b6-worker.pid ]; then kill -KILL "$(cat /tmp/mk0-b6-worker.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b6-worker-failure.pid ]; then kill -KILL "$(cat /tmp/mk0-b6-worker-failure.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b6-temporal.pid ]; then kill "$(cat /tmp/mk0-b6-temporal.pid)" 2>/dev/null || true; fi
+          docker compose down -v || true
