@@ -1,3 +1,4 @@
+import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { loadRuntimeConfig } from '../../../config/runtime-config.js';
@@ -14,6 +15,8 @@ import {
   postgresRegistrationActivities,
 } from '../activities/postgres-registration.activities.js';
 import { assertMk0TemporalTopology, temporalTopologyFrom } from '../topology.js';
+
+const READY_FILE = process.env.ENGINES_WORKER_READY_FILE ?? '/tmp/engines-mk0-worker-ready';
 
 async function run(): Promise<void> {
   const topology = temporalTopologyFrom(loadRuntimeConfig());
@@ -34,18 +37,21 @@ async function run(): Promise<void> {
       },
     });
 
+    writeFileSync(READY_FILE, `${process.pid}\n`, 'utf8');
     console.log(
       `B7_WORKER_STARTED ${JSON.stringify({
         temporalAddress: topology.address,
         namespace: topology.namespace,
         taskQueue: topology.taskQueue,
         attachmentStoreRoot: loadRuntimeConfig().attachmentStoreRoot,
+        readyFile: READY_FILE,
         pid: process.pid,
       })}`,
     );
 
     await worker.run();
   } finally {
+    if (existsSync(READY_FILE)) unlinkSync(READY_FILE);
     await Promise.all([
       closePostgresRegistrationActivities(),
       closeMongoRegistrationAuditActivities(),
@@ -56,6 +62,7 @@ async function run(): Promise<void> {
 }
 
 run().catch((error: unknown) => {
+  if (existsSync(READY_FILE)) unlinkSync(READY_FILE);
   console.error(
     `B7_WORKER_FAILED ${JSON.stringify({
       error: error instanceof Error ? error.message : String(error),
