@@ -10,6 +10,25 @@ Approval record:
 mk0/Plan/pre-build-approval-2026-08-24.md
 ```
 
+Current Build position:
+
+```text
+B0  runtime/repository skeleton                         ✅ CERTIFIED
+B1  canonical contracts + versioned RegistrationPolicy ← ACTIVE
+B2  real Temporal runtime/topology + visibility proof
+B3  first CLI CTA Adapter
+B4  Worker + Task Queue + interactive RegisterNewCustomer
+B5  PostgreSQL duplicate/customer/registration Activities
+B6  MongoDB mandatory interaction/audit Activities
+B7  AttachmentStore                                    🔒 GATED
+```
+
+B0 certification evidence:
+
+```text
+mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
+```
+
 `B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
 
 No application/web framework is selected or required for mk0.
@@ -38,37 +57,59 @@ Persistence Activities
    └── AttachmentStore → B7 gated
 ```
 
-## Authorized sequence
-
-```text
-B0  runtime/repository skeleton                         ← ACTIVE
-B1  canonical contracts + versioned RegistrationPolicy
-B2  real Temporal runtime/topology + visibility proof
-B3  first CLI CTA Adapter
-B4  Worker + Task Queue + interactive RegisterNewCustomer
-B5  PostgreSQL duplicate/customer/registration Activities
-B6  MongoDB mandatory interaction/audit Activities
-B7  AttachmentStore                                    ← GATED
-```
-
-Build must not skip forward by embedding later business logic inside an earlier stage.
-
-## B0 frozen runtime choice
+## B0 certified runtime
 
 ```text
 Language/runtime:        TypeScript / Node.js 20+
+Certified Node runtime:  v24.19.0
 Temporal TypeScript SDK: 1.22.0
-Temporal local runtime:  official Temporal CLI development server
+Temporal CLI:            1.8.1
+Temporal Server observed:1.31.2
+Temporal Web UI observed:2.50.1
 Temporal endpoint:       localhost:7233
 Temporal Web UI:         localhost:8233
-Namespace:               default for B0 laboratory proof
+Namespace:               default
 Task Queue:              engines-mk0-registration
-PostgreSQL:              Docker service
-MongoDB:                 Docker service
+PostgreSQL observed:     17.8
+MongoDB observed:        8.0.29
 Web/application framework: none
 ```
 
-B0 proves runtime boundaries, not Customer semantics.
+Dependency resolution is frozen through the committed `mk0/runtime/package-lock.json`, and certification uses `npm ci`.
+
+## B1 active target
+
+B1 creates the executable **canonical interaction contracts** and **versioned RegistrationPolicy model** required by later Temporal Workflow code.
+
+B1 may implement only pure/deterministic contract and policy logic such as:
+
+```text
+RegisterNewCustomer start envelope
+canonical Customer draft shape used by mk0
+GetRegistrationState projection contract
+ProvideCustomerData input contract
+RegistrationPolicy schema/version
+required-field evaluation
+normalization contract
+HARD_UNIQUE / SOFT_MATCH / NON_UNIQUE duplicate-rule representation
+start-session idempotency material / fingerprint contract
+safe validation result / typed contract errors
+Golden Dataset policy fixture mapping
+```
+
+B1 must **not** yet:
+
+```text
+start a production RegisterNewCustomer Temporal Workflow
+write PostgreSQL Customer rows
+write MongoDB audit events
+implement AttachmentStore
+implement Postman HTTP transport
+create Appointment/ResourceReservation behavior
+introduce an Agent/Hermes
+```
+
+B1 is complete only when its pure contract/policy tests pass against the frozen Test/Golden expectations relevant to the contract layer.
 
 ## Non-negotiable Temporal rule
 
@@ -80,14 +121,14 @@ mk0 must not use:
 - a CTA process that must remain alive for Workflow progress;
 - a reduced custom orchestrator that bypasses Task Queue/Worker semantics.
 
-The proof must use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
+Later Workflow proof must continue to use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
 
 ## CTA rule
 
 The channel and adapter remain replaceable.
 
 ```text
-CLI now
+CLI first
 Postman next
 Form later
 WhatsApp later
@@ -100,35 +141,7 @@ CTA Adapter
 Temporal
 ```
 
-The CLI may speak to Temporal through the official client SDK while preserving the canonical CTA contract. It does not become Workflow authority.
-
 A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal.
-
-## Runtime/repository boundaries
-
-```text
-mk0/runtime/
-  package.json
-  tsconfig.json
-  .env.example
-  docker-compose.yml
-  src/
-    config/
-    orchestration/
-      temporal/
-        workers/
-        workflows/
-        activities/
-    cta/
-      cli/
-    persistence/
-      postgres/
-      mongo/
-  scripts/
-  evidence/
-```
-
-B0 may create these boundaries and connectivity smoke probes. Business workflow behavior belongs to B1+.
 
 ## Frozen constraints
 
@@ -153,24 +166,24 @@ B0 may create these boundaries and connectivity smoke probes. Business workflow 
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-## B0 completion rule
+## B0 closure
 
-B0 is not complete because files exist.
+B0 is no longer an open gate.
 
-It completes only when runtime evidence proves:
+Certified evidence proves:
 
 ```text
-Node runtime/version observed
-Temporal Service reachable at configured endpoint
-Temporal Web UI reachable
-real Worker polls engines-mk0-registration
-real B0 smoke Workflow executes through Temporal
-PostgreSQL connectivity succeeds
-MongoDB connectivity succeeds
-runtime can stop/restart reproducibly
-no Customer/Appointment business mutation exists
+locked dependency installation                 PASS
+TypeScript type-check                          PASS
+Compose model                                  PASS
+PostgreSQL connectivity                        PASS
+MongoDB connectivity                           PASS
+real Temporal Service                          PASS
+Temporal Web UI                                PASS
+real Worker / Task Queue                       PASS
+real smoke Workflow with Workflow ID / Run ID  PASS
+structured evidence artifact                   PASS
+no Customer/Appointment business schema        PASS
 ```
 
-Until that evidence exists:
-
-> **B0 = IMPLEMENTED IN REPOSITORY / RUNTIME UNPROVEN.**
+> **B0 = CERTIFIED. B1 = ACTIVE.**
