@@ -37,9 +37,11 @@ async function run(): Promise<void> {
 }
 
 run().catch((error: unknown) => {
+  const candidate = error as { code?: unknown };
   console.error(
     `B4_WORKFLOW_START_FAILED ${JSON.stringify({
       ok: false,
+      ...(typeof candidate?.code === 'string' ? { code: candidate.code } : {}),
       error: error instanceof Error ? error.message : String(error),
     })}`,
   );
