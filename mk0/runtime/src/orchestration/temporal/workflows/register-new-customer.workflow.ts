@@ -211,33 +211,33 @@ export async function registerNewCustomerWorkflow(
   };
 
   const resolveAttachmentIngress = async (ingressRef: string): Promise<StagedAttachmentMetadata> => {
-    try {
-      const resolved = await attachmentStore.resolveAttachmentIngress({ ingressRef });
-      if (resolved.kind !== 'RESOLVED') {
-        return failAttachment(resolved.kind, resolved.message);
-      }
-      return resolved.ingress;
-    } catch (error) {
-      return failAttachment(
-        'ATTACHMENT_STORE_UNAVAILABLE',
-        error instanceof Error ? error.message : String(error),
+    const resolved = await attachmentStore
+      .resolveAttachmentIngress({ ingressRef })
+      .catch((error: unknown): never =>
+        failAttachment(
+          'ATTACHMENT_STORE_UNAVAILABLE',
+          error instanceof Error ? error.message : String(error),
+        ),
       );
+    if (resolved.kind !== 'RESOLVED') {
+      return failAttachment(resolved.kind, resolved.message);
     }
+    return resolved.ingress;
   };
 
   const commitAttachment = async (input: CommitAttachmentInput): Promise<CommittedAttachmentMetadata> => {
-    try {
-      const committed = await attachmentStore.commitAttachment(input);
-      if (committed.kind !== 'COMMITTED') {
-        return failAttachment(committed.kind, committed.message);
-      }
-      return committed.attachment;
-    } catch (error) {
-      return failAttachment(
-        'ATTACHMENT_STORE_UNAVAILABLE',
-        error instanceof Error ? error.message : String(error),
+    const committed = await attachmentStore
+      .commitAttachment(input)
+      .catch((error: unknown): never =>
+        failAttachment(
+          'ATTACHMENT_STORE_UNAVAILABLE',
+          error instanceof Error ? error.message : String(error),
+        ),
       );
+    if (committed.kind !== 'COMMITTED') {
+      return failAttachment(committed.kind, committed.message);
     }
+    return committed.attachment;
   };
 
   setHandler(getRegistrationStateQuery, projectState);
