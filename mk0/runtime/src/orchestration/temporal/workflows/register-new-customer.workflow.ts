@@ -22,12 +22,12 @@ import {
   type RegistrationResult,
   type RegistrationStateProjection,
 } from '../../../contracts/register-new-customer/index.js';
-import type { StagedAttachmentMetadata } from '../../../persistence/attachments/attachment-store.types.js';
 import type {
-  AttachmentStoreActivities,
-  CommitAttachmentActivityResult,
-  ResolveAttachmentIngressResult,
-} from '../activities/attachment-store.types.js';
+  CommitAttachmentInput,
+  CommittedAttachmentMetadata,
+  StagedAttachmentMetadata,
+} from '../../../persistence/attachments/attachment-store.types.js';
+import type { AttachmentStoreActivities } from '../activities/attachment-store.types.js';
 import type {
   MongoRegistrationAuditActivities,
   RegistrationAuditEventInput,
@@ -210,6 +210,36 @@ export async function registerNewCustomerWorkflow(
     throw ApplicationFailure.nonRetryable(message, code);
   };
 
+  const resolveAttachmentIngress = async (ingressRef: string): Promise<StagedAttachmentMetadata> => {
+    try {
+      const resolved = await attachmentStore.resolveAttachmentIngress({ ingressRef });
+      if (resolved.kind !== 'RESOLVED') {
+        return failAttachment(resolved.kind, resolved.message);
+      }
+      return resolved.ingress;
+    } catch (error) {
+      return failAttachment(
+        'ATTACHMENT_STORE_UNAVAILABLE',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  };
+
+  const commitAttachment = async (input: CommitAttachmentInput): Promise<CommittedAttachmentMetadata> => {
+    try {
+      const committed = await attachmentStore.commitAttachment(input);
+      if (committed.kind !== 'COMMITTED') {
+        return failAttachment(committed.kind, committed.message);
+      }
+      return committed.attachment;
+    } catch (error) {
+      return failAttachment(
+        'ATTACHMENT_STORE_UNAVAILABLE',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  };
+
   setHandler(getRegistrationStateQuery, projectState);
   setHandler(getInitialStartFingerprintQuery, () => initialStartFingerprint);
 
@@ -348,21 +378,7 @@ export async function registerNewCustomerWorkflow(
     }
     seenIngressRefs.add(attachment.ingressRef);
 
-    let resolved: ResolveAttachmentIngressResult;
-    try {
-      resolved = await attachmentStore.resolveAttachmentIngress({ ingressRef: attachment.ingressRef });
-    } catch (error) {
-      failAttachment(
-        'ATTACHMENT_STORE_UNAVAILABLE',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-
-    if (resolved.kind !== 'RESOLVED') {
-      failAttachment(resolved.kind, resolved.message);
-    }
-
-    const ingress = resolved.ingress;
+    const ingress = await resolveAttachmentIngress(attachment.ingressRef);
     if (attachment.sha256 && attachment.sha256 !== ingress.sha256) {
       failAttachment(
         'ATTACHMENT_INTEGRITY_MISMATCH',
@@ -445,29 +461,17 @@ export async function registerNewCustomerWorkflow(
         failAttachment('ATTACHMENT_INGRESS_NOT_FOUND', attachment.ingressRef);
       }
 
-      let committed: CommitAttachmentActivityResult;
-      try {
-        committed = await attachmentStore.commitAttachment({
-          ingressRef: attachment.ingressRef,
-          expectedSha256: attachment.sha256 ?? resolved.sha256,
-          expectedByteLength: attachment.byteLength ?? resolved.byteLength,
-          expectedMediaType: attachment.mediaType ?? resolved.mediaType,
-        });
-      } catch (error) {
-        failAttachment(
-          'ATTACHMENT_STORE_UNAVAILABLE',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-
-      if (committed.kind !== 'COMMITTED') {
-        failAttachment(committed.kind, committed.message);
-      }
+      const committed = await commitAttachment({
+        ingressRef: attachment.ingressRef,
+        expectedSha256: attachment.sha256 ?? resolved.sha256,
+        expectedByteLength: attachment.byteLength ?? resolved.byteLength,
+        expectedMediaType: attachment.mediaType ?? resolved.mediaType,
+      });
 
       phase = 'LINKING_ATTACHMENTS';
       await postgres.linkCustomerAttachment({
         customerId,
-        attachment: committed.attachment,
+        attachment: committed,
         ...(attachment.kind ? { kind: attachment.kind } : {}),
         ...(attachment.displayName ? { displayName: attachment.displayName } : {}),
       });
@@ -479,12 +483,12 @@ export async function registerNewCustomerWorkflow(
           `attachment:${attachment.ingressRef}`,
           phase,
           {
-            attachmentId: committed.attachment.attachmentId,
+            attachmentId: committed.attachmentId,
             ingressRef: attachment.ingressRef,
             kind: attachment.kind ?? null,
-            mediaType: committed.attachment.mediaType,
-            byteLength: committed.attachment.byteLength,
-            sha256: committed.attachment.sha256,
+            mediaType: committed.mediaType,
+            byteLength: committed.byteLength,
+            sha256: committed.sha256,
           },
           customerId,
         ),
