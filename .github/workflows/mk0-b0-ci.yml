@@ -99,12 +99,14 @@ jobs:
           timeout 60 npm run smoke:b0 | tee /tmp/mk0-smoke.log
           grep -q 'B0_TEMPORAL_SMOKE_OK' /tmp/mk0-smoke.log
 
-      - name: Assert no business schema exists in B0
+      - name: Assert no premature business persistence implementation
         run: |
-          test ! -d src/domain
-          test ! -d src/contracts/register-new-customer
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          test ! -f src/orchestration/temporal/workflows/register-new-customer.workflow.ts
 
-      - name: Create structured B0 evidence
+      - name: Create structured B0 regression evidence
         run: |
           mkdir -p evidence/ci
           SMOKE_JSON="$(grep 'B0_TEMPORAL_SMOKE_OK' /tmp/mk0-smoke.log | tail -1)"
@@ -118,7 +120,7 @@ jobs:
           MONGO_VERSION="$(docker compose exec -T mongo mongosh --quiet --eval 'db.version()')"
 
           jq -n \
-            --arg schemaVersion 'mk0.b0.evidence.v1' \
+            --arg schemaVersion 'mk0.b0.evidence.v2' \
             --arg repository '${{ github.repository }}' \
             --arg checkoutCommit "$GITHUB_SHA" \
             --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
@@ -163,7 +165,7 @@ jobs:
                 temporalWebUi: "PASS",
                 temporalWorker: "PASS",
                 temporalWorkflow: "PASS",
-                noBusinessSchemaInB0: "PASS"
+                noPrematureBusinessPersistence: "PASS"
               }
             }' > evidence/ci/b0-runtime-evidence.json
 
@@ -172,7 +174,7 @@ jobs:
           cp /tmp/mk0-smoke.log evidence/ci/smoke.log
           cat evidence/ci/b0-runtime-evidence.json
 
-      - name: Upload B0 evidence
+      - name: Upload B0 regression evidence
         uses: actions/upload-artifact@v4
         with:
           name: mk0-b0-runtime-evidence-${{ github.run_id }}
