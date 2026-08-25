@@ -6,6 +6,7 @@ export type RegistrationAuditEventType =
   | 'DUPLICATE_CHECK_COMPLETED'
   | 'EXISTING_CUSTOMER_RESOLVED'
   | 'CUSTOMER_CREATED'
+  | 'ATTACHMENT_COMMITTED'
   | 'REGISTRATION_COMPLETED';
 
 export type RegistrationAuditEventInput = Readonly<{
