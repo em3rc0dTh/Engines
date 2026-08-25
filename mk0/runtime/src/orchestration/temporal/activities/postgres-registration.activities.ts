@@ -11,6 +11,10 @@ import {
   completeRegistration,
   markRegistrationAudited,
 } from '../../../persistence/postgres/registration-finalization.repository.js';
+import {
+  closeCustomerAttachmentRepository,
+  linkCustomerAttachment,
+} from '../../../persistence/postgres/customer-attachment.repository.js';
 import type { PostgresRegistrationActivities } from './postgres-registration.types.js';
 
 export const postgresRegistrationActivities: PostgresRegistrationActivities = {
@@ -26,6 +30,7 @@ export const postgresRegistrationActivities: PostgresRegistrationActivities = {
       input.customer,
       input.enforceHardUniqueDocument,
     ),
+  linkCustomerAttachment: (input) => linkCustomerAttachment(input),
   markRegistrationAudited: (input) =>
     markRegistrationAudited(input.registrationId, input.customerId, input.outcome),
   completeRegistration: (input) =>
@@ -33,5 +38,9 @@ export const postgresRegistrationActivities: PostgresRegistrationActivities = {
 };
 
 export async function closePostgresRegistrationActivities(): Promise<void> {
-  await Promise.all([closePostgresRepository(), closePostgresFinalizationRepository()]);
+  await Promise.all([
+    closePostgresRepository(),
+    closePostgresFinalizationRepository(),
+    closeCustomerAttachmentRepository(),
+  ]);
 }
