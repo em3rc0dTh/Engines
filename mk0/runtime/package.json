@@ -1,0 +1,32 @@
+{
+  "name": "@engines/mk0-runtime",
+  "version": "0.0.0-mk0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "infra:up": "docker compose up -d postgres mongo",
+    "infra:down": "docker compose down",
+    "infra:status": "docker compose ps",
+    "temporal:dev": "temporal server start-dev --ui-port 8233",
+    "worker:b0": "tsx src/orchestration/temporal/workers/b0.worker.ts",
+    "smoke:b0": "tsx src/orchestration/temporal/clients/b0.client.ts",
+    "probe:stores": "tsx src/runtime/probe-stores.ts"
+  },
+  "dependencies": {
+    "@temporalio/client": "1.22.0",
+    "@temporalio/worker": "1.22.0",
+    "@temporalio/workflow": "1.22.0",
+    "mongodb": "7.6.0",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/pg": "8.15.5",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  }
+}
