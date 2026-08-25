@@ -2,7 +2,7 @@
 
 ## Status
 
-**AUTHORIZED — STAGED B0–B6**
+**AUTHORIZED — STAGED B0–B6 / ATTACHMENT-FREE CORE COMPLETE**
 
 Approval record:
 
@@ -13,14 +13,16 @@ mk0/Plan/pre-build-approval-2026-08-24.md
 Current Build position:
 
 ```text
-B0  runtime/repository skeleton                         ✅ CERTIFIED
-B1  canonical contracts + versioned RegistrationPolicy ✅ CERTIFIED
-B2  real Temporal runtime/topology + visibility proof  ✅ CERTIFIED
-B3  first CLI CTA Adapter                               ✅ CERTIFIED
+B0  runtime/repository skeleton                            ✅ CERTIFIED
+B1  canonical contracts + versioned RegistrationPolicy    ✅ CERTIFIED
+B2  real Temporal runtime/topology + visibility proof     ✅ CERTIFIED
+B3  first CLI CTA Adapter                                  ✅ CERTIFIED
 B4  Worker + Task Queue + interactive RegisterNewCustomer ✅ CERTIFIED
 B5  PostgreSQL duplicate/customer/registration Activities ✅ CERTIFIED
-B6  MongoDB mandatory interaction/audit Activities     ← ACTIVE
-B7  AttachmentStore                                    🔒 GATED
+B6  MongoDB mandatory audit + terminal finalization       ✅ CERTIFIED
+B7  AttachmentStore                                       🔒 GATED
+
+NEXT → attachment-free mk0 core Golden / release certification
 ```
 
 Certification evidence:
@@ -32,13 +34,14 @@ B2 → mk0/Build/evidence/B2-temporal-continuity-certification-2026-08-24.md
 B3 → mk0/Build/evidence/B3-cli-cta-certification-2026-08-24.md
 B4 → mk0/Build/evidence/B4-interactive-registration-certification-2026-08-24.md
 B5 → mk0/Build/evidence/B5-postgres-authority-certification-2026-08-25.md
+B6 → mk0/Build/evidence/B6-mongo-audit-finalization-certification-2026-08-25.md
 ```
 
 `B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
 
 No application/web framework is selected or required for mk0.
 
-## Certified execution chain so far
+## Certified attachment-free execution chain
 
 ```text
 CLI CTA
@@ -59,10 +62,19 @@ PostgreSQL Activities
   ├── hard/soft duplicate lookup
   └── canonical Customer persistence
   ↓
-PERSISTING_AUDIT_CONTEXT
+MongoDB mandatory audit Activities
+  ├── retry-safe logical milestones
+  ├── PII-safe execution evidence
+  └── success-gating verification
   ↓
-B6 MongoDB mandatory audit ← ACTIVE
+PostgreSQL audited finalization
+  ↓
+CREATED | ALREADY_EXISTS
 ```
+
+A soft duplicate remains durable at `WAITING_FOR_DUPLICATE_DECISION` and is not silently resolved.
+
+A permanent mandatory MongoDB audit failure produces typed `MONGO_AUDIT_STORE_UNAVAILABLE` and forbids terminal success even when a PostgreSQL Customer row already exists.
 
 ## Certified runtime baseline
 
@@ -139,115 +151,129 @@ activityOnlyDatabaseAccess                  PASS
 noFinalSuccessBeforeB6                      PASS
 ```
 
-### New Customer path
+B5 proved policy-driven hard uniqueness without installing a universal SQL `UNIQUE(document)` law. It uses a transaction-scoped advisory lock derived from stable SHA-256 ASCII material only when the active RegistrationPolicy requires the hard-unique document selector.
 
-Certified Golden execution reached PostgreSQL-backed pre-audit state:
+The B5 certification incident involving NUL advisory-lock separators is retained in its evidence record; Temporal exposed the Activity failure, the representation was corrected, and the full gate was rerun successfully.
+
+## B6 certified mandatory audit + terminal finalization
+
+B6 completed the attachment-free mk0 execution path.
+
+Final certified receipt:
 
 ```text
-Workflow ID: register-customer:golden-business:05aec8fb7529f80ddfa057b7aa3c360b
-Run ID:      01a0394f-24ad-7a69-a66b-afcb394779ac
-Customer ID: cus_8b8a95cb-f6fb-4e55-bdd8-1c8c47961cc7
-Phase:       PERSISTING_AUDIT_CONTEXT
+Source SHA: 4403738cfc55159874ca7597d65856ae76bcdd7a
+Run ID:     32870235091
+Artifact:   mk0-b6-mongo-audit-finalization-32870235091
+Digest:     sha256:c138e851ef9bd088fb0685859857d2e243e86d8f4045b18e635a1b615d3107be
+```
+
+Certified B6 assertions:
+
+```text
+mongoIndexesIdempotent                         PASS
+auditLogicalIdentityRetrySafe                  PASS
+auditConflictRejected                          PASS
+waitingSessionAlreadyAudited                   PASS
+customerDataUpdateAuditedBeforeMutation        PASS
+newCustomerTerminalCreated                     PASS
+hardDuplicateTerminalAlreadyExists             PASS
+softDuplicateWaitsWithoutCompletionAudit       PASS
+auditContainsNoCustomerPIIValues               PASS
+activityOnlyPersistenceAccess                  PASS
+postgresCompletionGatedByAudit                 PASS
+mongoFailureAfterCustomerCreateForbidsSuccess  PASS
+temporalRetriesMandatoryAudit                  PASS
+```
+
+### Mandatory logical event identity
+
+MongoDB `execution_audit` uses deterministic retry-safe event identity and unique logical-event enforcement.
+
+Exact retry reuses an existing event. A materially different replay for the same logical identity is rejected rather than overwriting evidence.
+
+### Truthful CREATED path
+
+Certified execution:
+
+```text
+Workflow ID: register-customer:golden-business:25e2d4512a679309b1e2ac1c17b2485a
+Run ID:      01a039af-978d-7a59-9bab-d2bed10fe5ca
+Customer ID: cus_c566084f-6997-4800-be68-808976a8279a
+Temporal:    COMPLETED
+PostgreSQL:  COMPLETED_CREATED
+Result:      created = true
+```
+
+The intent-only execution was already audited while waiting. Its accepted Workflow Update was audited before durable draft mutation. `CUSTOMER_CREATED` and `REGISTRATION_COMPLETED` existed before PostgreSQL terminal completion.
+
+### Truthful ALREADY_EXISTS path
+
+```text
+Workflow ID: register-customer:golden-business:da7b7ec182c976de5dd4cb816868b1bf
+Run ID:      01a039af-aa9a-714f-9878-07edf23f5720
+Customer ID: cus_c566084f-6997-4800-be68-808976a8279a
+Temporal:    COMPLETED
+PostgreSQL:  COMPLETED_ALREADY_EXISTS
+Result:      created = false / HARD_UNIQUE
+```
+
+No second Customer was created.
+
+### Soft duplicate remains unresolved
+
+```text
+Workflow ID: register-customer:golden-business:f20086d2468fac06ce54410d92a16e1b
+Phase:       WAITING_FOR_DUPLICATE_DECISION
+PostgreSQL:  SOFT_DUPLICATE_PENDING_DECISION
+```
+
+`DUPLICATE_CHECK_COMPLETED` exists; `REGISTRATION_COMPLETED` does not.
+
+### Mandatory-audit failure cannot become success
+
+Certification injected Mongo failure specifically at `CUSTOMER_CREATED`, after PostgreSQL had already persisted the Customer.
+
+```text
+Workflow ID: register-customer:golden-business:bbe6543969ce6a7c0cc5d0074f0b74da
+Run ID:      01a039af-ca06-750d-aa6e-3ec69195aa49
 PostgreSQL:  CUSTOMER_CREATED_PENDING_AUDIT
+Temporal:    FAILED / MONGO_AUDIT_STORE_UNAVAILABLE
+Mongo CUSTOMER_CREATED:       absent
+Mongo REGISTRATION_COMPLETED: absent
+terminal success:             forbidden
 ```
 
-Normalized PostgreSQL evidence included:
+The mandatory audit Activity failed on attempts 1, 2 and 3 before the Workflow failed typed. Temporal Event History preserved the failure evidence.
+
+### B6 certification harness incident
+
+The first B6 negative test killed an `npm` wrapper PID while the original Worker child remained alive on the Task Queue. That happy Worker consumed the intended failure execution, making the fault test invalid.
+
+The harness was fixed without changing product semantics: B6 Workers now expose and persist their actual Node PID for certification, and injected Workers expose the exact fault milestone. The complete B6 gate was rerun from zero and passed.
+
+## Next gate — attachment-free core Golden / release certification
+
+B0–B6 individually prove their stage contracts. The next recommended action is **not B7 yet**.
+
+Before opening attachment persistence, certify the integrated attachment-free core against the applicable Golden Dataset scenarios and release invariants as one system:
 
 ```text
-name     = Primary Customer
-email    = primary@example.test
-document = DNI / PE / 12345678
+canonical CTA contract
+interactive waiting / multi-round Update
+business-scoped idempotency
+initial fingerprint conflict
+hard duplicate
+soft duplicate waiting
+PostgreSQL retry/idempotency behavior
+Mongo audit retry/idempotency behavior
+Worker restart / reconnect
+no false success after mandatory audit failure
+zero scheduling side effects
+no attachment-bearing success while B7 is gated
 ```
 
-`result` and `created` remained absent. This is the required B5 boundary, not an incomplete implementation.
-
-### Hard duplicate path
-
-A second registration with the same Golden hard-unique document resolved the same Customer ID and produced:
-
-```text
-PostgreSQL status = EXISTING_CUSTOMER_PENDING_AUDIT
-Workflow phase    = PERSISTING_AUDIT_CONTEXT
-second Customer   = 0
-```
-
-### Soft duplicate path
-
-A soft-match-only registration produced:
-
-```text
-Workflow phase   = WAITING_FOR_DUPLICATE_DECISION
-nextAction       = RESOLVE_DUPLICATE
-PostgreSQL state = SOFT_DUPLICATE_PENDING_DECISION
-```
-
-No silent merge or automatic Customer creation occurred.
-
-### Policy-driven hard uniqueness
-
-B5 does not install a universal SQL `UNIQUE(document)` constraint. When `RegistrationPolicy` marks the document selector as `HARD_UNIQUE`, Customer creation uses a transaction-scoped PostgreSQL advisory lock derived from stable SHA-256 ASCII material for the document identity tuple.
-
-Certification proved two concurrent registration commands with different idempotency keys and the same hard-unique document produce exactly one Customer:
-
-```text
-result kinds = CREATED + HARD_DUPLICATE
-shared customerId = yes
-```
-
-### Certification incident retained as evidence
-
-The first full B5 run `32808833057` failed because advisory-lock text used NUL separators, which PostgreSQL rejected as invalid UTF-8 text. Temporal retried the Activity three times and exposed the failure rather than advancing falsely.
-
-The lock material was corrected to an ASCII SHA-256 representation without weakening duplicate semantics. The subsequent full run `32859253361` passed every B5 gate.
-
-## B6 active target — mandatory MongoDB audit + success gate
-
-B6 introduces required application execution/audit persistence and is the stage that can finally unlock truthful terminal success.
-
-MongoDB must own application audit/workflow context, not Customer business truth.
-
-B6 must implement and certify applicable success-gating milestones:
-
-```text
-REGISTRATION_SESSION_STARTED
-REGISTRATION_POLICY_LOADED
-REQUIRED_DATA_REQUESTED          when applicable
-CUSTOMER_DATA_ACCEPTED           per logically accepted external input
-DUPLICATE_CHECK_COMPLETED
-EXISTING_CUSTOMER_RESOLVED       for ALREADY_EXISTS
-CUSTOMER_CREATED                 for CREATED
-REGISTRATION_COMPLETED
-```
-
-B6 must preserve retry-safe logical event identity and queryability by Workflow/correlation/customer where applicable.
-
-Only after all applicable mandatory audit milestones exist may the Workflow publish:
-
-```text
-CREATED
-or
-ALREADY_EXISTS
-```
-
-If mandatory MongoDB audit remains unavailable after the frozen retry policy is exhausted:
-
-```text
-failureCode = MONGO_AUDIT_STORE_UNAVAILABLE
-successful outcome = forbidden
-```
-
-Temporal Event History remains durable orchestration evidence for that failure.
-
-B6 must not:
-
-```text
-turn MongoDB into a shadow Customer authority
-write unrestricted request bodies or attachment binaries into audit
-allow success while mandatory audit is missing
-implement AttachmentStore
-create Appointment/ResourceReservation
-introduce Agent/Hermes
-```
+This produces the first coherent **mk0 core release candidate/certification receipt**. Only after that gate should project authority decide whether to authorize B7 AttachmentStore.
 
 ## Non-negotiable Temporal rule
 
@@ -282,4 +308,4 @@ mk0 must not use:
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-> **B0–B5 = CERTIFIED. B6 = ACTIVE.**
+> **B0–B6 = CERTIFIED. Attachment-free mk0 core path = COMPLETE. NEXT = integrated Golden / release certification. B7 = GATED.**
