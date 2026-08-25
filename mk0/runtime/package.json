@@ -23,6 +23,9 @@
     "worker:b4": "tsx src/orchestration/temporal/workers/b4.worker.ts",
     "b4:start-cli": "tsx src/orchestration/temporal/clients/b4-start-via-cli.client.ts",
     "b4:interact": "tsx src/orchestration/temporal/clients/b4-interact.client.ts",
+    "migrate:b5": "tsx scripts/migrate-postgres.ts",
+    "probe:b5": "tsx scripts/b5-postgres-semantics.ts",
+    "worker:b5": "tsx src/orchestration/temporal/workers/b5.worker.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
   },
   "dependencies": {
