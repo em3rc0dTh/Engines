@@ -6,6 +6,11 @@ import {
   recordSoftDuplicate,
   reserveRegistration,
 } from '../../../persistence/postgres/registration.repository.js';
+import {
+  closePostgresFinalizationRepository,
+  completeRegistration,
+  markRegistrationAudited,
+} from '../../../persistence/postgres/registration-finalization.repository.js';
 import type { PostgresRegistrationActivities } from './postgres-registration.types.js';
 
 export const postgresRegistrationActivities: PostgresRegistrationActivities = {
@@ -21,8 +26,12 @@ export const postgresRegistrationActivities: PostgresRegistrationActivities = {
       input.customer,
       input.enforceHardUniqueDocument,
     ),
+  markRegistrationAudited: (input) =>
+    markRegistrationAudited(input.registrationId, input.customerId, input.outcome),
+  completeRegistration: (input) =>
+    completeRegistration(input.registrationId, input.customerId, input.outcome),
 };
 
 export async function closePostgresRegistrationActivities(): Promise<void> {
-  await closePostgresRepository();
+  await Promise.all([closePostgresRepository(), closePostgresFinalizationRepository()]);
 }
