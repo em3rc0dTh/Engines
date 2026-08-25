@@ -1,0 +1,48 @@
+name: mk0 B7 AttachmentStore fast gate
+
+on:
+  push:
+    branches:
+      - build/mk0-b7-attachmentstore-local-lab
+  workflow_dispatch:
+
+jobs:
+  b7-fast-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mk0/runtime
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 contracts
+        run: npm run test:b1
+
+      - name: Regress B3 CTA
+        run: npm run test:b3
+
+      - name: Test B7 filesystem AttachmentStore
+        run: npm run test:b7
+
+      - name: Verify frozen fixture bytes
+        working-directory: .
+        run: |
+          test "$(wc -c < mk0/golden-dataset/fixtures/synthetic-id-front-v1.png)" -eq 75
+          test "$(sha256sum mk0/golden-dataset/fixtures/synthetic-id-front-v1.png | awk '{print $1}')" = '248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84'
+          test "$(wc -c < mk0/golden-dataset/fixtures/synthetic-supporting-document-v1.txt)" -eq 67
+          test "$(sha256sum mk0/golden-dataset/fixtures/synthetic-supporting-document-v1.txt | awk '{print $1}')" = 'c4de8a6ee133dfc935ccb27071170ea692d1261f30cb18cd35269a1d09cf1609'
+          jq -e '.fixtures | length == 2' mk0/golden-dataset/fixtures/manifest.json >/dev/null
