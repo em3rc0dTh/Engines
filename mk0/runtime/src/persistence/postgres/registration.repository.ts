@@ -225,8 +225,15 @@ async function lockAndFindDocument(
 ): Promise<string | undefined> {
   const document = completeDocument(customer);
   if (!document) return undefined;
-  const lockMaterial = `${businessSlug}\u0000${document.type}\u0000${document.country}\u0000${document.value}`;
+
+  // Advisory locks accept a bigint key. We derive it from a stable ASCII SHA-256
+  // representation so document identity is unambiguous without sending NUL bytes
+  // through PostgreSQL's text protocol.
+  const lockMaterial = sha256(
+    JSON.stringify([businessSlug, document.type, document.country, document.value]),
+  );
   await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [lockMaterial]);
+
   const result = await client.query<{ customer_id: string }>(
     `SELECT customer_id
        FROM customer_documents
