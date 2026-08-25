@@ -181,7 +181,7 @@ export function validateRegistrationPolicy(policy: RegistrationPolicy): readonly
   return issues;
 }
 
-export const GOLDEN_REGISTRATION_POLICY_V1: RegistrationPolicy = Object.freeze({
+export const GOLDEN_REGISTRATION_POLICY_V1 = {
   policyId: 'golden-registration-v1',
   policyVersion: '1',
   businessSlug: 'golden-business',
@@ -194,4 +194,4 @@ export const GOLDEN_REGISTRATION_POLICY_V1: RegistrationPolicy = Object.freeze({
   documentRequired: false,
   attachmentsRequired: false,
   normalizationProfile: 'mk0.customer-normalization.v1',
-});
+} as const satisfies RegistrationPolicy;
