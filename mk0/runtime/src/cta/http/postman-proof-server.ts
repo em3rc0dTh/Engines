@@ -103,19 +103,17 @@ async function run(): Promise<void> {
           return;
         }
 
+        const expectedSha256 = headerString(request, 'x-expected-sha256');
+        const displayName = headerString(request, 'x-file-name');
+        const ingressRef = headerString(request, 'x-ingress-ref');
+
         try {
           const staged = await attachmentStore.stage({
             bytes,
             mediaType,
-            ...(headerString(request, 'x-expected-sha256')
-              ? { expectedSha256: headerString(request, 'x-expected-sha256') }
-              : {}),
-            ...(headerString(request, 'x-file-name')
-              ? { displayName: headerString(request, 'x-file-name') }
-              : {}),
-            ...(headerString(request, 'x-ingress-ref')
-              ? { ingressRef: headerString(request, 'x-ingress-ref') }
-              : {}),
+            ...(expectedSha256 ? { expectedSha256 } : {}),
+            ...(displayName ? { displayName } : {}),
+            ...(ingressRef ? { ingressRef } : {}),
           });
           sendJson(response, 201, { ok: true, status: 'ATTACHMENT_STAGED', attachment: staged });
         } catch (error) {
