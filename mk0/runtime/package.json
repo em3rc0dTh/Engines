@@ -26,6 +26,11 @@
     "migrate:b5": "tsx scripts/migrate-postgres.ts",
     "probe:b5": "tsx scripts/b5-postgres-semantics.ts",
     "worker:b5": "tsx src/orchestration/temporal/workers/b5.worker.ts",
+    "migrate:b6": "tsx scripts/migrate-postgres-b6.ts",
+    "mongo:init:b6": "tsx scripts/init-mongo-b6.ts",
+    "probe:b6:mongo": "tsx scripts/b6-mongo-audit-semantics.ts",
+    "worker:b6": "tsx src/orchestration/temporal/workers/b6.worker.ts",
+    "b6:result": "tsx src/orchestration/temporal/clients/b6-result.client.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
   },
   "dependencies": {
