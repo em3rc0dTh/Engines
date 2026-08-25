@@ -36,6 +36,8 @@ async function run(): Promise<void> {
         namespace: topology.namespace,
         taskQueue: topology.taskQueue,
         forcedMongoAuditFailure: process.env.B6_FORCE_MONGO_AUDIT_FAILURE === '1',
+        forcedMongoAuditFailureEventType:
+          process.env.B6_FORCE_MONGO_AUDIT_FAILURE_EVENT_TYPE?.trim() || null,
         pid: process.pid,
       }),
     );
