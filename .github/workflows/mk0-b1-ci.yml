@@ -1,0 +1,65 @@
+name: mk0 B1 contracts certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b1-contracts-policy
+    paths:
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - 'mk0/runtime/tsconfig.json'
+      - '.github/workflows/mk0-b1-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - 'mk0/runtime/tsconfig.json'
+      - '.github/workflows/mk0-b1-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b1-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Run B1 contract tests
+        run: npm run test:b1
+
+      - name: Assert B1 remains pure contract layer
+        run: |
+          test ! -f src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          test ! -d src/cta/postman
+          test ! -d src/attachments
+
+      - name: Record B1 CI summary
+        run: |
+          echo 'B1 contract/type gate: PASS'
+          echo 'No DB/Temporal business side effects introduced: PASS'
