@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { loadRuntimeConfig } from '../../../config/runtime-config.js';
@@ -10,6 +11,15 @@ import {
   postgresRegistrationActivities,
 } from '../activities/postgres-registration.activities.js';
 import { assertMk0TemporalTopology, temporalTopologyFrom } from '../topology.js';
+
+function writeCertificationPidFile(): string {
+  const injectedEventType = process.env.B6_FORCE_MONGO_AUDIT_FAILURE_EVENT_TYPE?.trim();
+  const pidFile = injectedEventType || process.env.B6_FORCE_MONGO_AUDIT_FAILURE === '1'
+    ? '/tmp/mk0-b6-worker-failure.pid'
+    : '/tmp/mk0-b6-worker.pid';
+  writeFileSync(pidFile, String(process.pid), 'utf8');
+  return pidFile;
+}
 
 async function run(): Promise<void> {
   const topology = temporalTopologyFrom(loadRuntimeConfig());
@@ -29,6 +39,7 @@ async function run(): Promise<void> {
       },
     });
 
+    const pidFile = writeCertificationPidFile();
     console.log(
       JSON.stringify({
         event: 'B6_WORKER_STARTED',
@@ -39,6 +50,7 @@ async function run(): Promise<void> {
         forcedMongoAuditFailureEventType:
           process.env.B6_FORCE_MONGO_AUDIT_FAILURE_EVENT_TYPE?.trim() || null,
         pid: process.pid,
+        pidFile,
       }),
     );
 
