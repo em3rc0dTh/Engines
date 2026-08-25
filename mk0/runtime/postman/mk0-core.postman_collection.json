@@ -1,0 +1,44 @@
+{
+  "info": {
+    "name": "Engines mk0 Core",
+    "description": "Framework-free Postman proof surface for the mk0 RegisterNewCustomer CTA Adapter.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://127.0.0.1:8787"},
+    {"key": "workflowId", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "Start RegisterNewCustomer",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"businessSlug\": \"golden-business\",\n  \"idempotencyKey\": \"postman-manual-session\",\n  \"correlationId\": \"postman-manual-correlation\",\n  \"draft\": {\n    \"customer\": {}\n  }\n}"
+        },
+        "url": "{{baseUrl}}/mk0/register-new-customer"
+      }
+    },
+    {
+      "name": "Query Registration State",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/mk0/register-new-customer/{{workflowId}}"
+      }
+    },
+    {
+      "name": "Provide Customer Data",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"inputId\": \"postman-manual-input-1\",\n  \"customerPatch\": {\n    \"name\": \"Synthetic Postman Customer\",\n    \"contact\": {\n      \"email\": \"postman.customer@example.test\"\n    }\n  }\n}"
+        },
+        "url": "{{baseUrl}}/mk0/register-new-customer/{{workflowId}}/customer-data"
+      }
+    }
+  ]
+}
