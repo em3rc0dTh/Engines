@@ -1,102 +1,198 @@
 # Engines
 
-`Engines` is the design and implementation home for the reusable operational architecture that will support future agentic systems.
+`Engines` is the design and implementation home for a reusable operational orchestration architecture that can support future agentic and non-agentic systems.
 
 ## Current version
 
-**mk0 — documentation-first foundation**
+**mk0 — attachment-free core system-certified**
 
-mk0 intentionally contains **no production implementation** yet. Its job is to freeze the first real operational spine before choosing application frameworks or channel-specific products.
+The first executable specimen is `RegisterNewCustomer`.
 
-## mk0 scope — first three architecture zones
-
-```text
-1. CTA / OMNICHANNEL ENTRY
-   Postman / CLI now
-   Form / WhatsApp / Telegram / API / Webhook later
-                 ↓
-             CTA Adapter
-                 ↓ canonical command
-
-2. ORCHESTRATION ENGINE
-   Full Temporal platform
-   ├── workflow routing
-   ├── Workflow Library
-   ├── durable Workflow Execution
-   ├── Activities
-   ├── Task Queues / Workers
-   ├── retries / timeouts / recovery
-   ├── Queries / Signals / Updates when required
-   └── visibility / durable history
-                 ↓
-      RegisterNewCustomer first workflow
-
-3. PERSISTENCE / STORAGE
-   PostgreSQL      → canonical Customer + registration/idempotency truth
-   MongoDB         → execution/audit/workflow context
-   AttachmentStore → binary/document objects when present
-```
-
-Canonical first path:
+Current truth:
 
 ```text
-CTA channel
-→ CTA Adapter
-→ Temporal Orchestration Engine
-→ PostgreSQL + MongoDB + optional AttachmentStore
+B0–B6                               ✅ CERTIFIED
+attachment-free integrated Golden  ✅ 14 / 14 PASS
+B7 AttachmentStore                 🔒 GATED
+attachment Golden cases            ⏳ 4 DEFERRED_B7
+full mk0                            ⏳ NOT YET COMPLETE
 ```
 
-**No NestJS, Express, Fastify or other web/application framework is part of mk0 architecture.** A future HTTP adapter may use a framework, but the framework remains replaceable and outside the orchestration authority.
+The current integrated certification receipt is:
 
-## Architectural meaning of the CTA Adapter
+```text
+Golden Dataset:  mk0.golden.register-customer.v0
+Source SHA:      f0896c58d918e8f3971c78867870243e16a8b604
+GitHub run ID:   32873848134
+Artifact:        mk0-core-golden-release-32873848134
+Digest:          sha256:25fea20c892ea7cd758788ac63a53ba9048b8809599f2b972c5ef77942c2b4e8
+Verdict:         ATTACHMENT_FREE_CORE_GOLDEN_PASS
+```
 
-The CTA Adapter is a contract boundary, not a chosen framework.
+See [`mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md`](mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md).
 
-It converts channel-specific input into the same canonical command. Today the sender can be Postman or CLI. Later the sender can be a form, WhatsApp message, Telegram message, mobile app, voice channel, API/webhook or another future channel explicitly admitted by a later design decision.
+## Core architecture
 
-All channels must converge on the same orchestration contract instead of creating channel-specific business workflows.
+```text
+INPUT CHANNELS
+CLI / Postman-compatible HTTP now
+future channels through adapters
+            ↓
+        CTA Adapter
+            ↓
+   canonical operation
+            ↓
+┌────────────────────────────────────┐
+│ TEMPORAL ORCHESTRATION ENGINE      │
+│                                    │
+│ durable Workflow Execution         │
+│ Task Queue / Workers / Activities  │
+│ Query / Update                     │
+│ retries / replay / recovery        │
+│ durable Event History              │
+└─────────────────┬──────────────────┘
+                  ↓
+             Activities
+        ┌─────────┴─────────┐
+        ↓                   ↓
+   PostgreSQL             MongoDB
+   business truth         audit/context
+        │
+        └──── future B7 ──→ AttachmentStore
+```
 
-## What mk0 must prove
+The channel is replaceable. Temporal owns durable orchestration. PostgreSQL owns canonical Customer/session business truth. MongoDB owns required application audit/context. AttachmentStore will own binary/document truth only after B7 is separately authorized and implemented.
 
-- controlled input can enter from the CTA boundary;
-- structurally invalid input is rejected before business side effects;
-- a structurally valid registration intent may start with incomplete Customer business data and wait durably for policy-required fields;
-- the accepted command starts the full Temporal-managed workflow;
-- Temporal durably owns state, retries, worker recovery and workflow progress;
-- the first Workflow is `RegisterNewCustomer`;
-- the workflow follows the approved DataModel v3 / TimeSlots Customer semantics;
-- PostgreSQL persists canonical Customer and registration/idempotency state;
-- MongoDB persists required execution/audit/context evidence;
-- attachments, when present, are persisted through a separate attachment capability and safely referenced from business data;
-- CTA disconnect/reconnect does not interrupt an accepted workflow;
-- retries/restarts do not duplicate Customers, logs or logical attachments;
-- the final outcome is queryable and auditable.
+## What mk0 has physically proven
 
-## First workflow
+The attachment-free core has runtime evidence for:
 
-> **Register New Customer**
+- CLI and Postman-compatible HTTP CTA entry through the same canonical adapter contract;
+- structurally invalid start rejection before business execution;
+- legal intent-only start into `WAITING_FOR_REQUIRED_DATA`;
+- multi-round `ProvideCustomerData` Updates on the same Workflow;
+- real Temporal Service, Task Queue, Worker, Activities, Query, Update and Event History;
+- CTA process loss without loss of accepted Workflow state;
+- completed-session exact replay to the same Workflow/Run;
+- typed `SESSION_IDEMPOTENCY_CONFLICT` for materially different reuse of the same business-scoped session;
+- PostgreSQL Customer/session persistence and retry safety;
+- hard-duplicate resolution without a second Customer;
+- soft-duplicate waiting without silently becoming a hard rule;
+- mandatory MongoDB audit before terminal success;
+- typed failure instead of false success when mandatory audit exhausts retries;
+- Worker loss after PostgreSQL Customer creation followed by recovery of the same Workflow/Run without duplicate Customer;
+- zero Appointment / ResourceReservation / Availability side effects.
 
-The CTA does not register the Customer itself. It submits the controlled command. Temporal manages the workflow and Activities that produce the persistence effects.
+## First Workflow
 
-## Data-model baseline
+> **RegisterNewCustomer**
 
-mk0 uses **DataModel v3 / TimeSlots** as the canonical business-model baseline.
+`RegisterNewCustomer` is the first architecture specimen, not the permanent definition of Engines.
 
-For the first workflow the relevant concern is `Customer`. `RegisterNewCustomer` creates no `Appointment`, `ResourceReservation`, availability mutation, service execution or scheduling side effect.
+Its certified attachment-free path is:
+
+```text
+CTA
+→ Temporal start
+→ RegistrationPolicy
+→ wait/update when required
+→ duplicate check
+→ PostgreSQL Customer or existing-Customer resolution
+→ mandatory MongoDB audit
+→ PostgreSQL audited finalization
+→ CREATED | ALREADY_EXISTS
+```
+
+A soft duplicate remains at `WAITING_FOR_DUPLICATE_DECISION`.
+
+## Session identity
+
+Registration session idempotency is business-scoped:
+
+```text
+(operation, businessSlug, idempotencyKeyHash)
+```
+
+The normalized material initial start is fingerprinted.
+
+```text
+same identity + same initial fingerprint
+→ same logical Workflow/session
+→ same completed Workflow/Run on replay
+
+same identity + different initial fingerprint
+→ SESSION_IDEMPOTENCY_CONFLICT
+```
+
+Later `ProvideCustomerData` Updates evolve durable Workflow state without rewriting the original fingerprint.
+
+## Current proof surfaces
+
+### CLI
+
+The first command-oriented CTA proof surface.
+
+### Postman-compatible HTTP
+
+A framework-free `node:http` adapter proves a second replaceable transport. An importable Postman collection is stored under:
+
+```text
+mk0/runtime/postman/
+```
+
+This HTTP process is not required to stay alive after Temporal accepts the Workflow.
 
 ## Persistence authority
 
-- **PostgreSQL**: canonical Customer + registration/idempotency truth.
-- **MongoDB**: application execution/audit/workflow context.
-- **AttachmentStore**: separate binary/document persistence capability; physical technology remains a Build decision.
-- **Temporal**: orchestration authority and durable execution history, not Customer truth.
+- **PostgreSQL** — canonical Customer + registration/idempotency business truth.
+- **MongoDB** — required application execution/audit/context evidence.
+- **Temporal** — orchestration authority and durable Event History.
+- **AttachmentStore** — future B7 binary/document authority; not yet runtime-certified.
 
-Temporal may use its own infrastructure database. That persistence is isolated from the Engines application business databases.
+Temporal's own internal persistence is separate from Engines application business databases.
 
-## Repository structure
+## Attachment boundary
 
-See [`mk0/README.md`](mk0/README.md).
+Attachment support is intentionally not being inferred from the successful core.
 
-## Build rule
+The following Golden cases remain explicitly deferred:
 
-**No application framework and no production implementation is selected until Design, Plan, Test contract and Golden Dataset gates are approved.**
+```text
+GD-003 one attachment
+GD-004 multiple attachments
+GD-009 transient AttachmentStore failure
+GD-010 permanent attachment integrity mismatch
+```
+
+B7 cannot enter Build until project authority freezes the physical AttachmentStore technology, synthetic fixtures, expected SHA-256 values and the required integrity/retry/TTL semantics.
+
+## Repository navigation
+
+- [`mk0/README.md`](mk0/README.md) — architecture/specimen overview.
+- [`mk0/Design/`](mk0/Design/) — design decisions and closure decisions.
+- [`mk0/Plan/`](mk0/Plan/) — authorization and gate records.
+- [`mk0/Test/`](mk0/Test/) — frozen runtime test contract.
+- [`mk0/golden-dataset/`](mk0/golden-dataset/) — machine-readable Golden expectations.
+- [`mk0/runtime/`](mk0/runtime/) — executable mk0 runtime.
+- [`mk0/Build/evidence/`](mk0/Build/evidence/) — stage and integrated certification receipts.
+
+## Current gate
+
+The next transition is not another attachment-free core feature.
+
+```text
+ATTACHMENT-FREE MK0 CORE
+          ✅ SYSTEM CERTIFIED
+                 ↓
+       PROJECT AUTHORITY B7 DECISION
+                 ↓
+       AttachmentStore closure + Build
+                 ↓
+       GD-003/004/009/010
+                 ↓
+       FULL MK0 GOLDEN CERTIFICATION
+```
+
+Until B7 is explicitly authorized and certified, the correct statement is:
+
+> **The attachment-free mk0 core is release-ready as a laboratory core; full mk0 is not yet complete.**
