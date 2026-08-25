@@ -102,6 +102,79 @@ jobs:
           test ! -d src/domain
           test ! -d src/contracts/register-new-customer
 
+      - name: Create structured B0 evidence
+        run: |
+          mkdir -p evidence/ci
+          SMOKE_JSON="$(grep 'B0_TEMPORAL_SMOKE_OK' /tmp/mk0-smoke.log | tail -1)"
+          test -n "$SMOKE_JSON"
+
+          NODE_VERSION="$(node --version)"
+          NPM_VERSION="$(npm --version)"
+          TEMPORAL_CLI_VERSION="$(temporal --version | tr -d '\r')"
+          TEMPORAL_SDK_VERSION="$(npm ls @temporalio/client --json | jq -r '.dependencies["@temporalio/client"].version')"
+          POSTGRES_VERSION="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'show server_version')"
+          MONGO_VERSION="$(docker compose exec -T mongo mongosh --quiet --eval 'db.version()')"
+
+          jq -n \
+            --arg schemaVersion 'mk0.b0.evidence.v1' \
+            --arg repository '${{ github.repository }}' \
+            --arg commit "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg node "$NODE_VERSION" \
+            --arg npm "$NPM_VERSION" \
+            --arg temporalCli "$TEMPORAL_CLI_VERSION" \
+            --arg temporalSdk "$TEMPORAL_SDK_VERSION" \
+            --arg temporalAddress 'localhost:7233' \
+            --arg temporalUi 'http://localhost:8233' \
+            --arg temporalNamespace 'default' \
+            --arg taskQueue 'engines-mk0-registration' \
+            --arg postgres "$POSTGRES_VERSION" \
+            --arg mongo "$MONGO_VERSION" \
+            --argjson smoke "$SMOKE_JSON" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              commit: $commit,
+              githubActions: {runId: $runId, runAttempt: $runAttempt},
+              runtime: {node: $node, npm: $npm},
+              temporal: {
+                cli: $temporalCli,
+                sdk: $temporalSdk,
+                address: $temporalAddress,
+                ui: $temporalUi,
+                namespace: $temporalNamespace,
+                taskQueue: $taskQueue,
+                workflowSmoke: $smoke
+              },
+              applicationStores: {
+                postgres: {version: $postgres, probe: "PASS"},
+                mongo: {version: $mongo, probe: "PASS"}
+              },
+              assertions: {
+                typecheck: "PASS",
+                composeModel: "PASS",
+                temporalService: "PASS",
+                temporalWebUi: "PASS",
+                temporalWorker: "PASS",
+                temporalWorkflow: "PASS",
+                noBusinessSchemaInB0: "PASS"
+              }
+            }' > evidence/ci/b0-runtime-evidence.json
+
+          cp package-lock.json evidence/ci/package-lock.json
+          cp /tmp/mk0-worker.log evidence/ci/worker.log
+          cp /tmp/mk0-smoke.log evidence/ci/smoke.log
+          cat evidence/ci/b0-runtime-evidence.json
+
+      - name: Upload B0 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b0-runtime-evidence-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Capture versions
         if: always()
         run: |
