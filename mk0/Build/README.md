@@ -2,19 +2,24 @@
 
 ## Status
 
-**NOT AUTHORIZED YET**
+**AUTHORIZED — STAGED B0–B6**
 
-This directory is intentionally documentation-only.
+Approval record:
 
-No application framework is selected or required for mk0.
+```text
+mk0/Plan/pre-build-approval-2026-08-24.md
+```
 
-## Future build target
+`B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
 
-When authorized, Build must realize only:
+No application/web framework is selected or required for mk0.
+
+## Authorized build target
 
 ```text
 CTA channel
-   Postman / CLI first
+   CLI first
+   Postman transport later
         ↓
 CTA Adapter contract
         ↓
@@ -30,8 +35,40 @@ FULL TEMPORAL ORCHESTRATION ENGINE
 Persistence Activities
    ├── PostgreSQL → Customer + registration/idempotency truth
    ├── MongoDB    → execution/audit/workflow context
-   └── AttachmentStore → optional binary/document persistence
+   └── AttachmentStore → B7 gated
 ```
+
+## Authorized sequence
+
+```text
+B0  runtime/repository skeleton                         ← ACTIVE
+B1  canonical contracts + versioned RegistrationPolicy
+B2  real Temporal runtime/topology + visibility proof
+B3  first CLI CTA Adapter
+B4  Worker + Task Queue + interactive RegisterNewCustomer
+B5  PostgreSQL duplicate/customer/registration Activities
+B6  MongoDB mandatory interaction/audit Activities
+B7  AttachmentStore                                    ← GATED
+```
+
+Build must not skip forward by embedding later business logic inside an earlier stage.
+
+## B0 frozen runtime choice
+
+```text
+Language/runtime:        TypeScript / Node.js 20+
+Temporal TypeScript SDK: 1.22.0
+Temporal local runtime:  official Temporal CLI development server
+Temporal endpoint:       localhost:7233
+Temporal Web UI:         localhost:8233
+Namespace:               default for B0 laboratory proof
+Task Queue:              engines-mk0-registration
+PostgreSQL:              Docker service
+MongoDB:                 Docker service
+Web/application framework: none
+```
+
+B0 proves runtime boundaries, not Customer semantics.
 
 ## Non-negotiable Temporal rule
 
@@ -43,15 +80,15 @@ mk0 must not use:
 - a CTA process that must remain alive for Workflow progress;
 - a reduced custom orchestrator that bypasses Task Queue/Worker semantics.
 
-The first proof must use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
+The proof must use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
 
 ## CTA rule
 
 The channel and adapter remain replaceable.
 
 ```text
-Postman
-CLI
+CLI now
+Postman next
 Form later
 WhatsApp later
 Telegram later
@@ -63,45 +100,35 @@ CTA Adapter
 Temporal
 ```
 
-A CLI may be the first executable CTA Adapter because it can speak to Temporal through the official client/SDK without introducing a web framework.
+The CLI may speak to Temporal through the official client SDK while preserving the canonical CTA contract. It does not become Workflow authority.
 
-Postman can be proven through a thin transport-compatible CTA Adapter. That adapter remains transport only and cannot own orchestration or persistence sequencing.
+A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal.
 
-A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal, producing durable waiting/Update behavior when required.
-
-## Expected logical boundaries
+## Runtime/repository boundaries
 
 ```text
-contracts/
-  register-new-customer/
-
-cta/
-  adapter-contract/
-  cli/
-  postman-transport/          later in mk0 proof
-
-orchestration/
-  temporal/
-    workflows/
-    activities/
-    workers/
-    task-queues/
-
-persistence/
-  postgres/
-    customer/
-    registration-command/
-    attachment-reference/
-
-  mongo/
-    execution-audit/
-    workflow-context/
-
-  attachments/
-    attachment-store-adapter/
+mk0/runtime/
+  package.json
+  tsconfig.json
+  .env.example
+  docker-compose.yml
+  src/
+    config/
+    orchestration/
+      temporal/
+        workers/
+        workflows/
+        activities/
+    cta/
+      cli/
+    persistence/
+      postgres/
+      mongo/
+  scripts/
+  evidence/
 ```
 
-This is conceptual and does not authorize scaffolding yet.
+B0 may create these boundaries and connectivity smoke probes. Business workflow behavior belongs to B1+.
 
 ## Frozen constraints
 
@@ -109,7 +136,7 @@ This is conceptual and does not authorize scaffolding yet.
 - all channels converge on one CTA Adapter contract;
 - CTA validates structural/session input before Temporal start, not final Customer completeness;
 - CTA/adapter never writes business persistence directly;
-- full Temporal owns durable sequencing/retries/recovery;
+- Temporal owns durable sequencing/retries/recovery;
 - real Task Queue/Worker semantics are required;
 - Workflow code calls no DB/file/network driver directly;
 - Activities are retry-safe/idempotent;
@@ -117,34 +144,33 @@ This is conceptual and does not authorize scaffolding yet.
 - normalized material initial-start input is fingerprinted for exact replay/conflict detection;
 - later `ProvideCustomerData` Updates evolve Workflow state without rewriting the initial-start fingerprint;
 - PostgreSQL is canonical Customer + registration/idempotency truth;
-- Customer persistence follows approved DataModel v3 / TimeSlots semantics;
 - MongoDB stores execution/audit/workflow context, not a shadow Customer truth;
 - required MongoDB success-gating milestones must exist before `CREATED` or `ALREADY_EXISTS` is reported as successful;
 - exhausted mandatory-audit failure cannot be converted into success;
-- attachments use a separate persistence contract;
+- attachments use a separate persistence contract and remain gated in B7;
 - CTA disconnect must not stop an accepted Workflow;
 - Worker restart must not lose accepted Workflow progress;
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-## Authorization record
+## B0 completion rule
 
-When Build is approved, record:
+B0 is not complete because files exist.
 
-- approval date;
-- approved Design commit;
-- approved Golden Dataset version;
-- Temporal Service topology;
-- namespace;
-- Task Queue/Worker topology;
-- Temporal SDK language/version;
-- PostgreSQL topology;
-- MongoDB topology;
-- chosen AttachmentStore technology if attachment cases are enabled;
-- chosen first CTA Adapter implementation;
-- Postman transport decision;
-- exact Build ticket sequence.
+It completes only when runtime evidence proves:
 
-Until then:
+```text
+Node runtime/version observed
+Temporal Service reachable at configured endpoint
+Temporal Web UI reachable
+real Worker polls engines-mk0-registration
+real B0 smoke Workflow executes through Temporal
+PostgreSQL connectivity succeeds
+MongoDB connectivity succeeds
+runtime can stop/restart reproducibly
+no Customer/Appointment business mutation exists
+```
 
-> **No code in Build.**
+Until that evidence exists:
+
+> **B0 = IMPLEMENTED IN REPOSITORY / RUNTIME UNPROVEN.**
