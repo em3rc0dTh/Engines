@@ -14,7 +14,8 @@ Status vocabulary:
 SPECIFIED             contract exists and is materially explicit
 ALIGNED               known cross-document conflicts are resolved
 OPEN                  a required decision/evidence item remains
-APPROVAL_NOT_RECORDED  contract may be ready for review, but no approval record exists
+READY_FOR_APPROVAL    independent pre-Build review found no known contract blocker
+APPROVAL_NOT_RECORDED project authority has not yet recorded authorization
 BLOCKS_BUILD           Build authorization must not be declared while this remains
 BUILD_TIME             intentionally selected during authorized Build, not a pre-Build architecture gap
 RUNTIME_GATE           cannot be proven until implementation exists
@@ -22,9 +23,32 @@ RUNTIME_GATE           cannot be proven until implementation exists
 
 ---
 
+## Formal review checkpoint
+
+A formal agnostic pre-Build review is now recorded at:
+
+```text
+Plan/pre-build-review-2026-08-24.md
+```
+
+Review result:
+
+```text
+RECOMMENDATION: READY_FOR_APPROVAL
+BUILD AUTHORIZED BY REVIEW: NO
+RECOMMENDED FIRST BUILD TICKET: B0
+RECOMMENDED ATTACHMENT DISPOSITION: OPTION B / B7 GATED
+```
+
+The review found no known unresolved architecture, core Golden Dataset or Test-contract contradiction after the closure pass.
+
+The remaining transition is a **project authority decision**, not another architecture-discovery cycle.
+
+---
+
 ## M0 — Reality / source lock
 
-**Status: SPECIFIED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
 Materially present:
 
@@ -43,14 +67,14 @@ Build impact:
 
 ```text
 not an architecture-content blocker
-but formal approval record is still absent
+formal approval record is still absent
 ```
 
 ---
 
 ## M1 — Architecture lock
 
-**Status: SPECIFIED / ALIGNED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
 Current locked spine:
 
@@ -77,7 +101,7 @@ Open approval evidence:
 
 ## M2 — Interactive RegisterNewCustomer contract lock
 
-**Status: SPECIFIED / ALIGNED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
 Specified:
 
@@ -106,7 +130,7 @@ legal session → Temporal → WAITING_FOR_REQUIRED_DATA when incomplete
 
 ## M3 — Temporal orchestration lock
 
-**Status: SPECIFIED AT ARCHITECTURE LEVEL / BUILD_TIME DETAILS REMAIN / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED AT ARCHITECTURE LEVEL / READY_FOR_APPROVAL / BUILD_TIME DETAILS REMAIN / APPROVAL_NOT_RECORDED**
 
 Pre-Build invariants are explicit:
 
@@ -131,19 +155,17 @@ The following are correctly **BUILD_TIME**, not reasons to select a framework or
 
 ### Replay/versioning interpretation
 
-Before Build, mk0 must freeze the invariant:
+Before Build, mk0 freezes the invariant:
 
 > A deployed Workflow change must preserve deterministic replay/version compatibility for executions whose history was created by an older implementation.
 
 Build must then select and document the SDK-specific mechanism that satisfies that invariant before introducing a non-replay-compatible Workflow change.
 
-This resolves the apparent conflict between `Plan` asking for a versioning/replay strategy and the Temporal quarry leaving the exact implementation mechanism open until Build.
-
 ---
 
 ## M4 — Persistence contract lock
 
-**Status: SPECIFIED / ALIGNED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
 Frozen authority:
 
@@ -171,15 +193,13 @@ BUILD_TIME persistence choices:
 - attachment TTL/limits;
 - production encryption/backup profile.
 
-mk0 synthetic-data rule is already frozen; complete production PII retention/encryption policy is a production gate, not permission to put real PII into mk0 tests.
-
 ---
 
 ## M5 — Test contract lock
 
-**Status: SPECIFIED / ALIGNED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
-The Test contract now covers:
+The Test contract covers:
 
 - legal partial start;
 - invalid session start;
@@ -204,7 +224,7 @@ Classification: `RUNTIME_GATE` after Build authorization.
 
 ## M6 — Golden Dataset v0
 
-**Status: SPECIFIED / MACHINE-READABLE / ALIGNED / APPROVAL_NOT_RECORDED**
+**Status: SPECIFIED / MACHINE-READABLE / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
 
 Current machine-readable manifest freezes:
 
@@ -217,14 +237,17 @@ Current machine-readable manifest freezes:
 
 Attachment fixture hashes remain explicitly marked `TO_BE_FROZEN*`.
 
-Interpretation:
+Recommended disposition from formal review:
 
-- this does not authorize fake attachment evidence;
-- exact binary fixture hashes must be frozen before attachment runtime cases can be certified;
-- AttachmentStore technology is a Build decision;
-- attachment runtime certification remains blocked until fixture + technology are concrete.
+```text
+OPTION B
 
-This does not require choosing the whole application framework before B0.
+B0–B6 may proceed after formal authorization.
+B7 remains gated until AttachmentStore technology,
+synthetic fixture binaries and SHA-256 expectations are frozen.
+```
+
+This keeps attachment behavior inside mk0 without forcing unresolved binary-storage choices to block the core orchestration proof.
 
 ---
 
@@ -232,9 +255,11 @@ This does not require choosing the whole application framework before B0.
 
 ```text
 Architecture content            STRONG / materially specified
-Known contract contradictions   corrected in current closure pass
+Known contract contradictions   corrected in closure pass
+Formal pre-Build review         COMPLETE / READY_FOR_APPROVAL
 Formal Design approval record   MISSING
 Formal Golden approval record   MISSING
+Project authority decision      REQUIRED NEXT
 Build/README status             NOT AUTHORIZED YET
 Runtime evidence                impossible until Build exists
 ```
@@ -243,20 +268,31 @@ Therefore:
 
 > **Do not add production code yet.**
 
-The next documentation milestone is a formal **pre-Build review/approval record**, not framework scaffolding.
+## Next transition
 
-## Proposed authorization record when the gate is actually approved
+The next point is now exactly:
 
-Record at minimum:
+```text
+PROJECT AUTHORITY BUILD-GATE DECISION
+```
+
+If approved, the repository records:
 
 ```text
 approval date
 approved repository commit SHA
-approved Design package version/paths
+approved Design package
 approved Golden Dataset version
-known BUILD_TIME decisions intentionally deferred
-first authorized Build ticket
-explicit statement that Build/README may change from NOT AUTHORIZED YET
+accepted BUILD_TIME deferrals
+attachment disposition
+first authorized Build ticket = B0
+explicit authorization to change Build/README status
 ```
 
-No such approval is asserted by this ledger itself.
+Only after that record exists does mk0 enter:
+
+```text
+B0 — Runtime / Repository Skeleton
+```
+
+No approval is asserted by this ledger itself.
