@@ -1,0 +1,150 @@
+name: mk0 B3 CLI CTA certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b3-cli-cta-adapter
+    paths:
+      - 'mk0/runtime/src/cta/**'
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b3-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/src/cta/**'
+      - 'mk0/runtime/src/contracts/register-new-customer/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b3-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b3-cli-cta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 canonical contracts
+        run: npm run test:b1
+
+      - name: Run B3 CTA contract tests
+        run: npm run test:b3
+
+      - name: CLI smoke intent-only input
+        run: |
+          npm run cta:cli -- register-new-customer '{"businessSlug":"golden-business","idempotencyKey":"b3-smoke-intent","correlationId":"b3-corr"}' \
+            | tee /tmp/mk0-b3-intent.log
+          LINE="$(grep 'CTA_ACCEPTED' /tmp/mk0-b3-intent.log | tail -1)"
+          test -n "$LINE"
+          JSON="${LINE#CTA_ACCEPTED }"
+          echo "$JSON" | jq -e '
+            .ok == true and
+            .status == "READY_FOR_ORCHESTRATION" and
+            .envelope.businessSlug == "golden-business" and
+            .envelope.request.idempotencyKey == "b3-smoke-intent" and
+            .envelope.request.correlationId == "b3-corr" and
+            .envelope.request.channel == "cli" and
+            .envelope.draft == {}
+          ' >/dev/null
+
+      - name: CLI smoke full Customer input
+        run: |
+          printf '%s' '{"businessSlug":"golden-business","idempotencyKey":"b3-smoke-full","draft":{"customer":{"name":"  Ada Lovelace  ","contact":{"email":" ADA@EXAMPLE.COM "}}}}' \
+            | npm run cta:cli -- register-new-customer \
+            | tee /tmp/mk0-b3-full.log
+          LINE="$(grep 'CTA_ACCEPTED' /tmp/mk0-b3-full.log | tail -1)"
+          JSON="${LINE#CTA_ACCEPTED }"
+          echo "$JSON" | jq -e '
+            .ok == true and
+            .envelope.draft.customer.name == "Ada Lovelace" and
+            .envelope.draft.customer.contact.email == "ada@example.com"
+          ' >/dev/null
+
+      - name: CLI rejects unknown command
+        run: |
+          set +e
+          npm run cta:cli -- delete-customer '{"businessSlug":"golden-business","idempotencyKey":"b3-bad-command"}' \
+            > /tmp/mk0-b3-rejected.out 2>&1
+          CODE=$?
+          set -e
+          cat /tmp/mk0-b3-rejected.out
+          test "$CODE" -eq 2
+          grep -q 'CTA_REJECTED' /tmp/mk0-b3-rejected.out
+          grep -q 'UNKNOWN_OPERATION' /tmp/mk0-b3-rejected.out
+
+      - name: Assert CTA remains transport-only
+        run: |
+          if grep -R -n -E "from ['\"](pg|mongodb|@temporalio/)" src/cta; then
+            echo 'CTA must not import persistence drivers or Temporal SDK directly in B3'
+            exit 1
+          fi
+          test ! -f src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          echo 'B3_TRANSPORT_ONLY_BOUNDARY_OK'
+
+      - name: Create B3 evidence
+        run: |
+          mkdir -p evidence/ci/b3
+          jq -n \
+            --arg schemaVersion 'mk0.b3.evidence.v1' \
+            --arg repository '${{ github.repository }}' \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $githubRunId},
+              channel: "cli",
+              assertions: {
+                lockedInstall: "PASS",
+                typecheck: "PASS",
+                b1Regression: "PASS",
+                b3ContractTests: "PASS",
+                intentOnlyAccepted: "PASS",
+                fullCustomerAccepted: "PASS",
+                canonicalNormalization: "PASS",
+                unknownCommandRejected: "PASS",
+                channelMetadataInjected: "PASS",
+                noDirectTemporalDependency: "PASS",
+                noDirectPersistenceDependency: "PASS",
+                noBusinessWorkflowHiddenInAdapter: "PASS"
+              }
+            }' > evidence/ci/b3/b3-cli-cta-evidence.json
+          cp /tmp/mk0-b3-intent.log evidence/ci/b3/intent-only.log
+          cp /tmp/mk0-b3-full.log evidence/ci/b3/full-customer.log
+          cp /tmp/mk0-b3-rejected.out evidence/ci/b3/rejected-command.log
+          cat evidence/ci/b3/b3-cli-cta-evidence.json
+
+      - name: Upload B3 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b3-cli-cta-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/b3/
+          if-no-files-found: error
+          retention-days: 90
