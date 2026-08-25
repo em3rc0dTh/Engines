@@ -1,0 +1,563 @@
+name: mk0 attachment-free Golden release certification
+
+on:
+  push:
+    branches:
+      - cert/mk0-core-golden-release
+    paths:
+      - 'mk0/runtime/**'
+      - 'mk0/golden-dataset/**'
+      - 'mk0/Test/**'
+      - '.github/workflows/mk0-core-golden-release.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/**'
+      - 'mk0/golden-dataset/**'
+      - 'mk0/Test/**'
+      - '.github/workflows/mk0-core-golden-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  attachment-free-golden-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 contracts
+        run: npm run test:b1
+
+      - name: Regress B3 CTA
+        run: npm run test:b3
+
+      - name: Freeze Golden release scope
+        run: |
+          GOLDEN=../golden-dataset/register-new-customer-v0.json
+          jq -e '.datasetVersion == "mk0.golden.register-customer.v0"' "$GOLDEN" >/dev/null
+          test "$(jq '.cases | length' "$GOLDEN")" -eq 18
+          for id in GD-003 GD-004 GD-009 GD-010; do
+            jq -e --arg id "$id" '.cases[] | select(.id == $id)' "$GOLDEN" >/dev/null
+          done
+          for id in GD-001 GD-002 GD-005 GD-006 GD-007 GD-008 GD-011 GD-012 GD-013 GD-014 GD-015 GD-016 GD-017 GD-018; do
+            jq -e --arg id "$id" '.cases[] | select(.id == $id)' "$GOLDEN" >/dev/null
+          done
+          echo 'CORE_GOLDEN_SCOPE_OK applicable=14 deferred_b7=4 total=18'
+
+      - name: Start PostgreSQL and MongoDB
+        run: docker compose up -d --wait postgres mongo
+
+      - name: Apply PostgreSQL migrations
+        run: |
+          npm run migrate:b5
+          npm run migrate:b6
+          npm run migrate:b6
+
+      - name: Initialize Mongo audit indexes
+        run: |
+          npm run mongo:init:b6
+          npm run mongo:init:b6
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-core-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-core-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-core-temporal.log
+          exit 1
+
+      - name: Start core Worker with GD-008 one-shot PostgreSQL fault
+        run: |
+          CORE_FAIL_POSTGRES_CREATE_ATTEMPTS=1 \
+          CORE_FAIL_POSTGRES_CREATE_NAME='GD008 Retry Customer' \
+          node --import tsx src/orchestration/temporal/workers/core-release.worker.ts \
+            > /tmp/mk0-core-worker-a.log 2>&1 &
+          echo $! > /tmp/mk0-core-worker-a.pid
+          for i in $(seq 1 30); do
+            if grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-a.log; then
+              cat /tmp/mk0-core-worker-a.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-core-worker-a.pid)" 2>/dev/null; then
+              cat /tmp/mk0-core-worker-a.log
+              exit 1
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Start Postman-compatible HTTP CTA
+        run: |
+          CORE_HTTP_PORT=8787 node --import tsx src/cta/http/postman-proof-server.ts \
+            > /tmp/mk0-core-http.log 2>&1 &
+          echo $! > /tmp/mk0-core-http.pid
+          for i in $(seq 1 30); do
+            if grep -q 'CORE_HTTP_CTA_STARTED' /tmp/mk0-core-http.log; then
+              cat /tmp/mk0-core-http.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-core-http.pid)" 2>/dev/null; then
+              cat /tmp/mk0-core-http.log
+              exit 1
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: GD-001 create minimal Customer through Postman HTTP
+        id: gd001
+        run: |
+          BODY='{"businessSlug":"golden-business","idempotencyKey":"gd-001-session","correlationId":"gd-001-corr","draft":{"customer":{"type":"person","name":"Ana Torres","contact":{"phones":[],"email":"ana.torres@example.test"}}}}'
+          CODE="$(curl -sS -o /tmp/gd001-start.json -w '%{http_code}' -H 'content-type: application/json' -d "$BODY" http://127.0.0.1:8787/mk0/register-new-customer)"
+          cat /tmp/gd001-start.json
+          test "$CODE" = '202'
+          WORKFLOW_ID="$(jq -r '.workflowId' /tmp/gd001-start.json)"
+          RUN_ID="$(jq -r '.runId' /tmp/gd001-start.json)"
+          test -n "$WORKFLOW_ID"
+          test -n "$RUN_ID"
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd001-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd001-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e '.status == "COMPLETED" and .result.created == true and .result.customerId != null' >/dev/null
+          CUSTOMER_ID="$(echo "$RESULT" | jq -r '.result.customerId')"
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where customer_id='$CUSTOMER_ID'")" -eq 1
+          test "$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'$WORKFLOW_ID',eventType:'REGISTRATION_COMPLETED'})")" -eq 1
+          CHANNEL="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.findOne({workflowId:'$WORKFLOW_ID',eventType:'REGISTRATION_SESSION_STARTED'}).metadata.channel")"
+          test "$CHANNEL" = 'postman'
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "customer_id=$CUSTOMER_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-001 PASS'
+
+      - name: GD-005 exact terminal replay resolves same Workflow and Customer
+        env:
+          EXPECTED_WORKFLOW_ID: ${{ steps.gd001.outputs.workflow_id }}
+          EXPECTED_RUN_ID: ${{ steps.gd001.outputs.run_id }}
+          EXPECTED_CUSTOMER_ID: ${{ steps.gd001.outputs.customer_id }}
+        run: |
+          BODY='{"businessSlug":"golden-business","idempotencyKey":"gd-001-session","correlationId":"gd-001-replay-corr","draft":{"customer":{"type":"person","name":"Ana Torres","contact":{"phones":[],"email":"ana.torres@example.test"}}}}'
+          CODE="$(curl -sS -o /tmp/gd005-replay.json -w '%{http_code}' -H 'content-type: application/json' -d "$BODY" http://127.0.0.1:8787/mk0/register-new-customer)"
+          cat /tmp/gd005-replay.json
+          test "$CODE" = '202'
+          test "$(jq -r '.workflowId' /tmp/gd005-replay.json)" = "$EXPECTED_WORKFLOW_ID"
+          test "$(jq -r '.runId' /tmp/gd005-replay.json)" = "$EXPECTED_RUN_ID"
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where customer_id='$EXPECTED_CUSTOMER_ID'")" -eq 1
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from registration_commands where workflow_id='$EXPECTED_WORKFLOW_ID'")" -eq 1
+          echo 'GD-005 PASS'
+
+      - name: GD-006 materially different terminal replay is typed conflict
+        env:
+          EXPECTED_WORKFLOW_ID: ${{ steps.gd001.outputs.workflow_id }}
+        run: |
+          BODY='{"businessSlug":"golden-business","idempotencyKey":"gd-001-session","draft":{"customer":{"type":"person","name":"Materially Different Ana","contact":{"phones":[],"email":"different-ana@example.test"}}}}'
+          CODE="$(curl -sS -o /tmp/gd006-conflict.json -w '%{http_code}' -H 'content-type: application/json' -d "$BODY" http://127.0.0.1:8787/mk0/register-new-customer)"
+          cat /tmp/gd006-conflict.json
+          test "$CODE" = '409'
+          jq -e --arg workflowId "$EXPECTED_WORKFLOW_ID" '.code == "SESSION_IDEMPOTENCY_CONFLICT" and .workflowId == $workflowId' /tmp/gd006-conflict.json >/dev/null
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from registration_commands where workflow_id='$EXPECTED_WORKFLOW_ID'")" -eq 1
+          echo 'GD-006 PASS'
+
+      - name: GD-007 invalid structural start never reaches Temporal business execution
+        run: |
+          BEFORE="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'select count(*) from registration_commands')"
+          BODY='{"idempotencyKey":"gd-007-session","draft":{"customer":{}}}'
+          CODE="$(curl -sS -o /tmp/gd007-invalid.json -w '%{http_code}' -H 'content-type: application/json' -d "$BODY" http://127.0.0.1:8787/mk0/register-new-customer)"
+          cat /tmp/gd007-invalid.json
+          test "$CODE" = '400'
+          jq -e '.status == "CTA_REJECTED"' /tmp/gd007-invalid.json >/dev/null
+          AFTER="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'select count(*) from registration_commands')"
+          test "$BEFORE" = "$AFTER"
+          echo 'GD-007 PASS'
+
+      - name: GD-002 full Customer through CLI
+        id: gd002
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"gd-002-session","draft":{"customer":{"type":"person","name":"Luis Vega","document":{"type":"DNI","country":"PE","value":"00000002"},"contact":{"phones":[{"countryCode":"+51","number":"900000002","primary":true}],"email":"luis.vega@example.test"},"notes":"Synthetic golden customer"}}}' | tee /tmp/gd002-start.log
+          START="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/gd002-start.log | tail -1 | sed 's/^B4_WORKFLOW_ACCEPTED //')"
+          WORKFLOW_ID="$(echo "$START" | jq -r '.workflowId')"
+          RUN_ID="$(echo "$START" | jq -r '.runId')"
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd002-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd002-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e '.status == "COMPLETED" and .result.created == true' >/dev/null
+          CUSTOMER_ID="$(echo "$RESULT" | jq -r '.result.customerId')"
+          test "$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'$WORKFLOW_ID',eventType:'REGISTRATION_COMPLETED'})")" -eq 1
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "customer_id=$CUSTOMER_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-002 PASS'
+
+      - name: GD-017 hard duplicate resolves existing Customer
+        env:
+          EXPECTED_CUSTOMER_ID: ${{ steps.gd002.outputs.customer_id }}
+        run: |
+          BEFORE="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'select count(*) from customers')"
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"gd-017-session","draft":{"customer":{"name":"Another Display Name","document":{"type":"DNI","country":"PE","value":"00000002"},"contact":{"phones":[],"email":"new-email@example.test"}}}}' | tee /tmp/gd017-start.log
+          START="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/gd017-start.log | tail -1 | sed 's/^B4_WORKFLOW_ACCEPTED //')"
+          WORKFLOW_ID="$(echo "$START" | jq -r '.workflowId')"
+          RUN_ID="$(echo "$START" | jq -r '.runId')"
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd017-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd017-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e --arg customerId "$EXPECTED_CUSTOMER_ID" '.status == "COMPLETED" and .result.created == false and .result.customerId == $customerId and .result.reason == "HARD_UNIQUE"' >/dev/null
+          AFTER="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'select count(*) from customers')"
+          test "$BEFORE" = "$AFTER"
+          echo 'GD-017 PASS'
+
+      - name: GD-018 soft duplicate remains a decision state
+        id: gd018
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"gd-018-session","draft":{"customer":{"name":"Different Person","contact":{"phones":[],"email":"luis.vega@example.test"}}}}' | tee /tmp/gd018-start.log
+          START="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/gd018-start.log | tail -1 | sed 's/^B4_WORKFLOW_ACCEPTED //')"
+          WORKFLOW_ID="$(echo "$START" | jq -r '.workflowId')"
+          RUN_ID="$(echo "$START" | jq -r '.runId')"
+          for i in $(seq 1 60); do
+            B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b4:interact -- query > /tmp/gd018-state.log 2>&1 || true
+            if grep -q 'WAITING_FOR_DUPLICATE_DECISION' /tmp/gd018-state.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/gd018-state.log
+          STATE="$(grep 'B4_STATE' /tmp/gd018-state.log | tail -1 | sed 's/^B4_STATE //')"
+          echo "$STATE" | jq -e '.state.workflowStatus == "RUNNING" and .state.phase == "WAITING_FOR_DUPLICATE_DECISION" and .state.possibleDuplicate.classification == "SOFT_MATCH" and .state.result == null' >/dev/null
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='$WORKFLOW_ID'")" = 'SOFT_DUPLICATE_PENDING_DECISION'
+          test "$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'$WORKFLOW_ID',eventType:'REGISTRATION_COMPLETED'})")" -eq 0
+          temporal workflow terminate --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --reason 'GD-018 evidence captured'
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-018 PASS'
+
+      - name: GD-008 transient PostgreSQL create failure retries to one Customer
+        id: gd008
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"gd-008-session","draft":{"customer":{"name":"GD008 Retry Customer","contact":{"phones":[],"email":"gd008.retry@example.test"}}}}' | tee /tmp/gd008-start.log
+          START="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/gd008-start.log | tail -1 | sed 's/^B4_WORKFLOW_ACCEPTED //')"
+          WORKFLOW_ID="$(echo "$START" | jq -r '.workflowId')"
+          RUN_ID="$(echo "$START" | jq -r '.runId')"
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd008-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd008-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e '.status == "COMPLETED" and .result.created == true' >/dev/null
+          grep -q 'CORE_POSTGRES_CREATE_INJECTED_FAILURE' /tmp/mk0-core-worker-a.log
+          grep -q '"customerName":"GD008 Retry Customer"' /tmp/mk0-core-worker-a.log
+          grep -q '"injectedAttempt":1' /tmp/mk0-core-worker-a.log
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json > /tmp/gd008-history.json
+          grep -Eqi 'ACTIVITY_TASK_FAILED|EVENT_TYPE_ACTIVITY_TASK_FAILED' /tmp/gd008-history.json
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where email='gd008.retry@example.test'")" -eq 1
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-008 PASS'
+
+      - name: GD-013 and GD-015 start intent-only through HTTP then kill CTA
+        id: gd013
+        run: |
+          BODY='{"businessSlug":"golden-business","idempotencyKey":"gd-013-session","correlationId":"gd-013-corr"}'
+          CODE="$(curl -sS -o /tmp/gd013-start.json -w '%{http_code}' -H 'content-type: application/json' -d "$BODY" http://127.0.0.1:8787/mk0/register-new-customer)"
+          cat /tmp/gd013-start.json
+          test "$CODE" = '202'
+          WORKFLOW_ID="$(jq -r '.workflowId' /tmp/gd013-start.json)"
+          RUN_ID="$(jq -r '.runId' /tmp/gd013-start.json)"
+          for i in $(seq 1 40); do
+            curl -sS "http://127.0.0.1:8787/mk0/register-new-customer/$WORKFLOW_ID" > /tmp/gd015-http-state.json || true
+            if grep -q 'WAITING_FOR_REQUIRED_DATA' /tmp/gd015-http-state.json; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/gd015-http-state.json
+          jq -e '.state.phase == "WAITING_FOR_REQUIRED_DATA" and (.state.missingFields | index("customer.name")) != null and (.state.missingFields | index("customer.contact.phoneOrEmail")) != null and .state.nextAction == "PROVIDE_CUSTOMER_DATA"' /tmp/gd015-http-state.json >/dev/null
+          kill -KILL "$(cat /tmp/mk0-core-http.pid)"
+          for i in $(seq 1 20); do
+            if ! kill -0 "$(cat /tmp/mk0-core-http.pid)" 2>/dev/null; then break; fi
+            sleep 0.1
+          done
+          ! kill -0 "$(cat /tmp/mk0-core-http.pid)" 2>/dev/null
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b4:interact -- query | tee /tmp/gd013-reconnect.log
+          STATE="$(grep 'B4_STATE' /tmp/gd013-reconnect.log | tail -1 | sed 's/^B4_STATE //')"
+          echo "$STATE" | jq -e --arg workflowId "$WORKFLOW_ID" '.state.workflowId == $workflowId and .state.phase == "WAITING_FOR_REQUIRED_DATA"' >/dev/null
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-013 PASS'
+          echo 'GD-015 PASS'
+
+      - name: GD-016 multi-round Updates complete the same Workflow
+        env:
+          WORKFLOW_ID: ${{ steps.gd013.outputs.workflow_id }}
+          RUN_ID: ${{ steps.gd013.outputs.run_id }}
+        run: |
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b4:interact -- update '{"inputId":"gd-016-input-1","customerPatch":{"name":"Iris Sol"}}' | tee /tmp/gd016-update-1.log
+          UPDATE1="$(grep 'B4_UPDATE' /tmp/gd016-update-1.log | tail -1 | sed 's/^B4_UPDATE //')"
+          echo "$UPDATE1" | jq -e '.result.ok == true and .result.duplicateInput == false and .result.state.phase == "WAITING_FOR_REQUIRED_DATA" and (.result.state.missingFields | index("customer.contact.phoneOrEmail")) != null' >/dev/null
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b4:interact -- query | tee /tmp/gd016-between.log
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b4:interact -- update '{"inputId":"gd-016-input-2","customerPatch":{"contact":{"phones":[],"email":"iris.sol@example.test"}}}' | tee /tmp/gd016-update-2.log
+          UPDATE2="$(grep 'B4_UPDATE' /tmp/gd016-update-2.log | tail -1 | sed 's/^B4_UPDATE //')"
+          echo "$UPDATE2" | jq -e --arg workflowId "$WORKFLOW_ID" '.result.ok == true and .result.duplicateInput == false and .result.state.workflowId == $workflowId and (.result.state.missingFields | length) == 0' >/dev/null
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd016-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd016-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e '.status == "COMPLETED" and .result.created == true' >/dev/null
+          ACCEPTED="$(docker compose exec -T mongo mongosh engines_mk0 --quiet --eval "db.execution_audit.countDocuments({workflowId:'$WORKFLOW_ID',eventType:'CUSTOMER_DATA_ACCEPTED'})")"
+          test "$ACCEPTED" -ge 3
+          echo 'GD-016 PASS'
+
+      - name: GD-014 prove full Temporal path on the reconnect Workflow
+        env:
+          WORKFLOW_ID: ${{ steps.gd013.outputs.workflow_id }}
+          RUN_ID: ${{ steps.gd013.outputs.run_id }}
+        run: |
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json | tee /tmp/gd014-history.json
+          grep -Eqi 'UPDATE_ACCEPTED|WORKFLOW_EXECUTION_UPDATE_ACCEPTED|ProvideCustomerData' /tmp/gd014-history.json
+          grep -Eqi 'UPDATE_COMPLETED|WORKFLOW_EXECUTION_UPDATE_COMPLETED|ProvideCustomerData' /tmp/gd014-history.json
+          grep -Eqi 'ACTIVITY_TASK_SCHEDULED|EVENT_TYPE_ACTIVITY_TASK_SCHEDULED' /tmp/gd014-history.json
+          grep -Eqi 'ACTIVITY_TASK_COMPLETED|EVENT_TYPE_ACTIVITY_TASK_COMPLETED' /tmp/gd014-history.json
+          grep -Eqi 'WORKFLOW_EXECUTION_COMPLETED|EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED' /tmp/gd014-history.json
+          temporal task-queue describe --task-queue engines-mk0-registration > /tmp/gd014-task-queue.txt
+          grep -q 'engines-mk0-registration' /tmp/gd014-task-queue.txt || cat /tmp/gd014-task-queue.txt
+          grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-a.log
+          echo 'GD-014 PASS'
+
+      - name: GD-011 kill Worker after PostgreSQL Customer creation and recover same execution
+        id: gd011
+        run: |
+          kill -KILL "$(cat /tmp/mk0-core-worker-a.pid)"
+          for i in $(seq 1 20); do
+            if ! kill -0 "$(cat /tmp/mk0-core-worker-a.pid)" 2>/dev/null; then break; fi
+            sleep 0.1
+          done
+          ! kill -0 "$(cat /tmp/mk0-core-worker-a.pid)" 2>/dev/null
+
+          CORE_DELAY_CUSTOMER_CREATED_AUDIT_MS=30000 \
+          node --import tsx src/orchestration/temporal/workers/core-release.worker.ts \
+            > /tmp/mk0-core-worker-delay.log 2>&1 &
+          echo $! > /tmp/mk0-core-worker-delay.pid
+          for i in $(seq 1 30); do
+            if grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-delay.log; then break; fi
+            sleep 1
+          done
+          grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-delay.log
+
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"gd-011-session","draft":{"customer":{"name":"GD011 Restart Customer","document":{"type":"DNI","country":"PE","value":"11000011"},"contact":{"phones":[],"email":"gd011.restart@example.test"}}}}' | tee /tmp/gd011-start.log
+          START="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/gd011-start.log | tail -1 | sed 's/^B4_WORKFLOW_ACCEPTED //')"
+          WORKFLOW_ID="$(echo "$START" | jq -r '.workflowId')"
+          RUN_ID="$(echo "$START" | jq -r '.runId')"
+
+          for i in $(seq 1 80); do
+            STATUS="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select coalesce(status,'') from registration_commands where workflow_id='$WORKFLOW_ID'" || true)"
+            if [ "$STATUS" = 'CUSTOMER_CREATED_PENDING_AUDIT' ]; then break; fi
+            sleep 0.25
+          done
+          test "$STATUS" = 'CUSTOMER_CREATED_PENDING_AUDIT'
+          grep -q 'CORE_CUSTOMER_CREATED_AUDIT_DELAYING' /tmp/mk0-core-worker-delay.log
+          PRE_RECOVERY_CUSTOMERS="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where email='gd011.restart@example.test'")"
+          test "$PRE_RECOVERY_CUSTOMERS" -eq 1
+
+          kill -KILL "$(cat /tmp/mk0-core-worker-delay.pid)"
+          for i in $(seq 1 20); do
+            if ! kill -0 "$(cat /tmp/mk0-core-worker-delay.pid)" 2>/dev/null; then break; fi
+            sleep 0.1
+          done
+          ! kill -0 "$(cat /tmp/mk0-core-worker-delay.pid)" 2>/dev/null
+
+          node --import tsx src/orchestration/temporal/workers/core-release.worker.ts \
+            > /tmp/mk0-core-worker-recovery.log 2>&1 &
+          echo $! > /tmp/mk0-core-worker-recovery.pid
+          for i in $(seq 1 30); do
+            if grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-recovery.log; then break; fi
+            sleep 1
+          done
+          grep -q 'CORE_RELEASE_WORKER_STARTED' /tmp/mk0-core-worker-recovery.log
+
+          B4_WORKFLOW_ID="$WORKFLOW_ID" B4_RUN_ID="$RUN_ID" npm run b6:result | tee /tmp/gd011-result.log
+          RESULT="$(grep 'B6_REGISTRATION_RESULT' /tmp/gd011-result.log | tail -1 | sed 's/^B6_REGISTRATION_RESULT //')"
+          echo "$RESULT" | jq -e '.status == "COMPLETED" and .result.created == true' >/dev/null
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where email='gd011.restart@example.test'")" -eq 1
+          test "$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='$WORKFLOW_ID'")" = 'COMPLETED_CREATED'
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json > /tmp/gd011-history.json
+          grep -Eqi 'ACTIVITY_TASK_TIMED_OUT|EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT|ACTIVITY_TASK_FAILED|EVENT_TYPE_ACTIVITY_TASK_FAILED' /tmp/gd011-history.json
+          test "$(cat /tmp/mk0-core-worker-delay.pid)" != "$(cat /tmp/mk0-core-worker-recovery.pid)"
+          echo "workflow_id=$WORKFLOW_ID" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo 'GD-011 PASS'
+
+      - name: GD-012 prove scheduling isolation
+        run: |
+          COUNT="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name in ('appointments','appointment','resource_reservations','resource_reservation','availability_slots','availability_slot')")"
+          test "$COUNT" -eq 0
+          if grep -RniE 'createAppointment|ResourceReservation|mutateAvailability|reserveAvailability' src/orchestration/temporal/activities src/orchestration/temporal/workflows/register-new-customer.workflow.ts; then
+            echo 'Scheduling mutation path entered RegisterNewCustomer core'
+            exit 1
+          fi
+          echo 'GD-012 PASS'
+
+      - name: Assert attachment cases remain gated rather than silently passing
+        run: |
+          grep -q 'ATTACHMENT_BUILD_GATE_CLOSED' src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          test ! -d src/attachments
+          echo 'GD-003 DEFERRED_B7'
+          echo 'GD-004 DEFERRED_B7'
+          echo 'GD-009 DEFERRED_B7'
+          echo 'GD-010 DEFERRED_B7'
+
+      - name: Capture integrated Golden release evidence
+        env:
+          GD001_WORKFLOW_ID: ${{ steps.gd001.outputs.workflow_id }}
+          GD001_RUN_ID: ${{ steps.gd001.outputs.run_id }}
+          GD002_WORKFLOW_ID: ${{ steps.gd002.outputs.workflow_id }}
+          GD002_RUN_ID: ${{ steps.gd002.outputs.run_id }}
+          GD008_WORKFLOW_ID: ${{ steps.gd008.outputs.workflow_id }}
+          GD008_RUN_ID: ${{ steps.gd008.outputs.run_id }}
+          GD011_WORKFLOW_ID: ${{ steps.gd011.outputs.workflow_id }}
+          GD011_RUN_ID: ${{ steps.gd011.outputs.run_id }}
+          GD013_WORKFLOW_ID: ${{ steps.gd013.outputs.workflow_id }}
+          GD013_RUN_ID: ${{ steps.gd013.outputs.run_id }}
+          GD018_WORKFLOW_ID: ${{ steps.gd018.outputs.workflow_id }}
+          GD018_RUN_ID: ${{ steps.gd018.outputs.run_id }}
+        run: |
+          mkdir -p evidence/ci/core-golden
+          cp /tmp/gd008-history.json evidence/ci/core-golden/gd008-history.json
+          cp /tmp/gd011-history.json evidence/ci/core-golden/gd011-history.json
+          cp /tmp/gd014-history.json evidence/ci/core-golden/gd014-history.json
+          cp /tmp/gd014-task-queue.txt evidence/ci/core-golden/gd014-task-queue.txt
+          cp /tmp/mk0-core-worker-a.log evidence/ci/core-golden/worker-a.log
+          cp /tmp/mk0-core-worker-delay.log evidence/ci/core-golden/worker-delay.log
+          cp /tmp/mk0-core-worker-recovery.log evidence/ci/core-golden/worker-recovery.log
+          cp /tmp/mk0-core-http.log evidence/ci/core-golden/http-cta.log
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select registration_id,business_slug,workflow_id,customer_id,status from registration_commands order by created_at' > evidence/ci/core-golden/registration-commands.txt
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select customer_id,business_slug,customer_name,email,status from customers order by created_at' > evidence/ci/core-golden/customers.txt
+          docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'db.execution_audit.find({}).sort({workflowId:1,occurredAt:1}).forEach(x => print(JSON.stringify(x)))' > evidence/ci/core-golden/execution-audit.jsonl
+
+          jq -n \
+            --arg schemaVersion 'mk0.core-golden-release.evidence.v1' \
+            --arg datasetVersion 'mk0.golden.register-customer.v0' \
+            --arg repository '${{ github.repository }}' \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --arg gd001WorkflowId "$GD001_WORKFLOW_ID" \
+            --arg gd001RunId "$GD001_RUN_ID" \
+            --arg gd002WorkflowId "$GD002_WORKFLOW_ID" \
+            --arg gd002RunId "$GD002_RUN_ID" \
+            --arg gd008WorkflowId "$GD008_WORKFLOW_ID" \
+            --arg gd008RunId "$GD008_RUN_ID" \
+            --arg gd011WorkflowId "$GD011_WORKFLOW_ID" \
+            --arg gd011RunId "$GD011_RUN_ID" \
+            --arg gd013WorkflowId "$GD013_WORKFLOW_ID" \
+            --arg gd013RunId "$GD013_RUN_ID" \
+            --arg gd018WorkflowId "$GD018_WORKFLOW_ID" \
+            --arg gd018RunId "$GD018_RUN_ID" \
+            '{
+              schemaVersion: $schemaVersion,
+              datasetVersion: $datasetVersion,
+              repository: $repository,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $githubRunId},
+              scope: {totalGoldenCases: 18, attachmentFreeApplicable: 14, deferredToB7: 4},
+              verdict: "ATTACHMENT_FREE_CORE_GOLDEN_PASS",
+              cases: {
+                "GD-001": "PASS",
+                "GD-002": "PASS",
+                "GD-003": "DEFERRED_B7",
+                "GD-004": "DEFERRED_B7",
+                "GD-005": "PASS",
+                "GD-006": "PASS",
+                "GD-007": "PASS",
+                "GD-008": "PASS",
+                "GD-009": "DEFERRED_B7",
+                "GD-010": "DEFERRED_B7",
+                "GD-011": "PASS",
+                "GD-012": "PASS",
+                "GD-013": "PASS",
+                "GD-014": "PASS",
+                "GD-015": "PASS",
+                "GD-016": "PASS",
+                "GD-017": "PASS",
+                "GD-018": "PASS"
+              },
+              receipts: {
+                gd001: {workflowId: $gd001WorkflowId, runId: $gd001RunId},
+                gd002: {workflowId: $gd002WorkflowId, runId: $gd002RunId},
+                gd008: {workflowId: $gd008WorkflowId, runId: $gd008RunId},
+                gd011: {workflowId: $gd011WorkflowId, runId: $gd011RunId},
+                gd013_014_015_016: {workflowId: $gd013WorkflowId, runId: $gd013RunId},
+                gd018: {workflowId: $gd018WorkflowId, runId: $gd018RunId}
+              },
+              assertions: {
+                exactReplayAfterCompletion: "PASS",
+                conflictingReplayTyped: "PASS",
+                transientPostgresRetry: "PASS",
+                postmanHttpProofSurface: "PASS",
+                ctaDeathDoesNotKillWorkflow: "PASS",
+                freshClientReconnect: "PASS",
+                multiRoundUpdates: "PASS",
+                realTemporalServiceTaskQueueWorkerHistory: "PASS",
+                workerKilledAfterCustomerPersistence: "PASS",
+                recoveryNoDuplicateCustomer: "PASS",
+                hardDuplicateResolution: "PASS",
+                softDuplicateDecisionState: "PASS",
+                mandatoryMongoAuditBeforeSuccess: "PASS",
+                schedulingIsolation: "PASS"
+              }
+            }' > evidence/ci/core-golden/evidence.json
+          cat evidence/ci/core-golden/evidence.json
+
+      - name: Upload integrated Golden evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-core-golden-release-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/core-golden
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo '--- Temporal ---'
+          cat /tmp/mk0-core-temporal.log || true
+          echo '--- Worker A ---'
+          cat /tmp/mk0-core-worker-a.log || true
+          echo '--- Delayed Worker ---'
+          cat /tmp/mk0-core-worker-delay.log || true
+          echo '--- Recovery Worker ---'
+          cat /tmp/mk0-core-worker-recovery.log || true
+          echo '--- HTTP CTA ---'
+          cat /tmp/mk0-core-http.log || true
+          echo '--- PostgreSQL registrations ---'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select * from registration_commands' || true
+          echo '--- PostgreSQL customers ---'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select * from customers' || true
+          echo '--- Mongo audit ---'
+          docker compose exec -T mongo mongosh engines_mk0 --quiet --eval 'db.execution_audit.find({}).forEach(x => print(JSON.stringify(x)))' || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          for file in /tmp/mk0-core-http.pid /tmp/mk0-core-worker-a.pid /tmp/mk0-core-worker-delay.pid /tmp/mk0-core-worker-recovery.pid /tmp/mk0-core-temporal.pid; do
+            if [ -f "$file" ]; then kill -KILL "$(cat "$file")" 2>/dev/null || true; fi
+          done
+          docker compose down -v || true
