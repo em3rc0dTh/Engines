@@ -31,6 +31,8 @@
     "probe:b6:mongo": "tsx scripts/b6-mongo-audit-semantics.ts",
     "worker:b6": "tsx src/orchestration/temporal/workers/b6.worker.ts",
     "b6:result": "tsx src/orchestration/temporal/clients/b6-result.client.ts",
+    "worker:core-release": "tsx src/orchestration/temporal/workers/core-release.worker.ts",
+    "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
   },
   "dependencies": {
