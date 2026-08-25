@@ -21,7 +21,7 @@ test('B3 accepts intent-only CLI input and injects channel metadata', () => {
   assert.equal(result.envelope.request.idempotencyKey, 'cli-intent-001');
   assert.equal(result.envelope.request.correlationId, 'corr-001');
   assert.equal(result.envelope.request.channel, 'cli');
-  assert.deepEqual(result.envelope.draft, {});
+  assert.deepEqual(result.envelope.draft, { customer: {} });
 });
 
 test('B3 accepts full Customer draft and delegates normalization to B1 contract', () => {
