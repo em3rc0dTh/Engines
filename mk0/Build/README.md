@@ -16,8 +16,8 @@ Current Build position:
 B0  runtime/repository skeleton                         ✅ CERTIFIED
 B1  canonical contracts + versioned RegistrationPolicy ✅ CERTIFIED
 B2  real Temporal runtime/topology + visibility proof  ✅ CERTIFIED
-B3  first CLI CTA Adapter                              ← ACTIVE
-B4  Worker + Task Queue + interactive RegisterNewCustomer
+B3  first CLI CTA Adapter                              ✅ CERTIFIED
+B4  Worker + Task Queue + interactive RegisterNewCustomer ← ACTIVE
 B5  PostgreSQL duplicate/customer/registration Activities
 B6  MongoDB mandatory interaction/audit Activities
 B7  AttachmentStore                                    🔒 GATED
@@ -29,6 +29,7 @@ Certification evidence:
 B0 → mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
 B1 → mk0/Build/evidence/B1-contracts-policy-certification-2026-08-24.md
 B2 → mk0/Build/evidence/B2-temporal-continuity-certification-2026-08-24.md
+B3 → mk0/Build/evidence/B3-cli-cta-certification-2026-08-24.md
 ```
 
 `B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
@@ -81,131 +82,93 @@ Dependency resolution is frozen through the committed `mk0/runtime/package-lock.
 
 ## B1 certified contract layer
 
-B1 converted the documentation contract into executable pure/deterministic code:
-
-```text
-RegisterNewCustomer start envelope
-Customer draft/contact/document/phone types
-ProvideCustomerData input contract
-Registration state/result projections
-structural start/Update validation
-Customer normalization + patch merge
-versioned RegistrationPolicy
-policy-driven required-field evaluation
-HARD_UNIQUE / SOFT_MATCH / NON_UNIQUE representation
-Golden RegistrationPolicy v1 fixture
-business-scoped session identity material
-normalized initial-start fingerprint material
-canonical serialization/comparison
-Golden-oriented contract tests
-```
-
-B1 preserved the approved boundary:
-
-- missing Customer business-completeness fields do not become CTA/start validation failures;
-- `businessSlug` + operation + idempotency identity remain the logical session scope;
-- channel/correlation metadata is excluded from initial-start fingerprint material;
-- later Customer patches evolve draft state without redefining initial-start identity;
-- policy controls document/attachment requirements instead of universal hard-coding;
-- no DB, transport, AttachmentStore or production business Workflow side effects exist in B1.
+B1 converted the documentation contract into executable pure/deterministic code for start envelopes, Customer draft normalization, `RegistrationPolicy`, required-field evaluation, duplicate classifications, Update input, state/result projections, and business-scoped idempotency/fingerprint material.
 
 ## B2 certified Temporal execution plane
 
-B2 proved that Workflow execution truth survives Worker process loss and remains owned by Temporal.
+B2 proved that the same Workflow ID + Run ID remains durable and visible when Worker #1 is SIGKILLed, a Temporal timer expires with no Worker alive, and a distinct Worker #2 later resumes and completes the same execution from Event History.
 
-Certified experiment:
+## B3 certified CTA boundary
 
-```text
-real Temporal Service + Web UI
-Worker #1 starts b2ContinuitySmoke
-Query observes WAITING_ON_TEMPORAL_TIMER
-Worker #1 receives SIGKILL
-timer expires with no Worker alive
-same Workflow ID + Run ID remains RUNNING in Temporal visibility
-Worker #2 starts as a distinct process
-Worker #2 recovers the same execution
-same Workflow ID + Run ID reaches COMPLETED
-Event History captured
-```
-
-Observed Event History includes:
+B3 introduced the first replaceable channel implementation:
 
 ```text
-WORKFLOW_EXECUTION_STARTED
-TIMER_STARTED
-TIMER_FIRED
-WORKFLOW_TASK_TIMED_OUT
-WORKFLOW_TASK_SCHEDULED
-WORKFLOW_TASK_STARTED
-WORKFLOW_TASK_COMPLETED
-WORKFLOW_EXECUTION_COMPLETED
-```
-
-The timeout is retained as evidence: Temporal recovered from interrupted Workflow processing and completed the same durable execution.
-
-B2 introduced no Customer, audit, attachment or scheduling side effects.
-
-## B3 active target — first CLI CTA Adapter
-
-B3 implements the first replaceable channel boundary in front of Engines.
-
-The CLI is a **transport**, not business authority.
-
-B3 may implement:
-
-```text
-CLI input parsing
-channel metadata capture
-CTA Adapter interface
-canonical RegisterNewCustomer start-envelope construction
-structural/session validation through the B1 contract
-normalization of accepted transport input
-stable adapter result/error projection
-orchestration port/interface for later Temporal binding
-CLI contract tests
-```
-
-B3 must preserve this boundary:
-
-```text
-CLI-specific input
+CLI command + JSON
       ↓
 CLI parser
       ↓
 CTA Adapter
       ↓
-canonical RegisterNewCustomer envelope
+B1 structural validation + normalization
       ↓
-Orchestration port
+canonical RegisterNewCustomerStartEnvelope
+      ↓
+READY_FOR_ORCHESTRATION
 ```
 
-B3 must **not**:
+B3 certification proved:
+
+- legal intent-only input is accepted without Customer completeness;
+- full Customer input is normalized by B1 rather than reimplemented in the CLI;
+- unknown/malformed transport input is rejected structurally;
+- `channel = cli` is transport metadata;
+- CTA has no direct Temporal SDK dependency;
+- CTA has no direct PostgreSQL/MongoDB dependency;
+- CTA contains no hidden Workflow engine or business Workflow implementation.
+
+## B4 active target — interactive RegisterNewCustomer Workflow
+
+B4 binds the B3 orchestration port to the real Temporal Client and introduces the real `RegisterNewCustomer` Workflow execution.
+
+B4 owns **durable interaction state**, not Customer persistence yet.
+
+B4 may implement:
 
 ```text
-write PostgreSQL or MongoDB directly
-own Customer completeness rules
-hard-code business-required fields in the CLI
-implement a fake Workflow engine
-implement production RegisterNewCustomer orchestration before B4
-implement duplicate lookup before B5
-implement AttachmentStore
-implement scheduling
+RegisterNewCustomer Temporal Workflow
+real Worker registration on engines-mk0-registration
+Temporal Client implementation of RegisterNewCustomerOrchestrationPort
+GetRegistrationState Query
+ProvideCustomerData Update
+policy selection/loading for the frozen Golden business profile
+durable Customer draft state
+policy-driven missing-field evaluation
+WAITING_FOR_REQUIRED_DATA behavior
+multi-round Update merge/deduplication by inputId
+transition to REQUIRED_DATA_COMPLETE
+CTA → Temporal start receipt with Workflow ID / Run ID
+Worker restart/reconnect proof while waiting
+```
+
+B4 must not pretend persistence exists. Until B5/B6 are present, it must **not** report `CREATED` or `ALREADY_EXISTS` as a successful terminal business outcome.
+
+For B4 certification, a Workflow may remain running after reaching `REQUIRED_DATA_COMPLETE`; the laboratory client may terminate that proof execution after evidence is captured. This is preferable to inventing fake persistence success.
+
+B4 must not:
+
+```text
+write PostgreSQL Customer/registration records
+perform duplicate lookup
+write MongoDB application audit
+persist attachments
+report CREATED without B5/B6 success
+create Appointment/ResourceReservation
 introduce Agent/Hermes
 ```
 
-A legal intent-only command must be accepted by the CTA boundary when it contains the minimum structural/session fields, even when Customer business fields are incomplete. That incomplete Customer state will become a durable waiting state only when B4 binds the adapter to the real `RegisterNewCustomer` Workflow.
-
-B3 completes when executable CLI/adapter tests prove:
+B4 completes when a real Temporal runtime proves at least:
 
 ```text
-valid intent-only input → canonical accepted envelope
-full Customer input → canonical accepted envelope
-malformed/unknown operation → structural rejection
-missing businessSlug → structural rejection
-missing idempotency identity → structural rejection
-channel/correlation metadata preserved as metadata but not business authority
-no direct persistence writes/imports
-no business Workflow implementation hidden inside the adapter
+CLI/adapter input starts one real RegisterNewCustomer Workflow
+intent-only start enters WAITING_FOR_REQUIRED_DATA
+GetRegistrationState returns missing fields + next action
+ProvideCustomerData Update mutates same Workflow execution
+multiple Updates can satisfy policy requirements
+same Workflow ID + Run ID remains authoritative
+Worker restart while waiting does not lose draft state
+state reaches REQUIRED_DATA_COMPLETE without fake persistence success
+CTA/client reconnect resolves the same durable state
+Event History contains Update/restart evidence
 ```
 
 ## Non-negotiable Temporal rule
@@ -217,28 +180,6 @@ mk0 must not use:
 - database flags as a substitute for Temporal Workflow state;
 - a CTA process that must remain alive for Workflow progress;
 - a reduced custom orchestrator that bypasses Task Queue/Worker semantics.
-
-Later Workflow proof must continue to use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
-
-## CTA rule
-
-The channel and adapter remain replaceable.
-
-```text
-CLI first
-Postman next
-Form later
-WhatsApp later
-Telegram later
-API/Webhook later
-...
-    ↓
-CTA Adapter
-    ↓
-Temporal
-```
-
-A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal.
 
 ## Frozen constraints
 
@@ -263,4 +204,4 @@ A structurally legal registration session may start with incomplete Customer bus
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-> **B0 = CERTIFIED. B1 = CERTIFIED. B2 = CERTIFIED. B3 = ACTIVE.**
+> **B0 = CERTIFIED. B1 = CERTIFIED. B2 = CERTIFIED. B3 = CERTIFIED. B4 = ACTIVE.**
