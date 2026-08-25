@@ -12,7 +12,7 @@
     "temporalRuntimePath": ["client", "service", "task-queue", "worker", "workflow", "query", "update", "activities"],
     "businessPersistence": "postgresql",
     "interactionAuditPersistence": "mongodb",
-    "attachmentPersistence": "attachment-store-technology-to-be-frozen-at-build-gate"
+    "attachmentPersistence": "filesystem-content-addressed-mk0-local-lab"
   },
   "idempotencyProfile": {
     "scope": ["operation", "businessSlug", "idempotencyKeyHash"],
@@ -137,10 +137,11 @@
       "preconditions": {
         "stagedAttachments": [
           {
-            "fixture": "synthetic-id-front-v1",
+            "fixture": "synthetic-id-front-v1.png",
             "ingressRef": "ing_gd003_a",
             "mediaType": "image/png",
-            "sha256": "TO_BE_FROZEN_WITH_BINARY_FIXTURE"
+            "byteLength": 75,
+            "sha256": "248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84"
           }
         ]
       },
@@ -154,7 +155,7 @@
             "contact": {"phones": [], "email": "mara.rios@example.test"}
           },
           "attachments": [
-            {"ingressRef": "ing_gd003_a", "kind": "identity_document", "displayName": "Synthetic ID front"}
+            {"ingressRef": "ing_gd003_a", "kind": "identity_document", "displayName": "Synthetic ID front", "mediaType": "image/png", "byteLength": 75, "sha256": "248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84"}
           ]
         },
         "request": {"idempotencyKey": "gd-003-session"}
@@ -174,8 +175,8 @@
       "name": "multiple-attachments",
       "preconditions": {
         "stagedAttachments": [
-          {"fixture": "synthetic-a", "ingressRef": "ing_gd004_a", "sha256": "TO_BE_FROZEN"},
-          {"fixture": "synthetic-b", "ingressRef": "ing_gd004_b", "sha256": "TO_BE_FROZEN"}
+          {"fixture": "synthetic-id-front-v1.png", "ingressRef": "ing_gd004_a", "mediaType": "image/png", "byteLength": 75, "sha256": "248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84"},
+          {"fixture": "synthetic-supporting-document-v1.txt", "ingressRef": "ing_gd004_b", "mediaType": "text/plain", "byteLength": 67, "sha256": "c4de8a6ee133dfc935ccb27071170ea692d1261f30cb18cd35269a1d09cf1609"}
         ]
       },
       "start": {
@@ -188,8 +189,8 @@
             "contact": {"phones": [], "email": "noa.diaz@example.test"}
           },
           "attachments": [
-            {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A"},
-            {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B"}
+            {"ingressRef": "ing_gd004_a", "kind": "identity_document", "displayName": "Synthetic A", "mediaType": "image/png", "byteLength": 75, "sha256": "248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84"},
+            {"ingressRef": "ing_gd004_b", "kind": "supporting_document", "displayName": "Synthetic B", "mediaType": "text/plain", "byteLength": 67, "sha256": "c4de8a6ee133dfc935ccb27071170ea692d1261f30cb18cd35269a1d09cf1609"}
           ]
         },
         "request": {"idempotencyKey": "gd-004-session"}
