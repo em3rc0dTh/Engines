@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.8-alpine
     environment:
       POSTGRES_USER: engines
       POSTGRES_PASSWORD: engines
@@ -16,7 +16,7 @@ services:
       retries: 20
 
   mongo:
-    image: mongo:8.0
+    image: mongo:8.0.29
     ports:
       - "27017:27017"
     volumes:
