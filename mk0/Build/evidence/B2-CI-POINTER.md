@@ -1,0 +1,1 @@
+Machine-generated B2 evidence is retained in GitHub Actions run `32807348661`, artifact `mk0-b2-temporal-continuity-32807348661` (artifact id `9548597318`). See `B2-temporal-continuity-certification-2026-08-24.md` for the durable certification record.
