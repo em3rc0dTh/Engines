@@ -2,13 +2,18 @@ import type {
   CustomerDraft,
   RegisterNewCustomerStartEnvelope,
   RegistrationPolicy,
+  RegistrationResult,
 } from '../../../contracts/register-new-customer/index.js';
 
 export type RegistrationCommandStatus =
   | 'RESERVED'
   | 'SOFT_DUPLICATE_PENDING_DECISION'
   | 'EXISTING_CUSTOMER_PENDING_AUDIT'
-  | 'CUSTOMER_CREATED_PENDING_AUDIT';
+  | 'CUSTOMER_CREATED_PENDING_AUDIT'
+  | 'EXISTING_CUSTOMER_AUDITED'
+  | 'CUSTOMER_CREATED_AUDITED'
+  | 'COMPLETED_ALREADY_EXISTS'
+  | 'COMPLETED_CREATED';
 
 export type ReserveRegistrationInput = Readonly<{
   start: RegisterNewCustomerStartEnvelope;
@@ -67,10 +72,26 @@ export type CreateCustomerResult =
   | Readonly<{ kind: 'CREATED'; customerId: string; reused: boolean }>
   | Readonly<{ kind: 'HARD_DUPLICATE'; customerId: string }>;
 
+export type RegistrationOutcomeKind = 'CREATED' | 'ALREADY_EXISTS';
+
+export type MarkRegistrationAuditedInput = Readonly<{
+  registrationId: string;
+  customerId: string;
+  outcome: RegistrationOutcomeKind;
+}>;
+
+export type CompleteRegistrationInput = Readonly<{
+  registrationId: string;
+  customerId: string;
+  outcome: RegistrationOutcomeKind;
+}>;
+
 export type PostgresRegistrationActivities = Readonly<{
   reserveRegistrationSession(input: ReserveRegistrationInput): Promise<ReserveRegistrationResult>;
   checkCustomerDuplicate(input: CheckDuplicateInput): Promise<CheckDuplicateResult>;
   recordExistingCustomer(input: RecordExistingCustomerInput): Promise<void>;
   recordSoftDuplicate(input: RecordSoftDuplicateInput): Promise<void>;
   createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult>;
+  markRegistrationAudited(input: MarkRegistrationAuditedInput): Promise<void>;
+  completeRegistration(input: CompleteRegistrationInput): Promise<RegistrationResult>;
 }>;
