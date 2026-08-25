@@ -8,6 +8,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
+    "test:b1": "tsx --test src/contracts/register-new-customer/*.test.ts",
     "infra:up": "docker compose up -d postgres mongo",
     "infra:down": "docker compose down",
     "infra:status": "docker compose ps",
