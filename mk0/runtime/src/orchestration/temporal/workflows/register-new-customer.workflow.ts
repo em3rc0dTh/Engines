@@ -457,8 +457,16 @@ export async function registerNewCustomerWorkflow(
     phase = 'PERSISTING_ATTACHMENTS';
     for (const attachment of attachments) {
       const resolved = resolvedAttachments.get(attachment.ingressRef);
-      if (!resolved) {
-        failAttachment('ATTACHMENT_INGRESS_NOT_FOUND', attachment.ingressRef);
+      if (resolved === undefined) {
+        workflowFailure = {
+          code: 'ATTACHMENT_INGRESS_NOT_FOUND',
+          message: `Resolved attachment metadata disappeared for ${attachment.ingressRef}`,
+        };
+        phase = 'FAILED';
+        throw ApplicationFailure.nonRetryable(
+          workflowFailure.message,
+          workflowFailure.code,
+        );
       }
 
       const committed = await commitAttachment({
