@@ -15,8 +15,8 @@ Current Build position:
 ```text
 B0  runtime/repository skeleton                         ✅ CERTIFIED
 B1  canonical contracts + versioned RegistrationPolicy ✅ CERTIFIED
-B2  real Temporal runtime/topology + visibility proof  ← ACTIVE
-B3  first CLI CTA Adapter
+B2  real Temporal runtime/topology + visibility proof  ✅ CERTIFIED
+B3  first CLI CTA Adapter                              ← ACTIVE
 B4  Worker + Task Queue + interactive RegisterNewCustomer
 B5  PostgreSQL duplicate/customer/registration Activities
 B6  MongoDB mandatory interaction/audit Activities
@@ -28,6 +28,7 @@ Certification evidence:
 ```text
 B0 → mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
 B1 → mk0/Build/evidence/B1-contracts-policy-certification-2026-08-24.md
+B2 → mk0/Build/evidence/B2-temporal-continuity-certification-2026-08-24.md
 ```
 
 `B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
@@ -108,42 +109,104 @@ B1 preserved the approved boundary:
 - policy controls document/attachment requirements instead of universal hard-coding;
 - no DB, transport, AttachmentStore or production business Workflow side effects exist in B1.
 
-## B2 active target
+## B2 certified Temporal execution plane
 
-B2 must strengthen the **Temporal execution plane itself**, independently from Customer business behavior.
+B2 proved that Workflow execution truth survives Worker process loss and remains owned by Temporal.
 
-B0 already proved that a real Temporal Service/Worker/Task Queue/Workflow can execute. B2 now proves that this runtime is a reusable orchestration substrate with explicit topology, visibility and continuity semantics.
-
-B2 may implement laboratory-only orchestration proof such as:
+Certified experiment:
 
 ```text
-central Temporal topology/config contract
-shared Temporal Client/Worker bootstrap boundaries
-explicit namespace + Task Queue identity
-visibility/list/describe evidence
-real Event History retrieval/evidence
-long-running continuity smoke Workflow
-Worker stop/restart while Workflow remains durable
-same Workflow completion after Worker restart
-runtime health/diagnostic probe
-replay/version-compatibility build decision record
+real Temporal Service + Web UI
+Worker #1 starts b2ContinuitySmoke
+Query observes WAITING_ON_TEMPORAL_TIMER
+Worker #1 receives SIGKILL
+timer expires with no Worker alive
+same Workflow ID + Run ID remains RUNNING in Temporal visibility
+Worker #2 starts as a distinct process
+Worker #2 recovers the same execution
+same Workflow ID + Run ID reaches COMPLETED
+Event History captured
 ```
 
-B2 must **not** yet implement `RegisterNewCustomer` business orchestration. That belongs to B4 after the CTA boundary in B3.
-
-B2 must not:
+Observed Event History includes:
 
 ```text
-write Customer business data
-write MongoDB application audit
-implement duplicate lookup
+WORKFLOW_EXECUTION_STARTED
+TIMER_STARTED
+TIMER_FIRED
+WORKFLOW_TASK_TIMED_OUT
+WORKFLOW_TASK_SCHEDULED
+WORKFLOW_TASK_STARTED
+WORKFLOW_TASK_COMPLETED
+WORKFLOW_EXECUTION_COMPLETED
+```
+
+The timeout is retained as evidence: Temporal recovered from interrupted Workflow processing and completed the same durable execution.
+
+B2 introduced no Customer, audit, attachment or scheduling side effects.
+
+## B3 active target — first CLI CTA Adapter
+
+B3 implements the first replaceable channel boundary in front of Engines.
+
+The CLI is a **transport**, not business authority.
+
+B3 may implement:
+
+```text
+CLI input parsing
+channel metadata capture
+CTA Adapter interface
+canonical RegisterNewCustomer start-envelope construction
+structural/session validation through the B1 contract
+normalization of accepted transport input
+stable adapter result/error projection
+orchestration port/interface for later Temporal binding
+CLI contract tests
+```
+
+B3 must preserve this boundary:
+
+```text
+CLI-specific input
+      ↓
+CLI parser
+      ↓
+CTA Adapter
+      ↓
+canonical RegisterNewCustomer envelope
+      ↓
+Orchestration port
+```
+
+B3 must **not**:
+
+```text
+write PostgreSQL or MongoDB directly
+own Customer completeness rules
+hard-code business-required fields in the CLI
+implement a fake Workflow engine
+implement production RegisterNewCustomer orchestration before B4
+implement duplicate lookup before B5
 implement AttachmentStore
-implement Postman transport
-create Appointment/ResourceReservation behavior
+implement scheduling
 introduce Agent/Hermes
 ```
 
-B2 completes only when a real Temporal runtime test proves visibility + durable Worker restart/continuity and produces structured evidence.
+A legal intent-only command must be accepted by the CTA boundary when it contains the minimum structural/session fields, even when Customer business fields are incomplete. That incomplete Customer state will become a durable waiting state only when B4 binds the adapter to the real `RegisterNewCustomer` Workflow.
+
+B3 completes when executable CLI/adapter tests prove:
+
+```text
+valid intent-only input → canonical accepted envelope
+full Customer input → canonical accepted envelope
+malformed/unknown operation → structural rejection
+missing businessSlug → structural rejection
+missing idempotency identity → structural rejection
+channel/correlation metadata preserved as metadata but not business authority
+no direct persistence writes/imports
+no business Workflow implementation hidden inside the adapter
+```
 
 ## Non-negotiable Temporal rule
 
@@ -200,4 +263,4 @@ A structurally legal registration session may start with incomplete Customer bus
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-> **B0 = CERTIFIED. B1 = CERTIFIED. B2 = ACTIVE.**
+> **B0 = CERTIFIED. B1 = CERTIFIED. B2 = CERTIFIED. B3 = ACTIVE.**
