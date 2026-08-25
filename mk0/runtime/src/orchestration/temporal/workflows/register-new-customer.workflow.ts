@@ -22,6 +22,8 @@ import {
   type RegistrationResult,
   type RegistrationStateProjection,
 } from '../../../contracts/register-new-customer/index.js';
+import type { StagedAttachmentMetadata } from '../../../persistence/attachments/attachment-store.types.js';
+import type { AttachmentStoreActivities } from '../activities/attachment-store.types.js';
 import type {
   MongoRegistrationAuditActivities,
   RegistrationAuditEventInput,
@@ -33,6 +35,8 @@ import type {
 
 const DOCUMENT_SELECTOR =
   'customer.document.type+customer.document.country+customer.document.value' as const;
+const MK0_ATTACHMENT_MAX_COUNT = 4;
+const MK0_ATTACHMENT_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 
 const postgres = proxyActivities<PostgresRegistrationActivities>({
   startToCloseTimeout: '5s',
@@ -44,6 +48,15 @@ const postgres = proxyActivities<PostgresRegistrationActivities>({
 });
 
 const mongoAudit = proxyActivities<MongoRegistrationAuditActivities>({
+  startToCloseTimeout: '5s',
+  retry: {
+    initialInterval: '250ms',
+    backoffCoefficient: 2,
+    maximumAttempts: 3,
+  },
+});
+
+const attachmentStore = proxyActivities<AttachmentStoreActivities>({
   startToCloseTimeout: '5s',
   retry: {
     initialInterval: '250ms',
@@ -187,6 +200,12 @@ export async function registerNewCustomerWorkflow(
     }
   };
 
+  const failAttachment = (code: string, message: string): never => {
+    workflowFailure = { code, message };
+    phase = 'FAILED';
+    throw ApplicationFailure.nonRetryable(message, code);
+  };
+
   setHandler(getRegistrationStateQuery, projectState);
   setHandler(getInitialStartFingerprintQuery, () => initialStartFingerprint);
 
@@ -307,13 +326,67 @@ export async function registerNewCustomerWorkflow(
   phase = 'REQUIRED_DATA_COMPLETE';
   dataCollectionClosed = true;
 
-  if ((draft.attachments ?? []).length > 0) {
-    workflowFailure = {
-      code: 'ATTACHMENT_BUILD_GATE_CLOSED',
-      message: 'Attachment-bearing registration is gated until B7 AttachmentStore is authorized',
-    };
-    phase = 'FAILED';
-    throw ApplicationFailure.nonRetryable(workflowFailure.message, workflowFailure.code);
+  const attachments = draft.attachments ?? [];
+  if (attachments.length > MK0_ATTACHMENT_MAX_COUNT) {
+    failAttachment(
+      'ATTACHMENT_LIMIT_EXCEEDED',
+      `Registration contains ${attachments.length} attachments; maximum is ${MK0_ATTACHMENT_MAX_COUNT}`,
+    );
+  }
+
+  const resolvedAttachments = new Map<string, StagedAttachmentMetadata>();
+  const seenIngressRefs = new Set<string>();
+  let totalAttachmentBytes = 0;
+
+  for (const attachment of attachments) {
+    if (seenIngressRefs.has(attachment.ingressRef)) {
+      failAttachment('ATTACHMENT_INGRESS_CONFLICT', `Duplicate ingressRef ${attachment.ingressRef}`);
+    }
+    seenIngressRefs.add(attachment.ingressRef);
+
+    let resolved;
+    try {
+      resolved = await attachmentStore.resolveAttachmentIngress({ ingressRef: attachment.ingressRef });
+    } catch (error) {
+      failAttachment(
+        'ATTACHMENT_STORE_UNAVAILABLE',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
+    if (resolved.kind !== 'RESOLVED') {
+      failAttachment(resolved.kind, resolved.message);
+    }
+
+    const ingress = resolved.ingress;
+    if (attachment.sha256 && attachment.sha256 !== ingress.sha256) {
+      failAttachment(
+        'ATTACHMENT_INTEGRITY_MISMATCH',
+        `Workflow SHA-256 expectation differs for ${attachment.ingressRef}`,
+      );
+    }
+    if (attachment.byteLength !== undefined && attachment.byteLength !== ingress.byteLength) {
+      failAttachment(
+        'ATTACHMENT_INTEGRITY_MISMATCH',
+        `Workflow byte-length expectation differs for ${attachment.ingressRef}`,
+      );
+    }
+    if (attachment.mediaType && attachment.mediaType !== ingress.mediaType) {
+      failAttachment(
+        'ATTACHMENT_INTEGRITY_MISMATCH',
+        `Workflow media-type expectation differs for ${attachment.ingressRef}`,
+      );
+    }
+
+    resolvedAttachments.set(attachment.ingressRef, ingress);
+    totalAttachmentBytes += ingress.byteLength;
+  }
+
+  if (totalAttachmentBytes > MK0_ATTACHMENT_MAX_TOTAL_BYTES) {
+    failAttachment(
+      'ATTACHMENT_LIMIT_EXCEEDED',
+      `Registration attachment bytes ${totalAttachmentBytes} exceed ${MK0_ATTACHMENT_MAX_TOTAL_BYTES}`,
+    );
   }
 
   phase = 'CHECKING_EXISTING_CUSTOMER';
@@ -358,6 +431,61 @@ export async function registerNewCustomerWorkflow(
     });
     customerId = persisted.customerId;
     outcome = persisted.kind === 'HARD_DUPLICATE' ? 'ALREADY_EXISTS' : 'CREATED';
+  }
+
+  if (attachments.length > 0) {
+    phase = 'PERSISTING_ATTACHMENTS';
+    for (const attachment of attachments) {
+      const resolved = resolvedAttachments.get(attachment.ingressRef);
+      if (!resolved) {
+        failAttachment('ATTACHMENT_INGRESS_NOT_FOUND', attachment.ingressRef);
+      }
+
+      let committed;
+      try {
+        committed = await attachmentStore.commitAttachment({
+          ingressRef: attachment.ingressRef,
+          expectedSha256: attachment.sha256 ?? resolved.sha256,
+          expectedByteLength: attachment.byteLength ?? resolved.byteLength,
+          expectedMediaType: attachment.mediaType ?? resolved.mediaType,
+        });
+      } catch (error) {
+        failAttachment(
+          'ATTACHMENT_STORE_UNAVAILABLE',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+
+      if (committed.kind !== 'COMMITTED') {
+        failAttachment(committed.kind, committed.message);
+      }
+
+      phase = 'LINKING_ATTACHMENTS';
+      await postgres.linkCustomerAttachment({
+        customerId,
+        attachment: committed.attachment,
+        ...(attachment.kind ? { kind: attachment.kind } : {}),
+        ...(attachment.displayName ? { displayName: attachment.displayName } : {}),
+      });
+
+      phase = 'PERSISTING_ATTACHMENTS';
+      await persistMandatoryAudit([
+        auditEvent(
+          'ATTACHMENT_COMMITTED',
+          `attachment:${attachment.ingressRef}`,
+          phase,
+          {
+            attachmentId: committed.attachment.attachmentId,
+            ingressRef: attachment.ingressRef,
+            kind: attachment.kind ?? null,
+            mediaType: committed.attachment.mediaType,
+            byteLength: committed.attachment.byteLength,
+            sha256: committed.attachment.sha256,
+          },
+          customerId,
+        ),
+      ]);
+    }
   }
 
   phase = 'PERSISTING_AUDIT_CONTEXT';
