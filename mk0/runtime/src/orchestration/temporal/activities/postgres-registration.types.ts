@@ -60,6 +60,7 @@ export type CreateCustomerInput = Readonly<{
   registrationId: string;
   businessSlug: string;
   customer: CustomerDraft;
+  enforceHardUniqueDocument: boolean;
 }>;
 
 export type CreateCustomerResult =
