@@ -39,6 +39,7 @@
     "b6:result": "tsx src/orchestration/temporal/clients/b6-result.client.ts",
     "migrate:b7": "tsx scripts/migrate-postgres-b7.ts",
     "worker:b7": "tsx src/orchestration/temporal/workers/b7.worker.ts",
+    "worker:b7:cert": "tsx src/orchestration/temporal/workers/b7-cert.worker.ts",
     "worker:core-release": "tsx src/orchestration/temporal/workers/core-release.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
