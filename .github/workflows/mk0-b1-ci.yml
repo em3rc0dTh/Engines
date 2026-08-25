@@ -45,7 +45,26 @@ jobs:
         run: npm ci
 
       - name: Type-check runtime
-        run: npm run check
+        id: typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/mk0-b1-typecheck.log
+
+      - name: Upload typecheck diagnostics
+        if: steps.typecheck.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b1-typecheck-diagnostics-${{ github.run_id }}
+          path: /tmp/mk0-b1-typecheck.log
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce typecheck gate
+        if: steps.typecheck.outcome == 'failure'
+        run: |
+          cat /tmp/mk0-b1-typecheck.log
+          exit 1
 
       - name: Run B1 contract tests
         run: npm run test:b1
