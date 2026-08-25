@@ -43,9 +43,11 @@ CREATE TABLE IF NOT EXISTS customer_documents (
   document_type TEXT NOT NULL,
   country TEXT NOT NULL,
   document_value TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (business_slug, document_type, country, document_value)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_documents_business_identity
+  ON customer_documents (business_slug, document_type, country, document_value);
 
 CREATE TABLE IF NOT EXISTS registration_commands (
   registration_id TEXT PRIMARY KEY,
