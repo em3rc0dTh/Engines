@@ -17,8 +17,8 @@ B0  runtime/repository skeleton                         ✅ CERTIFIED
 B1  canonical contracts + versioned RegistrationPolicy ✅ CERTIFIED
 B2  real Temporal runtime/topology + visibility proof  ✅ CERTIFIED
 B3  first CLI CTA Adapter                              ✅ CERTIFIED
-B4  Worker + Task Queue + interactive RegisterNewCustomer ← ACTIVE
-B5  PostgreSQL duplicate/customer/registration Activities
+B4  Worker + Task Queue + interactive RegisterNewCustomer ✅ CERTIFIED
+B5  PostgreSQL duplicate/customer/registration Activities ← ACTIVE
 B6  MongoDB mandatory interaction/audit Activities
 B7  AttachmentStore                                    🔒 GATED
 ```
@@ -30,34 +30,29 @@ B0 → mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
 B1 → mk0/Build/evidence/B1-contracts-policy-certification-2026-08-24.md
 B2 → mk0/Build/evidence/B2-temporal-continuity-certification-2026-08-24.md
 B3 → mk0/Build/evidence/B3-cli-cta-certification-2026-08-24.md
+B4 → mk0/Build/evidence/B4-interactive-registration-certification-2026-08-24.md
 ```
 
 `B7 AttachmentStore` remains explicitly gated until attachment technology + synthetic fixtures + expected SHA-256 values are frozen.
 
 No application/web framework is selected or required for mk0.
 
-## Authorized build target
+## Certified execution chain so far
 
 ```text
-CTA channel
-   CLI first
-   Postman transport later
-        ↓
-CTA Adapter contract
-        ↓
-FULL TEMPORAL ORCHESTRATION ENGINE
-   Temporal Service
-   Workflow
-   Task Queue
-   Worker
-   Activities
-   durable Event History
-   retry/recovery/query/update semantics
-        ↓
-Persistence Activities
-   ├── PostgreSQL → Customer + registration/idempotency truth
-   ├── MongoDB    → execution/audit/workflow context
-   └── AttachmentStore → B7 gated
+CLI CTA
+  ↓ canonical B1 envelope
+Temporal Client port
+  ↓
+RegisterNewCustomer Workflow
+  ↓
+RegistrationPolicy
+  ↓
+WAITING_FOR_REQUIRED_DATA
+  ↓ Query / Update / Worker replacement / reconnect
+REQUIRED_DATA_COMPLETE
+  ↓
+B5 PostgreSQL Activities ← ACTIVE
 ```
 
 ## Certified runtime baseline
@@ -80,95 +75,124 @@ Web/application framework: none
 
 Dependency resolution is frozen through the committed `mk0/runtime/package-lock.json`, and certification uses `npm ci`.
 
-## B1 certified contract layer
+## B1–B3 certified boundaries
 
-B1 converted the documentation contract into executable pure/deterministic code for start envelopes, Customer draft normalization, `RegistrationPolicy`, required-field evaluation, duplicate classifications, Update input, state/result projections, and business-scoped idempotency/fingerprint material.
+B1 owns pure contracts/policy semantics. B2 proves the Temporal execution plane survives Worker loss. B3 owns the first replaceable transport boundary and produces a canonical envelope without direct Temporal/persistence authority.
 
-## B2 certified Temporal execution plane
+## B4 certified interactive Workflow
 
-B2 proved that the same Workflow ID + Run ID remains durable and visible when Worker #1 is SIGKILLed, a Temporal timer expires with no Worker alive, and a distinct Worker #2 later resumes and completes the same execution from Event History.
-
-## B3 certified CTA boundary
-
-B3 introduced the first replaceable channel implementation:
+B4 introduced the real `RegisterNewCustomer` Workflow and proved:
 
 ```text
-CLI command + JSON
-      ↓
-CLI parser
-      ↓
-CTA Adapter
-      ↓
-B1 structural validation + normalization
-      ↓
-canonical RegisterNewCustomerStartEnvelope
-      ↓
-READY_FOR_ORCHESTRATION
+CLI → Temporal start                        PASS
+intent-only start → WAITING                 PASS
+GetRegistrationState Query                  PASS
+ProvideCustomerData Update                  PASS
+policy-driven missing fields                PASS
+first Customer patch survives SIGKILL       PASS
+Worker #2 replays same Workflow/Run         PASS
+inputId dedup survives Worker replacement   PASS
+second Update → REQUIRED_DATA_COMPLETE      PASS
+reconnect Query returns same durable state  PASS
+Update Event History captured               PASS
 ```
 
-B3 certification proved:
-
-- legal intent-only input is accepted without Customer completeness;
-- full Customer input is normalized by B1 rather than reimplemented in the CLI;
-- unknown/malformed transport input is rejected structurally;
-- `channel = cli` is transport metadata;
-- CTA has no direct Temporal SDK dependency;
-- CTA has no direct PostgreSQL/MongoDB dependency;
-- CTA contains no hidden Workflow engine or business Workflow implementation.
-
-## B4 active target — interactive RegisterNewCustomer Workflow
-
-B4 binds the B3 orchestration port to the real Temporal Client and introduces the real `RegisterNewCustomer` Workflow execution.
-
-B4 owns **durable interaction state**, not Customer persistence yet.
-
-B4 may implement:
+Certified B4 execution:
 
 ```text
-RegisterNewCustomer Temporal Workflow
-real Worker registration on engines-mk0-registration
-Temporal Client implementation of RegisterNewCustomerOrchestrationPort
-GetRegistrationState Query
-ProvideCustomerData Update
-policy selection/loading for the frozen Golden business profile
-durable Customer draft state
-policy-driven missing-field evaluation
-WAITING_FOR_REQUIRED_DATA behavior
-multi-round Update merge/deduplication by inputId
-transition to REQUIRED_DATA_COMPLETE
-CTA → Temporal start receipt with Workflow ID / Run ID
-Worker restart/reconnect proof while waiting
+Workflow ID: register-customer:golden-business:9cb9fc4270d313cc171c8c03dbeffdac
+Run ID:      01a03720-d905-73ec-965f-2e8e2756e1f1
+Worker #1:   PID 2378 → SIGKILL
+Worker #2:   PID 2619
 ```
 
-B4 must not pretend persistence exists. Until B5/B6 are present, it must **not** report `CREATED` or `ALREADY_EXISTS` as a successful terminal business outcome.
-
-For B4 certification, a Workflow may remain running after reaching `REQUIRED_DATA_COMPLETE`; the laboratory client may terminate that proof execution after evidence is captured. This is preferable to inventing fake persistence success.
-
-B4 must not:
+At `REQUIRED_DATA_COMPLETE`:
 
 ```text
-write PostgreSQL Customer/registration records
-perform duplicate lookup
-write MongoDB application audit
-persist attachments
-report CREATED without B5/B6 success
+workflowStatus = RUNNING
+missingFields  = []
+created        = absent
+result         = absent
+```
+
+This is intentional. The B4 laboratory Workflow was terminated only after evidence capture because persistence authority was not yet implemented. B4 did not claim `CREATED` or `ALREADY_EXISTS`.
+
+## B5 active target — PostgreSQL authority + Activities
+
+B5 introduces the first real **business persistence authority**.
+
+PostgreSQL must own:
+
+```text
+canonical Customer records
+registration/idempotency reservation truth
+initial-start fingerprint conflict detection
+hard-unique duplicate identity
+soft-match candidate lookup data required by the Golden policy
+transactional create/finalize outcome
+```
+
+B5 may implement:
+
+```text
+versioned SQL migrations/schema
+PostgreSQL connection/repository boundary
+registration command/session reservation Activity
+business-scoped idempotency key hash
+initial-start fingerprint hash
+exact replay vs SESSION_IDEMPOTENCY_CONFLICT classification
+hard-unique Customer lookup
+soft-match Customer candidate lookup
+idempotent Customer create Activity
+registration result/finalization Activity
+Temporal Activity proxies + retry policy
+Workflow transition after REQUIRED_DATA_COMPLETE into duplicate/persistence phases
+```
+
+B5 must preserve duplicate semantics:
+
+```text
+HARD_UNIQUE match
+  → no second Customer
+  → ALREADY_EXISTS candidate outcome
+
+SOFT_MATCH only
+  → do not silently merge or create
+  → surface WAITING_FOR_DUPLICATE_DECISION
+
+no duplicate
+  → persist canonical Customer exactly once
+```
+
+However **B5 alone still must not report final success externally** if the mandatory B6 MongoDB success-gating audit milestones have not yet been written. PostgreSQL may create/reserve canonical business truth in B5, but final `CREATED` / `ALREADY_EXISTS` success publication remains gated by B6.
+
+B5 must not:
+
+```text
+write MongoDB audit/context directly from Workflow code
+turn MongoDB into Customer authority
+implement attachments
 create Appointment/ResourceReservation
+put SQL/network access inside Workflow code
+let CTA write PostgreSQL
 introduce Agent/Hermes
 ```
 
-B4 completes when a real Temporal runtime proves at least:
+B5 certification must prove at minimum:
 
 ```text
-CLI/adapter input starts one real RegisterNewCustomer Workflow
-intent-only start enters WAITING_FOR_REQUIRED_DATA
-GetRegistrationState returns missing fields + next action
-ProvideCustomerData Update mutates same Workflow execution
-multiple Updates can satisfy policy requirements
-same Workflow ID + Run ID remains authoritative
-Worker restart while waiting does not lose draft state
-state reaches REQUIRED_DATA_COMPLETE without fake persistence success
-CTA/client reconnect resolves the same durable state
-Event History contains Update/restart evidence
+real PostgreSQL schema migration                   PASS
+Activity-only database access                     PASS
+business-scoped registration reservation          PASS
+same start replay is idempotent                    PASS
+same scoped key + different fingerprint conflicts PASS
+hard duplicate does not create second Customer    PASS
+soft duplicate is surfaced, not silently resolved PASS
+new Customer is created once                      PASS
+Activity retry/re-execution remains idempotent    PASS
+Workflow reaches PostgreSQL-backed pre-audit state PASS
+no scheduling side effects                        PASS
+no false final success before B6                  PASS
 ```
 
 ## Non-negotiable Temporal rule
@@ -204,4 +228,4 @@ mk0 must not use:
 - CTA reconnect/query must resolve the same durable outcome;
 - RegisterNewCustomer creates zero scheduling side effects.
 
-> **B0 = CERTIFIED. B1 = CERTIFIED. B2 = CERTIFIED. B3 = CERTIFIED. B4 = ACTIVE.**
+> **B0–B4 = CERTIFIED. B5 = ACTIVE.**
