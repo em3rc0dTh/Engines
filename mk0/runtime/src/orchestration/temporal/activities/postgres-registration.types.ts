@@ -4,6 +4,7 @@ import type {
   RegistrationPolicy,
   RegistrationResult,
 } from '../../../contracts/register-new-customer/index.js';
+import type { CommittedAttachmentMetadata } from '../../../persistence/attachments/attachment-store.types.js';
 
 export type RegistrationCommandStatus =
   | 'RESERVED'
@@ -72,6 +73,13 @@ export type CreateCustomerResult =
   | Readonly<{ kind: 'CREATED'; customerId: string; reused: boolean }>
   | Readonly<{ kind: 'HARD_DUPLICATE'; customerId: string }>;
 
+export type LinkCustomerAttachmentActivityInput = Readonly<{
+  customerId: string;
+  attachment: CommittedAttachmentMetadata;
+  kind?: string;
+  displayName?: string;
+}>;
+
 export type RegistrationOutcomeKind = 'CREATED' | 'ALREADY_EXISTS';
 
 export type MarkRegistrationAuditedInput = Readonly<{
@@ -92,6 +100,7 @@ export type PostgresRegistrationActivities = Readonly<{
   recordExistingCustomer(input: RecordExistingCustomerInput): Promise<void>;
   recordSoftDuplicate(input: RecordSoftDuplicateInput): Promise<void>;
   createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult>;
+  linkCustomerAttachment(input: LinkCustomerAttachmentActivityInput): Promise<void>;
   markRegistrationAudited(input: MarkRegistrationAuditedInput): Promise<void>;
   completeRegistration(input: CompleteRegistrationInput): Promise<RegistrationResult>;
 }>;
