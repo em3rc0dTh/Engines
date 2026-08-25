@@ -12,8 +12,10 @@ on:
       - 'mk0/runtime/**'
       - '.github/workflows/mk0-b0-ci.yml'
 
+# Temporary write permission is used only to bootstrap the first certified
+# package-lock.json on this Build branch. The next commit removes it again.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   b0-runtime:
@@ -119,6 +121,7 @@ jobs:
             --arg schemaVersion 'mk0.b0.evidence.v1' \
             --arg repository '${{ github.repository }}' \
             --arg commit "$GITHUB_SHA" \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
             --arg runId "$GITHUB_RUN_ID" \
             --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
             --arg node "$NODE_VERSION" \
@@ -135,7 +138,8 @@ jobs:
             '{
               schemaVersion: $schemaVersion,
               repository: $repository,
-              commit: $commit,
+              checkoutCommit: $commit,
+              sourceHeadSha: $sourceHeadSha,
               githubActions: {runId: $runId, runAttempt: $runAttempt},
               runtime: {node: $node, npm: $npm},
               temporal: {
@@ -174,6 +178,20 @@ jobs:
           path: mk0/runtime/evidence/ci/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Freeze first certified npm lockfile
+        if: github.event_name == 'push'
+        run: |
+          if git ls-files --error-unmatch mk0/runtime/package-lock.json >/dev/null 2>&1; then
+            echo 'package-lock.json already tracked'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mk0/runtime/package-lock.json
+          git commit -m 'build(mk0-b0): freeze certified npm dependency graph'
+          git push origin HEAD:${GITHUB_REF_NAME}
+        working-directory: ${{ github.workspace }}
 
       - name: Capture versions
         if: always()
