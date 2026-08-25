@@ -15,6 +15,9 @@
     "temporal:dev": "temporal server start-dev --ui-port 8233",
     "worker:b0": "tsx src/orchestration/temporal/workers/b0.worker.ts",
     "smoke:b0": "tsx src/orchestration/temporal/clients/b0.client.ts",
+    "worker:b2": "tsx src/orchestration/temporal/workers/b2.worker.ts",
+    "b2:start": "tsx src/orchestration/temporal/clients/b2-start.client.ts",
+    "b2:result": "tsx src/orchestration/temporal/clients/b2-result.client.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
   },
   "dependencies": {
