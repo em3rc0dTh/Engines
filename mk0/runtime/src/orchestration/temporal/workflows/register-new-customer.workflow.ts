@@ -12,6 +12,7 @@ import {
   evaluateRegistrationCompleteness,
   mergeCustomerDraft,
   normalizeRegistrationDraft,
+  serializeInitialStartFingerprintMaterial,
   validateProvideCustomerData,
   type ContractIssue,
   type CustomerDraft,
@@ -56,6 +57,7 @@ export type ProvideCustomerDataUpdateResult =
   | Readonly<{ ok: false; issues: readonly ContractIssue[]; state: RegistrationStateProjection }>;
 
 export const getRegistrationStateQuery = defineQuery<RegistrationStateProjection>('GetRegistrationState');
+export const getInitialStartFingerprintQuery = defineQuery<string>('GetInitialStartFingerprint');
 export const provideCustomerDataUpdate = defineUpdate<
   ProvideCustomerDataUpdateResult,
   [ProvideCustomerDataInput]
@@ -76,6 +78,7 @@ export async function registerNewCustomerWorkflow(
 ): Promise<RegistrationResult> {
   const info = workflowInfo();
   const policy = resolveMk0Policy(start.businessSlug);
+  const initialStartFingerprint = serializeInitialStartFingerprintMaterial(start);
 
   let phase: RegistrationStateProjection['phase'] = 'STARTED';
   let draft: RegisterNewCustomerDraft = normalizeRegistrationDraft(start.draft);
@@ -185,6 +188,7 @@ export async function registerNewCustomerWorkflow(
   };
 
   setHandler(getRegistrationStateQuery, projectState);
+  setHandler(getInitialStartFingerprintQuery, () => initialStartFingerprint);
 
   setHandler(provideCustomerDataUpdate, async (input: ProvideCustomerDataInput): Promise<ProvideCustomerDataUpdateResult> => {
     if (workflowFailure) {
