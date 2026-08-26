@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateProvideCustomerDataIngress } from './validation.js';
+import {
+  validateProvideCustomerData,
+  validateProvideCustomerDataIngress,
+} from './validation.js';
 
 function validate(customerPatch: Record<string, unknown>) {
   return validateProvideCustomerDataIngress({
@@ -87,4 +90,25 @@ test('contact boundary validates optional country code independently', () => {
     },
   });
   assert.equal(invalid.ok, false);
+});
+
+test('CTA ingress rejects legacy bad phone material without changing durable V1 replay semantics', () => {
+  const input = {
+    inputId: 'legacy-replay-boundary',
+    customerPatch: {
+      contact: {
+        phones: [{ number: 'llslslsl', normalized: 'llslslsl', primary: true }],
+      },
+    },
+  };
+
+  const ingress = validateProvideCustomerDataIngress(input);
+  assert.equal(ingress.ok, false, 'new CTA ingress must reject alphabetic phone material');
+
+  const durableV1 = validateProvideCustomerData(input);
+  assert.equal(
+    durableV1.ok,
+    true,
+    'durable V1 validator must stay replay-compatible with histories recorded before CTA ingress V2',
+  );
 });
