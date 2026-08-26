@@ -1,176 +1,175 @@
-# mining-site — mk0 Evidence Ledger
+# Mining Site — MK0 Evidence Ledger
 
 ## Purpose
 
-`mining-site` records the evidence and explicit project decisions used to design mk0. Design must not rely on remembered assumptions.
+`mining-site` records source facts, explicit project decisions and extracted reusable conclusions used by MK0. Design must not depend on remembered assumptions.
 
-## MS-001 — VTKALL DataModel v3 / TimeSlots
+Canonical quarry location:
 
-Source:
+```text
+mk0/mining-site/quarries/
+```
 
-`em3rc0dTh/demo_test/DATA_MODEL_VTKALL_DataModel-0_v3_timeslots.md`
+See [`quarries/README.md`](quarries/README.md) for the extracted evidence index.
+
+## Evidence ledger
+
+### MS-001 — VTKALL DataModel v3 / TimeSlots
 
 Role:
 
-- semantic baseline for `Customer`;
-- preserves the later Appointment vs ResourceReservation distinction;
-- keeps `RegisterNewCustomer` isolated from scheduling.
+- semantic baseline for Customer;
+- preserves Appointment vs ResourceReservation distinction;
+- prevents `RegisterNewCustomer` from silently creating scheduling side effects.
 
-Key facts used by mk0:
+Key preserved source facts:
 
-- Customer is a canonical business entity;
-- Customer includes business/type/name/document/contact/notes/status/timestamps semantics;
-- `ManagedEntity` is separate from Customer;
-- `Appointment` is customer-facing scheduling;
-- `ResourceReservation` blocks real capacity;
-- availability derives from schedule rules + overrides - blocking reservations;
-- `AvailabilitySlot` is legacy compatibility rather than future authority.
+```text
+Appointment schedules the customer-facing event.
+ResourceReservation blocks real operational capacity.
+Availability is a derived operational concern, not Customer registration state.
+```
 
 Classification: `SOURCE_FACT`.
 
-## MS-002 — Temporal documentation
+### MS-002 — Temporal documentation
 
-Source:
-
-https://docs.temporal.io/
+Source: official Temporal documentation.
 
 Role:
 
-- durable workflow runtime;
+- durable Workflow execution;
 - Workflow/Activity separation;
-- retry/restart model.
-
-Design consequence:
-
-- orchestration belongs to Temporal;
-- persistence side effects belong in Activities/adapters;
-- an accepted workflow survives CTA/worker/process lifetime changes.
+- retries/replay/recovery;
+- process-independent orchestration identity.
 
 Classification: `SOURCE_FACT` + derived `DESIGN_REQUIREMENT`.
 
-## MS-003 — Framework decision superseded, 2026-08-24
+### MS-003 — Framework decision superseded
 
-Earlier drafts introduced NestJS as the CTA/application boundary.
-
-That is **superseded**.
-
-Current project decision:
-
-> mk0 selects no application framework. Postman, CLI, or a minimal test harness may be used to prove the CTA → Temporal contract.
-
-NestJS/Express/Fastify or another framework may only be evaluated later as a replaceable adapter if required for ergonomics or external channels.
+MK0 selects no application framework as architecture authority. CLI, Postman-compatible HTTP and laboratory consoles are replaceable CTA implementations.
 
 Classification: `PROJECT_DECISION`.
 
-## MS-004 — First architecture slice, corrected 2026-08-24
-
-Canonical mk0 slice:
+### MS-004 — First architecture slice
 
 ```text
 CTA / controlled entry
 → Temporal Orchestration Engine
-→ Persistence
-   ├── PostgreSQL
-   ├── MongoDB
-   └── optional AttachmentStore
+→ Activities
+→ PostgreSQL + MongoDB + optional AttachmentStore
 ```
-
-Services Engine, Scheduler Engine, Integration Engine and Agent are outside the first slice.
 
 Classification: `PROJECT_DECISION`.
 
-## MS-005 — Persistence clarification, 2026-08-24
+### MS-005 — Persistence authority split
 
-Authority split:
-
-- PostgreSQL = canonical Customer + registration/idempotency business truth;
-- MongoDB = execution/audit/workflow context;
-- attachments = separate persistence capability with opaque business reference back to PostgreSQL;
-- exact AttachmentStore technology remains a Build decision;
-- Temporal internal persistence is separate from application persistence even if it also uses PostgreSQL.
+- PostgreSQL = canonical business truth;
+- MongoDB = semantic execution/audit context;
+- AttachmentStore = binary/document object truth;
+- Temporal internal persistence = infrastructure state, separate from application databases.
 
 Classification: `PROJECT_DECISION` + `DESIGN_DECISION`.
 
-## MS-006 — Continuity requirement, 2026-08-24
+### MS-006 — Continuity requirement
 
-The CTA must be able to start a workflow, disappear, reconnect and observe the same durable outcome.
-
-Continuity is therefore workflow durability and identity, not a permanently open network connection.
+The CTA may disappear after Workflow acceptance. The same Workflow must remain queryable/recoverable later.
 
 Classification: `PROJECT_DECISION` + `DESIGN_REQUIREMENT`.
 
-## MS-007 — Interactive start boundary correction, 2026-08-24
+### MS-007 — Interactive Customer start boundary
 
-Earlier CTA material required Customer name/type/contact completeness before Temporal Workflow start.
-
-That rule is **superseded** by the interactive registration decision.
-
-Current rule:
+A legal Customer registration may start incomplete and wait durably for policy-required fields.
 
 ```text
-CTA validates legal session/transport envelope
-→ Temporal Workflow starts
-→ versioned RegistrationPolicy determines Customer completeness
-→ incomplete legal draft waits durably
-→ ProvideCustomerData Update(s) continue the same Workflow
+CTA validates legal session/input shape
+→ Temporal starts
+→ RegistrationPolicy evaluates completeness
+→ Update(s) evolve durable draft
 ```
 
-Missing policy-required Customer fields are not automatically a pre-start rejection.
+Classification: `DESIGN_DECISION`.
 
-Classification: `DESIGN_DECISION` + `DESIGN_REQUIREMENT`.
+### MS-008 — Business-scoped idempotency
 
-## MS-008 — Business-scoped registration idempotency, 2026-08-24
-
-Current registration session authority:
+Canonical registration identity:
 
 ```text
 (operation, businessSlug, idempotencyKeyHash)
 ```
 
-Consequences:
-
-- same opaque key text under different businesses does not collide solely on key text;
-- recommended Workflow identity includes `businessSlug`;
-- raw idempotency keys should not appear in routine logs.
-
-The normalized material **initial start snapshot** is fingerprinted for exact replay/conflict detection. Later accepted `ProvideCustomerData` Updates evolve Workflow state without rewriting that original fingerprint.
-
-Same business + same operation + same key + materially different initial-start fingerprint resolves to `SESSION_IDEMPOTENCY_CONFLICT` with no additional business effect.
+Initial material is fingerprinted; later Updates do not rewrite the original start fingerprint.
 
 Classification: `DESIGN_DECISION`.
 
-## MS-009 — Mandatory audit-before-success rule, 2026-08-24
+### MS-009 — Mandatory audit-before-success
 
-MongoDB remains application interaction/audit/context authority.
-
-A registration may be reported successful only after the applicable success-gating logical milestones are durably represented, including session start, policy load, accepted external inputs, duplicate classification, business outcome and registration completion, plus conditional attachment/data-request milestones where applicable.
-
-If required audit persistence remains unavailable after the frozen retry policy is exhausted:
-
-```text
-registration MUST NOT be reported successful
-```
-
-Temporal Event History remains orchestration evidence for a failure caused by the audit store itself. Writing a failure event to an unavailable MongoDB cannot be a prerequisite for truthfully exposing that failure.
+When MongoDB audit is a success gate, required semantic milestones must exist before terminal success. Failure to persist mandatory audit cannot become false success.
 
 Classification: `DESIGN_DECISION` + `TEST_REQUIREMENT`.
 
-## MS-010 — Current channel vocabulary narrowed, 2026-08-24
+### MS-010 — Current channel vocabulary
 
-Current mk0 executable CTA proof surfaces:
+Current executable proof surfaces:
 
 ```text
-Postman
 CLI
+Postman-compatible HTTP
+Customer Lab Console
+Appointment Lab Console
 ```
 
-Current future examples remain intentionally narrow: Form/Web, WhatsApp, Telegram, Mobile, Voice, API/Webhook and Email. Other protocols/channels require an explicit later design decision and are not automatically part of mk0 merely because the adapter boundary is extensible.
+Future channels remain replaceable adapters and require explicit product decisions.
 
 Classification: `PROJECT_DECISION`.
 
+### MS-011 — Contact validation boundary
+
+Pragmatic syntax validation for external Customer contact updates belongs at CTA ingress before invalid phone/email material enters Temporal history. Durable Workflow replay semantics for already-recorded histories must not be changed casually.
+
+Classification: `DESIGN_DECISION` + `CERTIFIED_RUNTIME_FACT`.
+
+### MS-012 — Human completion vs minimum completeness
+
+In interactive flows:
+
+```text
+minimum required data satisfied
+≠
+human finished editing
+```
+
+Explicit finalization is a separate action when the interaction contract requires it.
+
+Classification: `DESIGN_DECISION` + `CERTIFIED_RUNTIME_FACT`.
+
+### MS-013 — Appointment composition
+
+The second specimen reuses `RegisterNewCustomer` as a Temporal Child Workflow for new Customers rather than duplicating Customer persistence logic.
+
+Classification: `DESIGN_DECISION` + `CERTIFIED_RUNTIME_FACT`.
+
+### MS-014 — Catalog and availability authority
+
+Service/Product/availability fixture data is read from PostgreSQL through Activities. Temporal orchestrates selection but does not become catalog persistence authority.
+
+Classification: `DESIGN_DECISION` + `CERTIFIED_RUNTIME_FACT`.
+
+### MS-015 — Availability is not reservation
+
+A displayed slot is only an observation. Final persistence must revalidate capacity atomically because another Workflow may win the slot first.
+
+Classification: `DESIGN_REQUIREMENT` + `CERTIFIED_RUNTIME_FACT`.
+
+### MS-016 — Scheduler boundary remains open
+
+The Car Wash specimen uses a simplified local `default` resource and 30-minute fixture. It proves orchestration/concurrency, not final TimeSlots/ResourceReservation semantics.
+
+Classification: `SCOPE_BOUNDARY`.
+
 ## Evidence handling rule
 
-Classify significant statements as one of:
+Significant statements should be classified as one of:
 
 - `SOURCE_FACT`
 - `PROJECT_DECISION`
@@ -178,6 +177,8 @@ Classify significant statements as one of:
 - `DESIGN_PROPOSAL`
 - `DESIGN_REQUIREMENT`
 - `TEST_REQUIREMENT`
+- `CERTIFIED_RUNTIME_FACT`
+- `SCOPE_BOUNDARY`
 - `UNKNOWN`
 
-Never convert a proposal into source/project truth without an explicit decision.
+Never convert proposal, memory or plausible inference into source/project truth without explicit evidence or decision.
