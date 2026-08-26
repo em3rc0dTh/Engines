@@ -1,256 +1,235 @@
 # Engines
 
-`Engines` is the design and implementation home for a reusable operational orchestration architecture that can support future agentic and non-agentic systems.
+`Engines` is a reusable operational orchestration architecture built around durable workflows rather than channel-specific business logic.
 
-## Current version
+## Current milestone
 
-**mk0 — full local laboratory system-certified**
+**MK0 — OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED**
 
-The first executable specimen is `RegisterNewCustomer`.
-
-Current truth:
+MK0 proved that the same orchestration spine can support more than one business workflow without moving authority into the CTA/channel layer.
 
 ```text
-B0–B7                              ✅ CERTIFIED
-Golden Dataset                    ✅ 18 / 18 PASS
-WSL2 + Docker Compose laboratory  ✅ PHYSICALLY PROVEN
-Postman manual collection         ✅ 37 / 37 PASS
-Full mk0 laboratory               ✅ SYSTEM_CERTIFIED
-Production deployment             ❌ NOT CERTIFIED
-Broader Engines workflow library  ⏳ FUTURE WORK
+MK0 foundation / RegisterNewCustomer       ✅ CERTIFIED
+Golden Customer dataset                   ✅ 18 / 18 PASS
+WSL2 + Docker Compose laboratory           ✅ PHYSICALLY PROVEN
+Postman Customer collection                ✅ 37 / 37 PASS
+Observability + Lab Console                ✅ CERTIFIED
+Second specimen / RegisterNewAppointment   ✅ CERTIFIED
+Customer Child Workflow reuse              ✅ PROVEN
+Service / Product catalog reads            ✅ PROVEN
+Date / slot conversation                    ✅ PROVEN
+Atomic appointment slot conflict            ✅ PROVEN
+Production deployment                       ❌ NOT CERTIFIED
+Public/internet exposure                    ❌ NOT CERTIFIED
 ```
 
-Primary current receipt:
+The primary MK0 closure index is [`mk0/README.md`](mk0/README.md). Certification receipts are indexed in [`mk0/Build/evidence/README.md`](mk0/Build/evidence/README.md).
 
-[`mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md`](mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md)
-
-## Core architecture
+## Proven architecture
 
 ```text
-INPUT CHANNELS
-CLI / Postman-compatible HTTP now
-future channels through adapters
-            ↓
-        CTA Adapter
-            ↓
-   canonical operation
-            ↓
-┌────────────────────────────────────┐
-│ TEMPORAL ORCHESTRATION ENGINE      │
-│                                    │
-│ durable Workflow Execution         │
-│ Task Queue / Workers / Activities  │
-│ Query / Update                     │
-│ retries / replay / recovery        │
-│ durable Event History              │
-└─────────────────┬──────────────────┘
-                  ↓
-             Activities
-      ┌───────────┼────────────┐
-      ↓           ↓            ↓
- PostgreSQL    MongoDB   AttachmentStore
- business      audit/    binary/document
- truth         context   truth
+CHANNELS / LAB CLIENTS
+CLI · Postman-compatible HTTP · Lab Consoles
+                ↓
+          CTA ADAPTER
+ transport parsing / canonicalization
+                ↓
+       TEMPORAL / ENGINES
+ durable Workflow Executions
+ Query / Update / Child Workflow
+ retry / replay / recovery
+                ↓
+          ACTIVITIES / PORTS
+       ┌────────┼──────────┐
+       ↓        ↓          ↓
+ PostgreSQL   MongoDB   AttachmentStore
+ business    semantic    binary/document
+ truth       audit       truth
 ```
 
-The channel is replaceable. Temporal owns durable orchestration. PostgreSQL owns canonical Customer/session business truth. MongoDB owns mandatory application audit/context. AttachmentStore owns binary/document integrity and content-addressed storage.
+Authority remains separated:
 
-## What mk0 has physically proven
+- **Temporal** — durable orchestration and Event History.
+- **PostgreSQL** — canonical transactional/business truth.
+- **MongoDB** — application execution/audit context; not shadow business truth.
+- **AttachmentStore** — binary/document integrity and lifecycle.
+- **CTA/channel** — replaceable transport boundary; not business authority.
 
-The complete first specimen has runtime evidence for:
+## Specimen 01 — `RegisterNewCustomer`
 
-- CLI and Postman-compatible HTTP CTA entry through the same canonical adapter contract;
-- structurally invalid start rejection before business execution;
-- legal intent-only start into `WAITING_FOR_REQUIRED_DATA`;
-- multi-round `ProvideCustomerData` Updates on the same Workflow;
-- real Temporal Service, Task Queue, Worker, Activities, Query, Update and Event History;
-- CTA process loss without loss of accepted Workflow state;
-- completed-session exact replay to the same Workflow/Run;
-- typed `SESSION_IDEMPOTENCY_CONFLICT` for materially different reuse of the same business-scoped session;
-- PostgreSQL Customer/session persistence and retry safety;
-- hard-duplicate resolution without a second Customer;
-- soft-duplicate waiting without silently becoming a hard rule;
+The first specimen proved:
+
+- legal intent-only starts;
+- durable multi-round Customer input;
+- pragmatic contact validation at the CTA boundary;
+- explicit finalization for interactive laboratory sessions;
+- business-scoped idempotency and exact completed-session replay;
+- hard/soft duplicate semantics;
+- PostgreSQL Customer persistence;
 - mandatory MongoDB audit before terminal success;
-- typed failure instead of false success when mandatory audit exhausts retries;
-- Worker loss after PostgreSQL Customer creation followed by recovery of the same Workflow/Run without duplicate Customer;
-- AttachmentStore stage / resolve / commit;
-- SHA-256 integrity verification;
-- retry-safe logical attachment identity with content-addressed binary blobs;
-- PostgreSQL attachment references without storing binary payloads in business tables;
-- mandatory `ATTACHMENT_COMMITTED` evidence before attachment-bearing terminal success;
-- post-stage corruption detection with no false successful registration;
-- zero Appointment / ResourceReservation / Availability side effects.
+- Worker/CTA process-loss recovery;
+- AttachmentStore stage/resolve/commit with SHA-256 integrity;
+- stable multiple-phone ordering while fingerprinting remains order-independent;
+- read-only unified execution trace and Lab Console.
 
-## Golden Dataset
+The Customer Golden Dataset contains 18 certified cases.
 
-```text
-GD-001 PASS
-GD-002 PASS
-GD-003 PASS
-GD-004 PASS
-GD-005 PASS
-GD-006 PASS
-GD-007 PASS
-GD-008 PASS
-GD-009 PASS
-GD-010 PASS
-GD-011 PASS
-GD-012 PASS
-GD-013 PASS
-GD-014 PASS
-GD-015 PASS
-GD-016 PASS
-GD-017 PASS
-GD-018 PASS
+## Specimen 02 — `RegisterNewAppointment`
 
-18 / 18 PASS
-```
-
-The B7 attachment runtime was certified in successful GitHub Actions run:
+The second specimen proves reuse of the Engines spine rather than a one-off Customer application.
 
 ```text
-32896780937
+RegisterNewAppointment
+        ↓
+resolve existing Customer
+        │
+        └─ new Customer → Child Workflow: RegisterNewCustomer
+        ↓
+load Services from PostgreSQL
+        ↓
+select Service
+        ↓
+load Products from PostgreSQL
+        ↓
+select Product
+        ↓
+normalize/select date
+        ↓
+load available slots through Activity
+        ↓
+select slot
+        ↓
+READY_TO_FINALIZE
+        ↓
+finish
+        ↓
+atomic PostgreSQL booking
+        ↓
+Mongo appointment audit
+        ↓
+CREATED
 ```
 
-against source:
+The clean Compose certification proved:
+
+- new Customer creation through the existing Child Workflow;
+- Car Wash Service and three Product fixtures loaded from PostgreSQL;
+- `ayer` / `yesterday` past-date rejection;
+- English/Spanish weekday normalization (`Friday` / `viernes`);
+- deterministic 30-minute laboratory slots;
+- no Appointment before explicit `finish`;
+- persisted Appointment creation;
+- exact idempotency replay;
+- two Workflows selecting the same slot while only one may persist it;
+- losing slot-race Workflow returns to durable slot selection with refreshed availability.
+
+The 30-minute slot size and the simplified `default` resource are **MK0 laboratory fixtures**, not a claim that the future Scheduler Engine is complete.
+
+## Repository map
 
 ```text
-80a95d0b9715f91879a9e0cbd7230828098ba997
+.
+├── README.md
+├── .github/workflows/          # current active certification workflows only
+└── mk0/
+    ├── README.md               # canonical MK0 closure/index
+    ├── Brainstorming/          # problem framing
+    ├── Design/                 # architecture + specimen contracts
+    ├── Plan/                   # gates, decisions, closure ledger
+    ├── Build/                  # build history + evidence + archived historical CI
+    ├── Test/                   # test contracts / specimen certification notes
+    ├── mining-site/
+    │   └── quarries/           # extracted evidence packages
+    ├── golden-dataset/         # Golden / expectation manifests + synthetic fixtures
+    └── runtime/                # executable TypeScript/Temporal local laboratory
 ```
 
-The core 14 actual Golden case steps were also re-exercised on B7-capable code. The old core job's only failure was its deliberately obsolete pre-B7 assertion that attachments must remain gated.
-
-## Physical local proof
-
-On 2026-08-26 the complete Postman manual-certification collection was executed against the local Windows + WSL2 + Docker Compose laboratory.
+The canonical documentation progression remains:
 
 ```text
-Tests               37
-Errors              0
-Failed assertions   0
-Verdict             37 / 37 PASS
+Brainstorming
+→ Mining Site / Quarries
+→ Design
+→ Plan
+→ Golden expectations
+→ Build
+→ Test / Evidence
 ```
 
-That proof exercised health, interactive Workflow behavior, multi-round Updates, exact replay, session conflict, AttachmentStore stage/resolve, attachment-bearing Customer registration and negative HTTP contracts.
+## Current active CI
 
-## First Workflow
+Historical B0–B6 stage workflows and the obsolete attachment-free core workflow are preserved under [`mk0/Build/ci-archive/`](mk0/Build/ci-archive/) rather than running on every new PR.
 
-> **RegisterNewCustomer**
+Current active workflows focus on the latest laboratory surface:
 
-`RegisterNewCustomer` is the first architecture specimen, not the permanent definition of Engines.
+- B7/AttachmentStore regression;
+- B7 clean Compose certification;
+- Lab Console / trace certification;
+- `RegisterNewAppointment` certification;
+- MK0 release/closure certification.
 
-Its certified path is conceptually:
+Historical GitHub Actions runs and their receipts remain part of the evidence chain.
+
+## Local laboratory
 
 ```text
-CTA
-→ Temporal start
-→ RegistrationPolicy
-→ wait/update when required
-→ duplicate check
-→ PostgreSQL Customer or existing-Customer resolution
-→ AttachmentStore commit when applicable
-→ PostgreSQL attachment linkage when applicable
-→ mandatory MongoDB audit
-→ PostgreSQL audited finalization
-→ CREATED | ALREADY_EXISTS
+Host             Windows + WSL2
+Runtime          Linux / Node / TypeScript
+Deployment       Docker Compose
+CTA              http://127.0.0.1:8787
+Temporal gRPC    localhost:7233
+Temporal UI      http://localhost:8233
+PostgreSQL       private Compose network
+MongoDB          private Compose network
+AttachmentStore shared Docker filesystem volume
+Cloud dependency none
 ```
 
-A soft duplicate remains at `WAITING_FOR_DUPLICATE_DECISION`.
+From `mk0/runtime`:
 
-## Session identity
+```bash
+npm ci
+npm run check
+docker compose up --build -d
+curl -fsS http://127.0.0.1:8787/health
+```
 
-Registration session idempotency is business-scoped:
+Interactive Customer laboratory:
+
+```bash
+npm run lab:console
+```
+
+Interactive Appointment laboratory:
+
+```bash
+npm run lab:appointment
+```
+
+## Evidence discipline
+
+MK0 preserves these rules:
 
 ```text
-(operation, businessSlug, idempotencyKeyHash)
+UNKNOWN != PASS
+documented != verified
+CI green != product-ready unless the gate proves the product claim
+observed != supported
 ```
 
-The normalized material initial start is fingerprinted.
+A runtime claim must point to an identified source revision and receipt. Documentation-only heads must not be presented as if the runtime was executed against them.
 
-```text
-same identity + same initial fingerprint
-→ same logical Workflow/session
-→ same completed Workflow/Run on replay
+## What MK0 does not claim
 
-same identity + different initial fingerprint
-→ SESSION_IDEMPOTENCY_CONFLICT
-```
+MK0 does **not** certify:
 
-Later `ProvideCustomerData` Updates evolve durable Workflow state without rewriting the original fingerprint.
+- production deployment;
+- public exposure/security hardening;
+- every channel;
+- a finished Scheduler Engine;
+- final ResourceReservation/WorkTeam capacity semantics;
+- Agent/Hermes;
+- a complete Services or Integration Engine;
+- the final Engines product/control-room UI.
 
-## Current proof surfaces
-
-### CLI
-
-The first command-oriented CTA proof surface.
-
-### Postman-compatible HTTP
-
-A framework-free `node:http` adapter proves a second replaceable transport. Importable Postman material lives under:
-
-```text
-mk0/runtime/postman/
-```
-
-The HTTP process is not required to stay alive after Temporal accepts the Workflow.
-
-## Persistence authority
-
-- **PostgreSQL** — canonical Customer + registration/idempotency + immutable attachment-reference business truth.
-- **MongoDB** — mandatory application execution/audit/context evidence.
-- **Temporal** — orchestration authority and durable Event History.
-- **AttachmentStore** — binary/document truth with SHA-256 integrity and content-addressed storage.
-
-Temporal's own internal persistence is separate from Engines application business databases.
-
-## Local laboratory profile
-
-```text
-Host                  Windows + WSL2
-Runtime               Linux WSL
-Deployment            Docker Compose
-CTA                    localhost:8787
-Temporal UI            localhost:8233
-Temporal gRPC          localhost:7233
-PostgreSQL             private Compose network
-MongoDB                private Compose network
-AttachmentStore       shared filesystem volume
-Public tunnel          none
-Cloud dependency       none
-```
-
-Production deployment and public exposure are intentionally not inferred from this laboratory proof.
-
-## Repository navigation
-
-- [`mk0/README.md`](mk0/README.md) — architecture/specimen overview.
-- [`mk0/Design/`](mk0/Design/) — design decisions and closure decisions.
-- [`mk0/Plan/`](mk0/Plan/) — authorization and gate records.
-- [`mk0/Test/`](mk0/Test/) — runtime test contract.
-- [`mk0/golden-dataset/`](mk0/golden-dataset/) — machine-readable Golden expectations and synthetic fixtures.
-- [`mk0/runtime/`](mk0/runtime/) — executable mk0 runtime and local Compose laboratory.
-- [`mk0/Build/evidence/`](mk0/Build/evidence/) — stage, Golden and local certification receipts.
-
-## Current gate
-
-B7 is no longer the project gate.
-
-The first specimen is complete as a laboratory proof. The next deliberate step is to select a **second Engines specimen** and prove the architecture is reusable rather than merely successful once.
-
-```text
-MK0 / RegisterNewCustomer
-       ✅ SYSTEM_CERTIFIED LABORATORY
-                    ↓
-          SELECT NEXT SPECIMEN
-                    ↓
-        freeze contract / authority
-        Golden Dataset / quarry
-                    ↓
-        reuse Engines spine
-                    ↓
-        Build + certify again
-```
-
-No future Workflow is implicitly authorized by mk0 completion.
-
-> **Full mk0 local laboratory = certified. Engines as the broader platform = still under construction.**
+> MK0 answered the architecture question: **Engines can durably orchestrate and compose multiple business workflows while keeping channels replaceable and persistence authorities explicit.**
