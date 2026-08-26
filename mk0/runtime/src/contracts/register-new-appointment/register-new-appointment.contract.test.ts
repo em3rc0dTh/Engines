@@ -28,6 +28,28 @@ test('past date is rejected before Temporal appointment Update', () => {
   if (!result.ok) assert.equal(result.code, 'PAST_DATE');
 });
 
+test('yesterday and ayer resolve to a past date and are rejected', () => {
+  for (const input of ['yesterday', 'ayer']) {
+    const result = normalizeAppointmentDateInput(input, '2026-08-26');
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.code, 'PAST_DATE');
+      assert.match(result.message, /2026-08-25/);
+    }
+  }
+});
+
+test('today/hoy and tomorrow/mañana are accepted relative inputs', () => {
+  assert.deepEqual(
+    normalizeAppointmentDateInput('hoy', '2026-08-26'),
+    { ok: true, appointmentDate: '2026-08-26' },
+  );
+  assert.deepEqual(
+    normalizeAppointmentDateInput('mañana', '2026-08-26'),
+    { ok: true, appointmentDate: '2026-08-27' },
+  );
+});
+
 test('malformed calendar dates are rejected', () => {
   const result = normalizeAppointmentDateInput('31/02/2026', '2026-08-26');
   assert.equal(result.ok, false);
