@@ -36,6 +36,7 @@ export function adaptRegisterNewCustomerCtaInput(
       idempotencyKey: input.idempotencyKey,
       correlationId: input.correlationId,
       channel: context.channel,
+      completionMode: input.completionMode,
     },
     schemaVersion: REGISTER_NEW_CUSTOMER_SCHEMA_VERSION,
   };
