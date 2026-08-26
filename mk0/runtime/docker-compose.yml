@@ -52,7 +52,7 @@ services:
     command:
       - sh
       - -lc
-      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run mongo:init:b6
+      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run mongo:init:b6
     restart: "no"
 
   worker:
@@ -74,7 +74,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - engines_mk0_attachments:/data/attachments
-    command: ["npm", "run", "worker:b7"]
+    command: ["npm", "run", "worker:appointment"]
     healthcheck:
       test: ["CMD-SHELL", "test -s /tmp/engines-mk0-worker-ready"]
       interval: 2s
