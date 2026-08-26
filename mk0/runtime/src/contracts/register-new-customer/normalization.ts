@@ -50,24 +50,17 @@ function normalizePhone(phone: CustomerPhoneDraft): CustomerPhoneDraft | undefin
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
-function phoneSortKey(phone: CustomerPhoneDraft): string {
-  return JSON.stringify([
-    phone.normalized ?? '',
-    phone.countryCode ?? '',
-    phone.number ?? '',
-    phone.label ?? '',
-    phone.primary ?? false,
-    phone.isWhatsapp ?? false,
-  ]);
-}
-
 function normalizeContact(contact: CustomerContactDraft | undefined): CustomerContactDraft | undefined {
   if (!contact) return undefined;
 
+  // Customer phone order is semantic because downstream persistence stores an
+  // explicit phone_index and interactive clients expose stable phone[n] slots.
+  // Do not canonical-sort here. Fingerprint-only canonical ordering belongs in
+  // the idempotency layer, where a sorted copy can be produced without mutating
+  // the durable Customer draft's user-visible slot order.
   const phones = (contact.phones ?? [])
     .map(normalizePhone)
-    .filter((phone): phone is CustomerPhoneDraft => Boolean(phone))
-    .sort((left, right) => phoneSortKey(left).localeCompare(phoneSortKey(right)));
+    .filter((phone): phone is CustomerPhoneDraft => Boolean(phone));
   const email = normalizeEmail(contact.email);
 
   if (phones.length === 0 && !email) return undefined;
