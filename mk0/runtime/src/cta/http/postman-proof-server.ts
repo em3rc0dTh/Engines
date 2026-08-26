@@ -11,8 +11,10 @@ import {
   TemporalRegisterNewCustomerPort,
 } from '../../orchestration/temporal/ports/register-new-customer.temporal-port.js';
 import {
+  finalizeRegistrationUpdate,
   getRegistrationStateQuery,
   provideCustomerDataUpdate,
+  type FinalizeRegistrationInput,
 } from '../../orchestration/temporal/workflows/register-new-customer.workflow.js';
 import { adaptRegisterNewCustomerCtaInput } from '../register-new-customer.adapter.js';
 import { buildRegisterNewCustomerExecutionTrace } from '../../observability/register-new-customer-trace.js';
@@ -82,6 +84,11 @@ function headerString(request: IncomingMessage, name: string): string | undefine
   const value = request.headers[name];
   if (Array.isArray(value)) return value[0]?.trim() || undefined;
   return value?.trim() || undefined;
+}
+
+function workflowAlreadyClosed(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /already completed|already closed|workflow execution.*completed/i.test(message);
 }
 
 async function run(): Promise<void> {
@@ -216,14 +223,77 @@ async function run(): Promise<void> {
         if (workflowId) {
           const input = (await readJson(request)) as ProvideCustomerDataInput;
           const handle = client.workflow.getHandle(workflowId);
-          const result = await handle.executeUpdate(provideCustomerDataUpdate, { args: [input] });
-          const description = await handle.describe();
-          sendJson(response, 200, {
-            ok: true,
-            workflowId,
-            runId: description.runId,
-            result,
-          });
+          try {
+            const state = await handle.query(getRegistrationStateQuery);
+            if (state.workflowStatus !== 'RUNNING') {
+              sendJson(response, 409, {
+                ok: false,
+                code: 'WORKFLOW_ALREADY_COMPLETED',
+                workflowId,
+                state,
+              });
+              return;
+            }
+            const result = await handle.executeUpdate(provideCustomerDataUpdate, { args: [input] });
+            const description = await handle.describe();
+            sendJson(response, 200, {
+              ok: true,
+              workflowId,
+              runId: description.runId,
+              result,
+            });
+          } catch (error) {
+            if (workflowAlreadyClosed(error)) {
+              sendJson(response, 409, {
+                ok: false,
+                code: 'WORKFLOW_ALREADY_COMPLETED',
+                workflowId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              return;
+            }
+            throw error;
+          }
+          return;
+        }
+      }
+
+      if (request.method === 'POST') {
+        const workflowId = pathWorkflowId(url.pathname, '/finalize');
+        if (workflowId) {
+          const input = (await readJson(request)) as FinalizeRegistrationInput;
+          const handle = client.workflow.getHandle(workflowId);
+          try {
+            const state = await handle.query(getRegistrationStateQuery);
+            if (state.workflowStatus !== 'RUNNING') {
+              sendJson(response, 409, {
+                ok: false,
+                code: 'WORKFLOW_ALREADY_COMPLETED',
+                workflowId,
+                state,
+              });
+              return;
+            }
+            const result = await handle.executeUpdate(finalizeRegistrationUpdate, { args: [input] });
+            const description = await handle.describe();
+            sendJson(response, 200, {
+              ok: true,
+              workflowId,
+              runId: description.runId,
+              result,
+            });
+          } catch (error) {
+            if (workflowAlreadyClosed(error)) {
+              sendJson(response, 409, {
+                ok: false,
+                code: 'WORKFLOW_ALREADY_COMPLETED',
+                workflowId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              return;
+            }
+            throw error;
+          }
           return;
         }
       }
