@@ -1,5 +1,5 @@
 import { normalizeRegistrationDraft } from './normalization.js';
-import type { RegisterNewCustomerStartEnvelope } from './types.js';
+import type { CustomerPhoneDraft, RegisterNewCustomerDraft, RegisterNewCustomerStartEnvelope } from './types.js';
 
 export type RegistrationSessionIdentityMaterial = Readonly<{
   operation: RegisterNewCustomerStartEnvelope['operation'];
@@ -13,6 +13,42 @@ export type InitialStartFingerprintMaterial = Readonly<{
   schemaVersion: RegisterNewCustomerStartEnvelope['schemaVersion'];
   draft: ReturnType<typeof normalizeRegistrationDraft>;
 }>;
+
+function phoneFingerprintSortKey(phone: CustomerPhoneDraft): string {
+  return JSON.stringify([
+    phone.normalized ?? '',
+    phone.countryCode ?? '',
+    phone.number ?? '',
+    phone.label ?? '',
+    phone.primary ?? false,
+    phone.isWhatsapp ?? false,
+  ]);
+}
+
+function normalizeInitialFingerprintDraft(
+  draft: RegisterNewCustomerDraft | undefined,
+): ReturnType<typeof normalizeRegistrationDraft> {
+  const normalized = normalizeRegistrationDraft(draft);
+  const customer = normalized.customer;
+  const contact = customer?.contact;
+  const phones = contact?.phones;
+
+  if (!customer || !contact || !phones || phones.length < 2) return normalized;
+
+  return {
+    ...normalized,
+    customer: {
+      ...customer,
+      contact: {
+        ...contact,
+        // Ordering is intentionally canonical only inside fingerprint material.
+        // The durable Customer draft preserves its user-visible phone[n] slots.
+        phones: [...phones].sort((left, right) =>
+          phoneFingerprintSortKey(left).localeCompare(phoneFingerprintSortKey(right))),
+      },
+    },
+  };
+}
 
 export function buildRegistrationSessionIdentityMaterial(
   start: RegisterNewCustomerStartEnvelope,
@@ -31,7 +67,7 @@ export function buildInitialStartFingerprintMaterial(
     operation: start.operation,
     businessSlug: start.businessSlug,
     schemaVersion: start.schemaVersion,
-    draft: normalizeRegistrationDraft(start.draft),
+    draft: normalizeInitialFingerprintDraft(start.draft),
   };
 }
 
