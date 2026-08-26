@@ -47,6 +47,15 @@ const MONTHS: Readonly<Record<string, number>> = {
   diciembre: 12,
 };
 
+const RELATIVE_DAYS: Readonly<Record<string, number>> = {
+  yesterday: -1,
+  ayer: -1,
+  today: 0,
+  hoy: 0,
+  tomorrow: 1,
+  manana: 1,
+};
+
 function ascii(value: string): string {
   return value
     .trim()
@@ -89,6 +98,12 @@ function dateFromIso(value: string): Date {
   return new Date(Date.UTC(year!, month! - 1, day!));
 }
 
+function shiftDate(referenceDate: string, days: number): string {
+  const date = dateFromIso(referenceDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+}
+
 function nextWeekday(referenceDate: string, targetWeekday: number): string {
   const reference = dateFromIso(referenceDate);
   const delta = (targetWeekday - reference.getUTCDay() + 7) % 7;
@@ -115,19 +130,24 @@ export function normalizeAppointmentDateInput(
   if (!input) return { ok: false, code: 'INVALID_DATE', message: 'appointment date is required' };
 
   let canonical: string | undefined;
-  const weekday = WEEKDAYS[input];
-  if (weekday !== undefined) {
-    canonical = nextWeekday(referenceDate, weekday);
+  const relative = RELATIVE_DAYS[input];
+  if (relative !== undefined) {
+    canonical = shiftDate(referenceDate, relative);
   } else {
-    const parts = parseIsoParts(input);
-    if (!parts || !validDate(parts.year, parts.month, parts.day)) {
-      return {
-        ok: false,
-        code: 'INVALID_DATE',
-        message: 'use YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, a supported month name, or an English/Spanish weekday',
-      };
+    const weekday = WEEKDAYS[input];
+    if (weekday !== undefined) {
+      canonical = nextWeekday(referenceDate, weekday);
+    } else {
+      const parts = parseIsoParts(input);
+      if (!parts || !validDate(parts.year, parts.month, parts.day)) {
+        return {
+          ok: false,
+          code: 'INVALID_DATE',
+          message: 'use yesterday/ayer, today/hoy, tomorrow/mañana, YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, a supported month name, or an English/Spanish weekday',
+        };
+      }
+      canonical = isoDate(parts.year, parts.month, parts.day);
     }
-    canonical = isoDate(parts.year, parts.month, parts.day);
   }
 
   if (canonical < referenceDate) {
