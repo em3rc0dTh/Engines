@@ -4,70 +4,89 @@
 
 This ledger records the **current** mk0 authorization/certification state.
 
-It is not a substitute for Design, Test, Golden Dataset or runtime evidence. Its purpose is to prevent one class of truth from being mistaken for another:
+It distinguishes specification, authorization, implementation, runtime proof and system certification.
 
 ```text
 specified ≠ approved
 approved ≠ implemented
 implemented ≠ runtime-proven
 stage-certified ≠ system-certified
-attachment-free certified ≠ full mk0 certified
+laboratory-certified ≠ production-certified
 ```
 
-## Status vocabulary
+## Current verdict
 
 ```text
-SPECIFIED        contract is materially explicit
-APPROVED         project authority authorized the stated scope
-IMPLEMENTED      executable implementation exists
-CERTIFIED        identified runtime evidence satisfies the stated gate
-SYSTEM_CERTIFIED integrated Golden/runtime proof exists across stage boundaries
-GATED            explicit authorization/preconditions still block entry
-DEFERRED_B7      Golden case belongs to the still-gated attachment stage
+Architecture contract                  CERTIFIED FOR MK0
+Interactive contract                   CERTIFIED
+Temporal execution plane               CERTIFIED
+PostgreSQL authority                   CERTIFIED
+MongoDB mandatory audit                CERTIFIED
+AttachmentStore authority              CERTIFIED
+CTA death/reconnect                     CERTIFIED
+Completed-session replay               CERTIFIED
+Transient PostgreSQL retry             CERTIFIED
+Post-persistence Worker recovery       CERTIFIED
+Hard duplicate                         CERTIFIED
+Soft duplicate decision state          CERTIFIED
+Scheduling isolation                   CERTIFIED
+Golden Dataset                         18 / 18 PASS
+WSL2 Docker Compose laboratory         PHYSICALLY PROVEN
+Postman manual collection              37 / 37 PASS
+Full mk0 laboratory                    SYSTEM_CERTIFIED
+Production deployment                  NOT CERTIFIED
+Public/external exposure               OUT OF SCOPE
+Broader Engines workflow library       NOT IMPLEMENTED BY MK0
 ```
 
 ---
 
-# Historical Build authorization
+# Authorization history
 
-The pre-Build architecture was formally reviewed and the staged Build was authorized through B0–B6 with B7 deliberately held closed.
+The original pre-Build approval authorized B0–B6 and intentionally held B7 closed.
 
-Authoritative records:
+Historical records:
 
 ```text
 mk0/Plan/pre-build-review-2026-08-24.md
 mk0/Plan/pre-build-approval-2026-08-24.md
 ```
 
-Authorized staged envelope:
+B7 was later explicitly authorized for the local WSL2 laboratory profile:
 
 ```text
-B0  runtime/repository skeleton
-B1  canonical contracts + RegistrationPolicy
-B2  Temporal runtime/topology
-B3  CLI CTA Adapter
-B4  interactive RegisterNewCustomer Workflow
-B5  PostgreSQL Activities
-B6  MongoDB mandatory audit Activities
-
-B7  AttachmentStore → NOT AUTHORIZED BY THAT RECORD
+Windows + WSL2
+Docker Compose
+real Temporal
+PostgreSQL
+MongoDB
+filesystem-backed content-addressed AttachmentStore
+Postman / localhost CTA
+no cloud dependency
+no tunnel/public exposure
 ```
 
-The old pre-Build state is therefore historical, not the current gate position.
+The B7 physical recommendation and decision package is preserved in:
+
+```text
+mk0/Plan/b7-attachmentstore-authority-decision.md
+```
+
+The earlier `GATED` state is historical and no longer current.
 
 ---
 
 # Current stage ledger
 
-| Stage | Current state | Evidence |
+| Stage | Current state | Primary evidence |
 |---|---|---|
-| M0 reality/source lock | APPROVED / IMPLEMENTED | approved architecture package + Build receipts |
+| M0 reality/source lock | APPROVED / IMPLEMENTED | architecture + Build receipts |
 | M1 architecture lock | APPROVED / IMPLEMENTED | CTA → Temporal → Activities authority preserved |
-| M2 interactive contract | APPROVED / CERTIFIED | B1/B4 + integrated Golden GD-015/016 |
-| M3 Temporal orchestration | IMPLEMENTED / CERTIFIED | B2/B4 + integrated GD-014/011 |
-| M4 PostgreSQL persistence | IMPLEMENTED / CERTIFIED | B5 + integrated GD-008/017 |
-| M5 Mongo audit contract | IMPLEMENTED / CERTIFIED | B6 + integrated success/failure gates |
-| M6 Golden Dataset v0 | PARTIALLY SYSTEM_CERTIFIED | 14 attachment-free PASS; 4 DEFERRED_B7 |
+| M2 interactive contract | CERTIFIED | B1/B4 + Golden GD-015/016 |
+| M3 Temporal orchestration | CERTIFIED | B2/B4 + GD-014/011 |
+| M4 PostgreSQL persistence | CERTIFIED | B5 + GD-008/017 |
+| M5 Mongo audit contract | CERTIFIED | B6 mandatory-audit gates |
+| M6 Golden Dataset v0 | SYSTEM_CERTIFIED | 18 / 18 accounted PASS |
 | B0 | CERTIFIED | runtime skeleton receipt |
 | B1 | CERTIFIED | contracts/policy receipt |
 | B2 | CERTIFIED | Temporal continuity receipt |
@@ -75,46 +94,36 @@ The old pre-Build state is therefore historical, not the current gate position.
 | B4 | CERTIFIED | interactive Workflow receipt |
 | B5 | CERTIFIED | PostgreSQL authority receipt |
 | B6 | CERTIFIED | Mongo audit/finalization receipt |
-| Integrated attachment-free core | SYSTEM_CERTIFIED | run `32873848134` |
-| B7 AttachmentStore | GATED | technology + fixture/hash closure required |
-| Full mk0 Golden | OPEN AFTER B7 | GD-003/004/009/010 remain |
+| B7 AttachmentStore | CERTIFIED | run `32896780937` + local proof |
+| Full mk0 laboratory | SYSTEM_CERTIFIED | automated 18/18 accounting + physical 37/37 Postman proof |
 
 ---
 
-# Integrated attachment-free Golden certification
+# Automated Golden evidence
 
-The system-level gate ran the complete currently-applicable Golden matrix against a real runtime.
+## Core 14 cases on B7-capable source
 
-```text
-Golden Dataset:  mk0.golden.register-customer.v0
-Source SHA:      f0896c58d918e8f3971c78867870243e16a8b604
-Run ID:          32873848134
-Job ID:          97886979323
-Artifact ID:     9573135809
-Artifact:        mk0-core-golden-release-32873848134
-Digest:          sha256:25fea20c892ea7cd758788ac63a53ba9048b8809599f2b972c5ef77942c2b4e8
-Verdict:         ATTACHMENT_FREE_CORE_GOLDEN_PASS
-```
-
-Durable receipt:
+Regression source:
 
 ```text
-mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md
+609fb09d8d8f5b1229df0e0ebae031a9b5afbb27
 ```
 
-Golden status:
+GitHub Actions run:
+
+```text
+32897158566
+```
+
+The actual core Golden case steps all completed successfully:
 
 ```text
 GD-001 PASS
 GD-002 PASS
-GD-003 DEFERRED_B7
-GD-004 DEFERRED_B7
 GD-005 PASS
 GD-006 PASS
 GD-007 PASS
 GD-008 PASS
-GD-009 DEFERRED_B7
-GD-010 DEFERRED_B7
 GD-011 PASS
 GD-012 PASS
 GD-013 PASS
@@ -125,23 +134,112 @@ GD-017 PASS
 GD-018 PASS
 ```
 
-Therefore:
+The job-level conclusion was `failure` only because the old final pre-B7 meta-assertion expected `ATTACHMENT_BUILD_GATE_CLOSED`. That assertion is deliberately obsolete after B7 and is not interpreted as a product regression.
+
+## B7 attachment cases
+
+Certified B7 source:
 
 ```text
-attachment-free applicable cases = 14 / 14 PASS
-attachment-dependent cases        = 4 / 4 explicitly deferred
-unaccounted Golden cases          = 0
+80a95d0b9715f91879a9e0cbd7230828098ba997
+```
+
+GitHub Actions run:
+
+```text
+32896780937
+```
+
+Conclusion:
+
+```text
+success
+```
+
+Cases:
+
+```text
+GD-003 PASS  one attachment
+GD-004 PASS  multiple attachments
+GD-009 PASS  transient AttachmentStore failure / Temporal retry
+GD-010 PASS  permanent integrity mismatch / no false success
+```
+
+Golden accounting:
+
+```text
+attachment-free/core = 14 / 14 PASS
+attachment-dependent =  4 /  4 PASS
+----------------------------------
+TOTAL                = 18 / 18 PASS
+unaccounted           =  0
 ```
 
 ---
 
-# What is now physically proven
+# Physical local laboratory proof
+
+On 2026-08-26 the operator ran the complete Postman manual-certification collection against the WSL2/Docker Compose laboratory.
+
+Observed Runner receipt:
+
+```text
+Iterations          1
+Duration            2s 668ms
+Tests               37
+Errors              0
+Average response    34 ms
+Failed assertions   0
+Verdict             37 / 37 PASS
+```
+
+The local proof covered:
+
+```text
+health
+intent-only start
+waiting-state query
+multi-round ProvideCustomerData Updates
+terminal creation
+complete-customer start
+exact completed-session replay
+SESSION_IDEMPOTENCY_CONFLICT
+AttachmentStore stage
+AttachmentStore resolve
+Customer registration with attachment
+CTA 400 structural rejection
+typed 404 absent-ingress response
+```
+
+Earlier in the same physical laboratory, the operator also supplied direct evidence of:
+
+```text
+normal registration       COMPLETED / CREATED
+75-byte PNG stage          STAGED / expected SHA-256
+attachment registration   COMPLETED / CREATED
+Worker                     RUNNING
+Task Queue                 engines-mk0-registration
+Temporal address           temporal:7233
+AttachmentStore root       /data/attachments
+```
+
+Durable receipt:
+
+```text
+mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
+```
+
+The final screenshot does not itself display `git rev-parse HEAD`; therefore exact source provenance for the local screenshot is not inferred from pixels. Exact source authority remains the source-pinned automated receipts, while the Postman run is physical local-operation evidence for the prescribed B7 branch/profile.
+
+---
+
+# What is physically proven now
 
 ## Replaceable CTA boundary
 
-Both CLI and a Postman-compatible framework-free HTTP adapter can submit the canonical registration operation.
+CLI and framework-free HTTP/Postman surfaces submit the same canonical operation.
 
-The HTTP CTA process can be killed after Workflow acceptance without destroying the Temporal execution. A fresh client can query and update the same Workflow/Run.
+An accepted Workflow is not owned by the initiating CTA process.
 
 Classification:
 
@@ -149,33 +247,9 @@ Classification:
 CTA replaceability / disconnect continuity = CERTIFIED
 ```
 
-## Business-scoped session replay
+## Interactive durable execution
 
-The integrated gate proved completed-session replay, not only running-session behavior.
-
-```text
-same identity + same initial fingerprint
-→ same Workflow ID
-→ same Run ID
-→ no second registration
-→ no second Customer
-
-same identity + different initial fingerprint
-→ SESSION_IDEMPOTENCY_CONFLICT
-→ original execution remains authoritative
-```
-
-Classification:
-
-```text
-start replay/conflict semantics = CERTIFIED
-```
-
-## Interactive waiting / Updates
-
-Intent-only start reaches `WAITING_FOR_REQUIRED_DATA` under the versioned RegistrationPolicy.
-
-Multiple `ProvideCustomerData` Updates evolve the same durable execution until completeness is satisfied.
+A legal incomplete start can enter `WAITING_FOR_REQUIRED_DATA` and receive multiple `ProvideCustomerData` Updates within the same Workflow execution.
 
 Classification:
 
@@ -183,25 +257,40 @@ Classification:
 interactive contract = CERTIFIED
 ```
 
-## PostgreSQL retry / duplicate authority
+## Business-scoped replay semantics
 
-The integrated gate injected a transient first-attempt `createCustomer` failure. Temporal retried and exactly one Customer resulted.
+```text
+same session identity + same initial fingerprint
+→ same Workflow ID
+→ same Run ID
+→ no second business effect
 
-Hard duplicate resolved an existing Customer without a second Customer row.
-
-Soft duplicate remained `WAITING_FOR_DUPLICATE_DECISION`.
+same session identity + different fingerprint
+→ SESSION_IDEMPOTENCY_CONFLICT
+→ original execution remains authoritative
+```
 
 Classification:
 
 ```text
-PostgreSQL business authority / retry safety = CERTIFIED
+completed-session replay/conflict = CERTIFIED
+```
+
+## PostgreSQL authority / crash safety
+
+Transient Customer persistence failure retries to one Customer.
+
+Worker death after Customer persistence recovers the same Workflow/Run and does not duplicate the Customer.
+
+Classification:
+
+```text
+PostgreSQL authority / retry / recovery = CERTIFIED
 ```
 
 ## Mandatory Mongo audit
 
-B6 already proved mandatory audit is required before success and that exhausted Mongo failure after Customer persistence becomes typed `MONGO_AUDIT_STORE_UNAVAILABLE` rather than false success.
-
-The integrated core gate reconfirmed successful terminal paths with required audit evidence.
+Successful terminal registration requires the mandatory audit chain. Exhausted audit failure cannot become false success.
 
 Classification:
 
@@ -209,28 +298,34 @@ Classification:
 mandatory audit-before-success = CERTIFIED
 ```
 
-## Worker loss after a real business side effect
+## AttachmentStore authority
 
-GD-011 delayed `CUSTOMER_CREATED` audit after PostgreSQL Customer creation, observed `CUSTOMER_CREATED_PENDING_AUDIT`, killed that Worker, and started a new Worker.
+The local laboratory now has a filesystem-backed content-addressed AttachmentStore behind a provider-neutral port.
+
+Certified semantics include:
 
 ```text
-Delayed Worker PID:   5689
-Recovery Worker PID:  6120
-Workflow ID:          register-customer:golden-business:427a35365ca5875145b397e2b7f391ce
-Run ID:               01a039d0-cadf-7dc8-bf39-e3703c2c8c86
-Final Customer count: 1
-Final registration:   COMPLETED_CREATED
+stage / resolve / commit
+SHA-256 integrity
+stable logical attachment identity
+content-addressed binary storage
+retry-safe commit
+PostgreSQL immutable attachment linkage
+ATTACHMENT_COMMITTED mandatory audit
+staged-ingress TTL
+corruption detection
+no false terminal success on integrity mismatch
 ```
 
 Classification:
 
 ```text
-post-side-effect Worker recovery = CERTIFIED
+AttachmentStore B7 = CERTIFIED
 ```
 
 ## Scheduling isolation
 
-The `RegisterNewCustomer` runtime creates no Appointment, ResourceReservation or Availability effects.
+`RegisterNewCustomer` creates zero Appointment, ResourceReservation or Availability effects.
 
 Classification:
 
@@ -240,93 +335,41 @@ scheduling isolation = CERTIFIED
 
 ---
 
-# Current B7 gate
-
-B7 remains intentionally closed.
-
-Before Build entry, project authority must freeze at minimum:
-
-```text
-1. AttachmentStore physical technology
-2. synthetic attachment binary fixtures
-3. expected SHA-256 values
-4. ingress staging identity and resolution contract
-5. commit/retry/idempotency semantics
-6. size/count limits
-7. TTL / expiry behavior
-8. corruption/hash-mismatch behavior
-9. retrieval/streaming proof expectations
-10. orphan/reconciliation expectations
-```
-
-The four Golden cases blocked by that gate are exactly:
-
-```text
-GD-003 one attachment
-GD-004 multiple attachments
-GD-009 transient AttachmentStore failure
-GD-010 permanent attachment integrity mismatch
-```
-
-No other Golden case is currently blocked.
-
----
-
-# Current project verdict
-
-```text
-Architecture contract                    CERTIFIED THROUGH CORE
-Interactive contract                     CERTIFIED
-Temporal execution plane                 CERTIFIED
-PostgreSQL authority                     CERTIFIED
-MongoDB mandatory audit                  CERTIFIED
-CTA death/reconnect                      CERTIFIED
-Completed-session replay                 CERTIFIED
-Transient PostgreSQL retry               CERTIFIED
-Post-persistence Worker recovery         CERTIFIED
-Hard duplicate                           CERTIFIED
-Soft duplicate decision state            CERTIFIED
-Scheduling isolation                     CERTIFIED
-Attachment-free Golden Dataset           14 / 14 PASS
-Attachment Golden Dataset                0 / 4 — DEFERRED_B7
-Attachment-free mk0 core                 SYSTEM_CERTIFIED
-Full mk0                                 NOT YET COMPLETE
-B7                                       GATED
-Production deployment                    NOT CERTIFIED
-```
+# Current boundary
 
 The repository may now truthfully state:
 
-> **The attachment-free mk0 `RegisterNewCustomer` core is integrated-Golden certified and release-ready as a laboratory core.**
+> **The full mk0 `RegisterNewCustomer` laboratory, including B7 AttachmentStore, is Golden-complete (18/18) and physically proven in local WSL2/Docker Compose through Postman against a real Temporal execution plane.**
 
-It may not yet state that full mk0 is complete.
+It must not overextend this claim into:
+
+```text
+production deployment certified       NO
+internet/public exposure certified    NO
+all future CTA channels certified     NO
+all Engines workflows implemented     NO
+Engines platform complete             NO
+```
 
 ---
 
-# Next transition
+# Next project gate
 
-The next project gate is now exactly:
+B7 is no longer the next gate.
 
-```text
-PROJECT AUTHORITY B7 DECISION
-```
-
-If B7 is authorized after its physical storage/fixture closure:
+The next deliberate gate is **selection of the next Engines specimen**.
 
 ```text
-B7 AttachmentStore implementation
-       ↓
-GD-003 / GD-004 / GD-009 / GD-010 runtime certification
-       ↓
-complete 18 / 18 Golden accounting
-       ↓
-FULL MK0 GOLDEN CERTIFICATION
+MK0 / RegisterNewCustomer
+        ✅ SYSTEM_CERTIFIED LABORATORY
+                    ↓
+SELECT NEXT SPECIMEN
+                    ↓
+freeze contract / authority / Golden cases
+                    ↓
+reuse certified orchestration spine
+                    ↓
+new Build + certification cycle
 ```
 
-Until that decision is explicitly recorded:
-
-```text
-DO NOT claim AttachmentStore runtime support.
-DO NOT mark GD-003/004/009/010 PASS.
-DO NOT call full mk0 complete.
-```
+No next specimen is implicitly authorized merely by mk0 completion. Its scope and Golden contract should be selected explicitly before implementation.
