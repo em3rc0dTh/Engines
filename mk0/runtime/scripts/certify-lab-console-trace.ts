@@ -207,11 +207,10 @@ async function certifyInteractiveFinalization(): Promise<void> {
   const conv = conversation(current);
   const updates = Array.isArray(conv.updates) ? conv.updates : [];
   const applied = updates.filter((item) => record(item)?.application === 'APPLIED');
-  const notApplied = updates.filter((item) => record(item)?.application === 'PENDING_OR_NOT_APPLIED');
   assert(applied.length >= 6, `expected at least six applied data Updates: ${JSON.stringify(updates)}`);
   assert(
-    notApplied.some((item) => record(record(item)?.input)?.inputId === invalidEmailId),
-    'rejected invalid-email Update must remain visible as not applied',
+    !updates.some((item) => record(record(item)?.input)?.inputId === invalidEmailId),
+    'CTA-rejected invalid-email input must not enter Temporal conversation history',
   );
   assert(customerDraft(current).name === 'Andresito', 'final durable draft must contain last name');
   assert(customerContact(current).email === validEmail, 'final durable draft must contain valid email');
@@ -219,7 +218,7 @@ async function certifyInteractiveFinalization(): Promise<void> {
 
   const temporal = record(current.temporal) ?? {};
   assert(Number(temporal.eventCount ?? 0) > 0, 'Temporal Event History missing');
-  assert(Number(temporal.updateAcceptedCount ?? 0) >= 8, 'Temporal data/finalize Update evidence missing');
+  assert(Number(temporal.updateAcceptedCount ?? 0) >= 7, 'Temporal data/finalize Update evidence missing');
   assert(Number(temporal.activityScheduledCount ?? 0) > 0, 'Temporal Activity evidence missing');
 
   const mongo = record(current.mongo) ?? {};
@@ -252,7 +251,7 @@ async function certifyInteractiveFinalization(): Promise<void> {
     workflowId: execution.workflowId,
     runId: execution.runId,
     appliedUpdates: applied.length,
-    rejectedUpdates: notApplied.length,
+    rejectedAtCta: 1,
     finalName: customer.name,
     phones: phones.length,
   })}`);
