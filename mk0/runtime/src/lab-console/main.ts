@@ -7,7 +7,6 @@ type Session = Readonly<{
   alias: string;
   workflowId: string;
   runId: string;
-  idempotencyKey: string;
 }>;
 
 type JsonRecord = Record<string, unknown>;
@@ -32,7 +31,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<JsonRecord
 }
 
 function activeSession(): Session {
-  if (!activeAlias) throw new Error('No active session. Use: new <alias> or use <alias>');
+  if (!activeAlias) throw new Error('No active session. Use: new <alias>, attach <alias> <workflowId>, or use <alias>');
   const session = sessions.get(activeAlias);
   if (!session) throw new Error(`Unknown active session: ${activeAlias}`);
   return session;
@@ -50,12 +49,27 @@ function traceObject(body: JsonRecord): JsonRecord {
   return record(body.trace) ?? {};
 }
 
+function patchSummary(input: unknown): string {
+  const update = record(input) ?? {};
+  const patch = record(update.customerPatch) ?? {};
+  const contact = record(patch.contact) ?? {};
+  const parts: string[] = [];
+  if (typeof patch.name === 'string') parts.push(`name=${patch.name}`);
+  if (typeof contact.email === 'string') parts.push(`email=${contact.email}`);
+  if (Array.isArray(contact.phones) && contact.phones.length > 0) {
+    const phone = record(contact.phones[0]) ?? {};
+    parts.push(`phone=${String(phone.normalized ?? phone.number ?? '?')}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : compact(patch);
+}
+
 function renderTrace(body: JsonRecord, options: Readonly<{ timelineLimit?: number }> = {}): void {
   const trace = traceObject(body);
   const workflow = record(trace.workflow) ?? {};
   const conversation = record(trace.conversation) ?? {};
   const currentStep = record(workflow.currentStep) ?? {};
   const evidence = record(trace.evidence) ?? {};
+  const sourceStatus = record(evidence.sourceStatus) ?? {};
   const draft = record(conversation.currentDraft) ?? {};
   const customer = record(draft.customer) ?? {};
   const contact = record(customer.contact) ?? {};
@@ -79,19 +93,37 @@ function renderTrace(body: JsonRecord, options: Readonly<{ timelineLimit?: numbe
   output.write(`missing    : ${missing.length ? missing.join(', ') : '—'}\n`);
   output.write(`nextAction : ${String(conversation.nextAction ?? 'NONE')}\n`);
 
-  header('EVIDENCE');
-  output.write(`Temporal        : ${String(evidence.temporal ?? false)}\n`);
-  output.write(`Mongo audit     : ${String(evidence.mongo ?? false)}\n`);
-  output.write(`PostgreSQL      : ${String(evidence.postgres ?? false)}\n`);
-  output.write(`AttachmentStore : ${String(evidence.attachmentStore ?? 'UNKNOWN')}\n`);
+  const updates = Array.isArray(conversation.updates) ? conversation.updates : [];
+  header(`PING-PONG UPDATES (${updates.length})`);
+  if (updates.length === 0) {
+    output.write('No ProvideCustomerData Updates yet.\n');
+  } else {
+    for (const raw of updates) {
+      const update = record(raw) ?? {};
+      const at = typeof update.at === 'string' ? update.at.slice(11, 23) : '            ';
+      output.write(`${at}  ${String(update.application ?? 'UNKNOWN').padEnd(22)} ${patchSummary(update.input)}\n`);
+    }
+  }
+
+  header('EVIDENCE PLANES');
+  output.write(`Temporal        : ${String(sourceStatus.temporal ?? (evidence.temporal ? 'AVAILABLE' : 'UNKNOWN'))}\n`);
+  output.write(`Mongo audit     : ${String(sourceStatus.mongo ?? (evidence.mongo ? 'AVAILABLE' : 'UNKNOWN'))}\n`);
+  output.write(`PostgreSQL      : ${String(sourceStatus.postgres ?? (evidence.postgres ? 'AVAILABLE' : 'UNKNOWN'))}\n`);
+  output.write(`AttachmentStore : ${String(sourceStatus.attachmentStore ?? evidence.attachmentStore ?? 'UNKNOWN')}\n`);
+  const warnings = Array.isArray(evidence.warnings) ? evidence.warnings : [];
+  if (warnings.length > 0) {
+    output.write(`warnings        : ${warnings.join(' | ')}\n`);
+  }
 
   const timeline = Array.isArray(trace.timeline) ? trace.timeline : [];
-  const limit = options.timelineLimit ?? 12;
+  const limit = options.timelineLimit ?? 16;
   header(`LATEST TRACE (${Math.min(limit, timeline.length)}/${timeline.length})`);
   for (const raw of timeline.slice(-limit)) {
     const item = record(raw) ?? {};
     const at = typeof item.at === 'string' ? item.at.slice(11, 23) : '            ';
-    output.write(`${at}  ${String(item.source ?? '?').padEnd(12)} ${String(item.actor ?? '?').padEnd(12)} ${String(item.action ?? '?')}\n`);
+    const actor = String(item.actor ?? '?');
+    const target = typeof item.target === 'string' ? ` → ${item.target}` : '';
+    output.write(`${at}  ${String(item.source ?? '?').padEnd(12)} ${actor}${target}  ${String(item.action ?? '?')}\n`);
   }
 }
 
@@ -118,11 +150,26 @@ async function newSession(alias: string): Promise<void> {
   const workflowId = String(body.workflowId ?? '');
   const runId = String(body.runId ?? '');
   if (!workflowId || !runId) throw new Error(`CTA did not return workflow identity: ${compact(body)}`);
-  const session: Session = { alias, workflowId, runId, idempotencyKey };
+  const session: Session = { alias, workflowId, runId };
   sessions.set(alias, session);
   activeAlias = alias;
   output.write(`\n✓ session ${alias} created\n`);
   renderTrace(await fetchTrace(session));
+}
+
+async function attachSession(alias: string, workflowId: string): Promise<void> {
+  if (!alias || !workflowId) throw new Error('Usage: attach <alias> <workflowId>');
+  if (sessions.has(alias)) throw new Error(`Alias already exists in this console: ${alias}`);
+  const provisional: Session = { alias, workflowId, runId: '?' };
+  const body = await fetchTrace(provisional);
+  const workflow = record(traceObject(body).workflow) ?? {};
+  const runId = String(workflow.runId ?? '');
+  if (!runId) throw new Error(`Trace did not return a runId for ${workflowId}`);
+  const session: Session = { alias, workflowId, runId };
+  sessions.set(alias, session);
+  activeAlias = alias;
+  output.write(`\n✓ attached ${alias} to durable Workflow ${workflowId}\n`);
+  renderTrace(body);
 }
 
 async function setField(field: string, value: string): Promise<void> {
@@ -155,7 +202,7 @@ function showSessions(): void {
   }
   for (const session of sessions.values()) {
     const marker = session.alias === activeAlias ? '●' : ' ';
-    output.write(`${marker} ${session.alias.padEnd(16)} ${session.workflowId}\n`);
+    output.write(`${marker} ${session.alias.padEnd(16)} ${session.runId.padEnd(38)} ${session.workflowId}\n`);
   }
 }
 
@@ -176,11 +223,13 @@ async function watch(secondsText?: string): Promise<void> {
     const body = await fetchTrace(session);
     const trace = traceObject(body);
     const workflow = record(trace.workflow) ?? {};
+    const conversation = record(trace.conversation) ?? {};
     const timeline = Array.isArray(trace.timeline) ? trace.timeline : [];
-    const signature = `${String(workflow.workflowStatus)}|${String(workflow.phase)}|${timeline.length}`;
+    const updates = Array.isArray(conversation.updates) ? conversation.updates : [];
+    const signature = `${String(workflow.workflowStatus)}|${String(workflow.phase)}|${timeline.length}|${updates.length}`;
     if (signature !== lastSignature) {
       const now = new Date().toISOString().slice(11, 23);
-      output.write(`[${now}] ${String(workflow.workflowStatus)} / ${String(workflow.phase)} / trace=${timeline.length}\n`);
+      output.write(`[${now}] ${String(workflow.workflowStatus)} / ${String(workflow.phase)} / trace=${timeline.length} / updates=${updates.length}\n`);
       lastSignature = signature;
     }
     if (workflow.workflowStatus === 'COMPLETED' || workflow.workflowStatus === 'FAILED') {
@@ -196,20 +245,22 @@ function help(): void {
   output.write(`
 Commands
 ────────
-new <alias>             start a new intent-only RegisterNewCustomer Workflow
-sessions                list local aliases/workflows
-use <alias>             switch active Workflow
-show                    current durable state + evidence + latest trace
-set name <value>        ProvideCustomerData Update
-set email <value>       ProvideCustomerData Update
-set phone <value>       ProvideCustomerData Update
-trace                   print the complete unified trace JSON
-watch [seconds]         observe phase/timeline changes (default 10s)
-raw                     alias for trace
-help                    show commands
-exit                    close console
+new <alias>                         start a new intent-only RegisterNewCustomer Workflow
+attach <alias> <workflowId>         reconnect this console to an existing durable Workflow
+resume <alias> <workflowId>         alias for attach
+sessions                            list local aliases/workflows
+use <alias>                         switch active Workflow
+show                                current durable state + ping-pong + evidence + trace
+set name <value>                    ProvideCustomerData Update
+set email <value>                   ProvideCustomerData Update
+set phone <value>                   ProvideCustomerData Update
+trace                               print the complete unified evidence JSON
+watch [seconds]                     observe phase/timeline changes (default 10s)
+raw                                 alias for trace
+help                                show commands
+exit                                close console
 
-Try this:
+Try one Workflow with several revisions:
   new test01
   set name Pepito
   set name Juancito
@@ -218,6 +269,16 @@ Try this:
   set email andresito@example.test
   watch 5
   trace
+
+Try several durable Workflows:
+  new pepito
+  new juancito
+  sessions
+  use pepito
+  use juancito
+
+Close the console, reopen it, then reconnect:
+  attach old-flow register-customer:golden-business:...
 `);
 }
 
@@ -240,6 +301,7 @@ async function main(): Promise<void> {
         if (command === 'exit' || command === 'quit') break;
         if (command === 'help' || command === '?') help();
         else if (command === 'new') await newSession(first ?? '');
+        else if (command === 'attach' || command === 'resume') await attachSession(first ?? '', rest[0] ?? '');
         else if (command === 'sessions') showSessions();
         else if (command === 'use') await useSession(first ?? '');
         else if (command === 'show') renderTrace(await fetchTrace(activeSession()));
