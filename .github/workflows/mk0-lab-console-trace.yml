@@ -74,6 +74,12 @@ jobs:
           ENGINES_CTA_URL: http://127.0.0.1:8787
         run: npx tsx scripts/certify-lab-console-trace.ts
 
+      - name: Certify contact input validation before durable mutation
+        working-directory: mk0/runtime
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-contact-input-validation.ts
+
       - name: Certify stable phone slot ordering through PostgreSQL
         working-directory: mk0/runtime
         env:
