@@ -1,25 +1,22 @@
-# Quarries — mk0
+# Quarries — MK0
 
-Quarries are distilled evidence packages. `mining-site` records sources and project decisions; each quarry extracts only the conclusions needed by Design.
+Quarries are distilled evidence packages inside the MK0 mining site. `mining-site` records source facts and project decisions; quarries extract only the conclusions needed by Design, Plan and Test.
 
-## Current quarries
-
-- `quarry-01-timeslot-data-model.md` — Customer + TimeSlots semantic boundaries.
-- `quarry-02-temporal.md` — durable orchestration, Activities, retry and infrastructure-persistence isolation.
-- `quarry-03-cta-entry-boundary.md` — framework-agnostic CTA, controlled session input and Temporal start/query/update boundary.
-- `quarry-04-attachment-persistence.md` — attachment persistence contract and cross-store consistency.
-
-## mk0 scope reminder
+## Canonical location
 
 ```text
-Postman | CLI | minimal test harness
-→ Temporal
-→ PostgreSQL + MongoDB + optional AttachmentStore
+mk0/mining-site/quarries/
 ```
 
-No application framework is part of the mk0 architecture baseline.
+The previous top-level `mk0/quarries/` path was removed during MK0 repository closure so there is one canonical evidence-extraction location.
 
-Services, Scheduler, Integration and Agent are outside this first slice.
+## Quarry index
+
+1. [`quarry-01-timeslot-data-model.md`](quarry-01-timeslot-data-model.md) — Customer/TimeSlots semantic boundary and future Scheduler constraints.
+2. [`quarry-02-temporal.md`](quarry-02-temporal.md) — durable orchestration, Activities, retry/replay and persistence isolation.
+3. [`quarry-03-cta-entry-boundary.md`](quarry-03-cta-entry-boundary.md) — replaceable CTA/channel boundary and legal-session semantics.
+4. [`quarry-04-attachment-persistence.md`](quarry-04-attachment-persistence.md) — AttachmentStore authority and cross-store consistency.
+5. [`quarry-05-register-new-appointment.md`](quarry-05-register-new-appointment.md) — second-specimen lessons: Child Workflow reuse, catalog reads, human-date normalization, explicit finalization and atomic slot conflict handling.
 
 ## Classification vocabulary
 
@@ -29,8 +26,21 @@ Services, Scheduler, Integration and Agent are outside this first slice.
 - `DESIGN_PROPOSAL`
 - `DESIGN_REQUIREMENT`
 - `TEST_REQUIREMENT`
+- `CERTIFIED_RUNTIME_FACT`
+- `SCOPE_BOUNDARY`
 - `UNKNOWN`
 
-The purpose is to prevent a plausible design idea from silently becoming project truth.
+A plausible idea does not become project truth merely because it sounds correct.
 
-For known pre-Build cross-document closure decisions and precedence, see `../Design/06-mk0-closure-decisions.md`.
+## MK0 boundary
+
+```text
+CTA / Lab client
+→ Temporal
+→ Activities
+→ PostgreSQL + MongoDB + AttachmentStore
+```
+
+The second Appointment specimen extends the Workflow library but does not authorize a completed Scheduler Engine, Services Engine, Integration Engine or Agent/Hermes layer.
+
+For normative architecture see [`../../Design/`](../../Design/). For current gate truth see [`../../Plan/mk0-gate-status.md`](../../Plan/mk0-gate-status.md).
