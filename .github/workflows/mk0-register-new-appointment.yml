@@ -1,0 +1,92 @@
+name: mk0 RegisterNewAppointment certification
+
+on:
+  pull_request:
+    paths:
+      - 'mk0/runtime/**'
+      - 'mk0/Design/07-register-new-appointment-specimen.md'
+      - '.github/workflows/mk0-register-new-appointment.yml'
+  push:
+    branches:
+      - feat/mk0-register-new-appointment
+    paths:
+      - 'mk0/runtime/**'
+      - 'mk0/Design/07-register-new-appointment-specimen.md'
+      - '.github/workflows/mk0-register-new-appointment.yml'
+
+jobs:
+  register-new-appointment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress Customer and Appointment contracts
+        run: |
+          npm run test:b1
+          npm run test:appointment
+          npm run test:lab-console
+
+      - name: Start clean local-equivalent Compose laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              curl -fsS http://127.0.0.1:8787/health
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify RegisterNewAppointment conversation, reuse and slot conflict
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-register-new-appointment.ts
+
+      - name: Capture appointment certification evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/mk0-register-new-appointment
+          docker compose ps -a > /tmp/mk0-register-new-appointment/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk0-register-new-appointment/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk0-register-new-appointment/cta.log 2>&1 || true
+          docker compose logs temporal > /tmp/mk0-register-new-appointment/temporal.log 2>&1 || true
+          docker compose logs migrate > /tmp/mk0-register-new-appointment/migrate.log 2>&1 || true
+
+      - name: Upload appointment certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-register-new-appointment-${{ github.run_id }}
+          path: /tmp/mk0-register-new-appointment
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
