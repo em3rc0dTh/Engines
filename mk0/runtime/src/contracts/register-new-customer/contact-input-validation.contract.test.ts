@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateProvideCustomerData } from './validation.js';
+import { validateProvideCustomerDataIngress } from './validation.js';
 
 function validate(customerPatch: Record<string, unknown>) {
-  return validateProvideCustomerData({
+  return validateProvideCustomerDataIngress({
     inputId: 'contact-validation-fixture',
     customerPatch,
   });
