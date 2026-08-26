@@ -218,6 +218,13 @@ export async function registerNewCustomerWorkflow(
     }
   };
 
+  const throwIfWorkflowFailed = (): void => {
+    const failure: Readonly<{ code: string; message: string }> | undefined = workflowFailure;
+    if (!failure) return;
+    phase = 'FAILED';
+    throw ApplicationFailure.nonRetryable(failure.message, failure.code);
+  };
+
   const failAttachment = (code: string, message: string): never => {
     workflowFailure = { code, message };
     phase = 'FAILED';
@@ -439,20 +446,14 @@ export async function registerNewCustomerWorkflow(
     await condition(() => completeness().complete || Boolean(workflowFailure));
   }
 
-  if (workflowFailure) {
-    phase = 'FAILED';
-    throw ApplicationFailure.nonRetryable(workflowFailure.message, workflowFailure.code);
-  }
+  throwIfWorkflowFailed();
 
   if (explicitFinalize && !finalizeRequested) {
     phase = 'READY_TO_FINALIZE';
     await condition(() => finalizeRequested || Boolean(workflowFailure));
   }
 
-  if (workflowFailure) {
-    phase = 'FAILED';
-    throw ApplicationFailure.nonRetryable(workflowFailure.message, workflowFailure.code);
-  }
+  throwIfWorkflowFailed();
 
   phase = 'REQUIRED_DATA_COMPLETE';
   dataCollectionClosed = true;
