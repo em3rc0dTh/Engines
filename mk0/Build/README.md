@@ -1,43 +1,37 @@
 # Build — mk0
 
-## Status
+## Current status
 
-**B0–B6 CERTIFIED — ATTACHMENT-FREE MK0 CORE SYSTEM-CERTIFIED**
+**FULL MK0 LABORATORY = GOLDEN COMPLETE + LOCALLY PHYSICALLY PROVEN**
 
 ```text
 B0  runtime/repository skeleton                            ✅ CERTIFIED
 B1  canonical contracts + versioned RegistrationPolicy    ✅ CERTIFIED
-B2  real Temporal runtime/topology + visibility proof     ✅ CERTIFIED
-B3  first CLI CTA Adapter                                  ✅ CERTIFIED
+B2  real Temporal runtime/topology + continuity            ✅ CERTIFIED
+B3  CLI CTA Adapter                                        ✅ CERTIFIED
 B4  Worker + Task Queue + interactive RegisterNewCustomer ✅ CERTIFIED
-B5  PostgreSQL duplicate/customer/registration Activities ✅ CERTIFIED
-B6  MongoDB mandatory audit + terminal finalization       ✅ CERTIFIED
+B5  PostgreSQL business authority                          ✅ CERTIFIED
+B6  MongoDB mandatory audit + finalization                 ✅ CERTIFIED
+B7  filesystem-backed content-addressed AttachmentStore    ✅ CERTIFIED
 
-Integrated attachment-free Golden gate                      ✅ CERTIFIED
-B7 AttachmentStore                                          🔒 GATED
-Full mk0 Golden certification                               ⏳ REQUIRES B7
+Golden Dataset                                              ✅ 18 / 18 PASS
+WSL2 + Docker Compose local laboratory                     ✅ PHYSICALLY PROVEN
+Postman full manual collection                             ✅ 37 / 37 PASS
+Production deployment                                      ❌ NOT CERTIFIED
+Broader Engines workflow library                           ⏳ OUTSIDE MK0
 ```
 
-Approval record for the staged B0–B6 Build:
+`RegisterNewCustomer` remains the first specimen used to prove the Engines orchestration/platform pattern. It is not the whole product scope of Engines.
+
+## Certified laboratory shape
 
 ```text
-mk0/Plan/pre-build-approval-2026-08-24.md
-```
-
-The original staged authorization deliberately left B7 closed. The integrated core certification does not change that authorization boundary.
-
-## Current certified system shape
-
-```text
-CLI CTA                 Postman-compatible HTTP CTA
-   \                           /
-    \                         /
-             CTA Adapter
-                 ↓
-       canonical start/session
-                 ↓
-        Temporal Client port
-                 ↓
+Windows / Postman
+        ↓ localhost:8787
+HTTP CTA Adapter
+        ↓
+Temporal Client
+        ↓
 ┌──────────────────────────────────────┐
 │ REAL TEMPORAL EXECUTION PLANE        │
 │                                      │
@@ -50,57 +44,28 @@ CLI CTA                 Postman-compatible HTTP CTA
 │ durable Event History                │
 └──────────────────┬───────────────────┘
                    ↓
-          PostgreSQL Activities
-          business/session truth
-                   ↓
-           MongoDB Activities
-         mandatory audit evidence
-                   ↓
-       PostgreSQL finalization
-                   ↓
-        CREATED | ALREADY_EXISTS
+      ┌────────────┼──────────────┐
+      ↓            ↓              ↓
+ PostgreSQL     MongoDB      AttachmentStore
+ business       mandatory    filesystem
+ truth          audit        content-addressed
 ```
 
-The initiating CTA process is not required to remain alive after Workflow acceptance.
+The local laboratory runs through Docker Compose inside WSL2. Public tunnels/exposure are not part of this certification.
 
-A soft duplicate remains at `WAITING_FOR_DUPLICATE_DECISION` rather than being silently merged or rejected as a hard duplicate.
-
-A mandatory MongoDB audit failure cannot be converted into terminal success.
-
-## Integrated Golden release receipt
-
-The attachment-free core is now certified as one system, not only as individually passing Build stages.
-
-```text
-Golden Dataset:  mk0.golden.register-customer.v0
-Source SHA:      f0896c58d918e8f3971c78867870243e16a8b604
-GitHub run ID:   32873848134
-Job ID:          97886979323
-Artifact ID:     9573135809
-Artifact:        mk0-core-golden-release-32873848134
-Digest:          sha256:25fea20c892ea7cd758788ac63a53ba9048b8809599f2b972c5ef77942c2b4e8
-Verdict:         ATTACHMENT_FREE_CORE_GOLDEN_PASS
-```
-
-Durable certification record:
-
-```text
-mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md
-```
-
-Golden accounting:
+## Golden accounting
 
 ```text
 GD-001 PASS
 GD-002 PASS
-GD-003 DEFERRED_B7
-GD-004 DEFERRED_B7
+GD-003 PASS
+GD-004 PASS
 GD-005 PASS
 GD-006 PASS
 GD-007 PASS
 GD-008 PASS
-GD-009 DEFERRED_B7
-GD-010 DEFERRED_B7
+GD-009 PASS
+GD-010 PASS
 GD-011 PASS
 GD-012 PASS
 GD-013 PASS
@@ -110,95 +75,83 @@ GD-016 PASS
 GD-017 PASS
 GD-018 PASS
 
-14 attachment-free PASS
-4 attachment-dependent DEFERRED_B7
-18 total accounted for
+18 / 18 PASS
 ```
 
-## What the integrated gate newly proved
+### Core 14 proof on B7 code
 
-The core release gate closed several system-level questions that stage-local tests alone could not completely answer.
-
-### Completed-session exact replay
-
-The orchestration port now rejects duplicate Workflow-ID reuse and resolves an existing business-scoped session by querying its immutable initial-start fingerprint.
+Ephemeral B7 regression source:
 
 ```text
-same business/session identity + same fingerprint
-→ same Workflow ID
-→ same Run ID
-→ no second registration command
-→ no second Customer
-
-same business/session identity + different fingerprint
-→ SESSION_IDEMPOTENCY_CONFLICT
-→ original Workflow remains authoritative
-→ no second business effect
+609fb09d8d8f5b1229df0e0ebae031a9b5afbb27
 ```
 
-### Real Postman-compatible proof surface
-
-mk0 now has a framework-free HTTP CTA proof implemented with Node's built-in `node:http` plus an importable Postman collection.
-
-This is a replaceable transport adapter, not a new orchestration authority.
-
-### CTA death / reconnect
-
-The integrated gate started an intent-only registration through HTTP, observed `WAITING_FOR_REQUIRED_DATA`, killed the HTTP CTA process, and then queried/updated the same Workflow from a fresh Temporal client.
+GitHub Actions run:
 
 ```text
-accepted Workflow lost = false
-Workflow ID changed     = false
-Run ID changed          = false
-Customer created early  = false
+32897158566
 ```
 
-### Multi-round interaction
+All actual core Golden case steps passed. The historical workflow concluded red only at its obsolete final pre-B7 assertion requiring attachments to remain gated. That failed assertion is intentionally invalid after B7 and is not a product regression.
 
-The same Workflow accepted multiple `ProvideCustomerData` Updates and completed only when RegistrationPolicy requirements became satisfied.
+### B7 attachment proof
 
-MongoDB recorded logically accepted interaction evidence before successful completion.
-
-### Transient PostgreSQL retry
-
-GD-008 deliberately failed the first matching `createCustomer` Activity attempt.
-
-The Worker recorded the injected `POSTGRES_CUSTOMER_STORE_UNAVAILABLE` failure, Temporal retried the Activity, and the Workflow ultimately completed with exactly one Customer.
-
-### Worker death after a real side effect
-
-GD-011 is the strongest attachment-free durability proof.
-
-The gate allowed PostgreSQL to create the Customer, observed:
+Certified B7 source:
 
 ```text
-CUSTOMER_CREATED_PENDING_AUDIT
+80a95d0b9715f91879a9e0cbd7230828098ba997
 ```
 
-then killed the delayed Worker before mandatory outcome audit completion.
-
-A different Worker process recovered the same Workflow/Run and completed it with the same Customer ID and no duplicate Customer.
+GitHub Actions run:
 
 ```text
-Delayed Worker PID:   5689
-Recovery Worker PID:  6120
-Workflow ID:          register-customer:golden-business:427a35365ca5875145b397e2b7f391ce
-Run ID:               01a039d0-cadf-7dc8-bf39-e3703c2c8c86
-Final PostgreSQL:     COMPLETED_CREATED
-Customer count:       1
+32896780937
 ```
 
-### Scheduling isolation
-
-`RegisterNewCustomer` remains isolated from scheduling.
+Conclusion:
 
 ```text
-Appointment delta            = 0
-ResourceReservation delta    = 0
-Availability mutation delta  = 0
+success
 ```
 
-## Certification evidence index
+The B7 runtime gate proved:
+
+```text
+GD-003 one attachment                    PASS
+GD-004 multiple attachments              PASS
+GD-009 transient AttachmentStore failure PASS
+GD-010 integrity mismatch                PASS
+```
+
+GD-009 injected a one-shot AttachmentStore commit failure and proved retry-safe logical attachment identity.
+
+GD-010 corrupted staged bytes after ingress and proved `ATTACHMENT_INTEGRITY_MISMATCH` with no attachment reference, no `ATTACHMENT_COMMITTED`, no `REGISTRATION_COMPLETED`, and no false successful registration.
+
+## Physical local proof
+
+On 2026-08-26 the operator ran the complete Postman manual-certification collection against the WSL2/Docker Compose laboratory.
+
+Observed Postman Runner result:
+
+```text
+Iterations          1
+Duration            2s 668ms
+All tests           37
+Errors              0
+Average response    34 ms
+Failed assertions   0
+Verdict             37 / 37 PASS
+```
+
+This physically exercised health, intent-only Workflow start, multi-round Updates, terminal creation, exact completed-session replay, typed replay conflict, AttachmentStore stage/resolve, attachment-bearing registration, CTA structural rejection, and typed unknown-ingress 404 behavior.
+
+Durable receipt:
+
+```text
+mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
+```
+
+## Evidence index
 
 ```text
 B0 → mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
@@ -208,111 +161,88 @@ B3 → mk0/Build/evidence/B3-cli-cta-certification-2026-08-24.md
 B4 → mk0/Build/evidence/B4-interactive-registration-certification-2026-08-24.md
 B5 → mk0/Build/evidence/B5-postgres-authority-certification-2026-08-25.md
 B6 → mk0/Build/evidence/B6-mongo-audit-finalization-certification-2026-08-25.md
-Core Golden → mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md
+Core integrated Golden → mk0/Build/evidence/mk0-core-golden-release-certification-2026-08-25.md
+Full local laboratory → mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
 ```
 
-## Certified runtime baseline
+## Frozen B7 physical profile
 
 ```text
-Language/runtime:         TypeScript / Node.js 20+
-Certified Node runtime:   v24.19.0
-Temporal TypeScript SDK:  1.22.0
-Temporal CLI:             1.8.1
-Temporal Server observed: 1.31.2
-Temporal Web UI observed: 2.50.1
-Temporal endpoint:        localhost:7233
-Temporal Web UI:          localhost:8233
-Namespace:                default
-Task Queue:               engines-mk0-registration
-PostgreSQL observed:      17.8
-MongoDB observed:         8.0.29
-Web/application framework: none
-HTTP proof adapter:       node:http
+Host                  Windows + WSL2
+Runtime               Linux WSL
+Deployment            Docker Compose
+CTA access            localhost HTTP
+Manual client         Postman
+Temporal              local Compose service
+Worker                local Compose service
+PostgreSQL            local Compose service
+MongoDB               local Compose service
+AttachmentStore       shared WSL/Compose filesystem volume
+Binary organization   content-addressed by SHA-256
+Logical identity      stable attachmentId derived from ingress identity
+External tunnel       none
+Cloud dependency      none
 ```
 
-Dependency resolution is frozen through `mk0/runtime/package-lock.json`, and certification uses `npm ci`.
-
-## B7 remains gated
-
-The integrated attachment-free certification is **not** implicit authorization for AttachmentStore implementation.
-
-Before B7 entry, project authority must freeze at minimum:
+The mk0 laboratory limits remain:
 
 ```text
-AttachmentStore physical technology
-synthetic attachment fixture binaries
-expected SHA-256 values
-size/count limits
-stage/resolve/commit contract
-TTL / expired-ingress behavior
-retry/idempotency behavior
-corruption/hash-mismatch behavior
-orphan/reconciliation expectations
+max attachments / registration = 4
+max single attachment          = 1 MiB
+max total attachment bytes     = 2 MiB
+staged ingress TTL             = 15 minutes
+integrity hash                 = SHA-256
+Golden media types             = image/png, text/plain
 ```
 
-The four attachment-dependent Golden cases remain:
+## Core invariants
+
+- external channels remain replaceable adapters;
+- CTA validates transport/session structure but is not final Customer-completeness authority;
+- CTA never writes canonical persistence directly;
+- Temporal owns durable orchestration, retries, replay and recovery;
+- Workflow code performs no direct DB/file/network side effects;
+- PostgreSQL remains canonical Customer + registration truth;
+- MongoDB remains mandatory application audit/context, not shadow Customer truth;
+- AttachmentStore owns binary content and integrity;
+- PostgreSQL stores immutable attachment references, not attachment bytes;
+- attachment bytes are not carried through Workflow history;
+- successful attachment-bearing registration requires committed binary integrity + PostgreSQL linkage + `ATTACHMENT_COMMITTED` audit before terminal success;
+- accepted Workflow progress survives CTA death;
+- Worker loss after a real business side effect cannot duplicate the Customer;
+- exact completed-session replay returns the existing Workflow/Run;
+- conflicting replay produces typed `SESSION_IDEMPOTENCY_CONFLICT` without a second business effect;
+- hard and soft duplicate semantics remain distinct;
+- `RegisterNewCustomer` creates zero scheduling side effects.
+
+## Current interpretation
+
+The repository may truthfully state:
+
+> **The full mk0 `RegisterNewCustomer` laboratory, including B7 AttachmentStore, is Golden-complete (18/18) and physically proven in local WSL2/Docker Compose through Postman against a real Temporal execution plane.**
+
+It must still not state:
 
 ```text
-GD-003 one attachment                    DEFERRED_B7
-GD-004 multiple attachments              DEFERRED_B7
-GD-009 transient AttachmentStore failure DEFERRED_B7
-GD-010 integrity mismatch                DEFERRED_B7
-```
-
-## Current release interpretation
-
-The repository may now truthfully state:
-
-> **The attachment-free mk0 `RegisterNewCustomer` core is integrated-Golden certified and release-ready as a laboratory core.**
-
-The repository must not yet state:
-
-```text
-full mk0 is complete                    NO
-attachment-bearing registration works  NO
-B7 is authorized                       NO
-production deployment is certified     NO
-all Engines workflows are implemented  NO
+production deployment certified     NO
+public/external exposure certified  NO
+all Engines workflows implemented   NO
+Engines platform complete           NO
 ```
 
 ## Next transition
 
+mk0 is no longer waiting on B7.
+
+The next architecture transition is to stop deepening the first specimen and use the certified Engines spine for the next deliberately selected Workflow/specimen.
+
 ```text
-ATTACHMENT-FREE CORE
-B0–B6 + integrated Golden
-           ✅ CERTIFIED
-               ↓
-PROJECT AUTHORITY B7 DECISION
-               ↓
-AttachmentStore technology + fixtures + hashes
-               ↓
-B7 BUILD + GD-003/004/009/010
-               ↓
-FULL MK0 GOLDEN CERTIFICATION
+MK0 RegisterNewCustomer
+        ✅ CERTIFIED LABORATORY
+                ↓
+SELECT NEXT ENGINES SPECIMEN
+                ↓
+reuse CTA → Temporal → Activities → authority boundaries
+                ↓
+new Golden Dataset / quarry / certification
 ```
-
-## Frozen core constraints
-
-- all channels converge on one canonical CTA Adapter contract;
-- CTA validates structural/session input, not final Customer completeness;
-- CTA never writes business persistence directly;
-- accepted Workflow progress survives CTA process loss;
-- Temporal owns durable orchestration, retries, replay and recovery;
-- real Service / Task Queue / Worker / Workflow / Activities are required;
-- Workflow code performs no direct DB/file/network side effects;
-- registration identity is business-scoped by `(operation, businessSlug, idempotencyKeyHash)`;
-- the normalized material initial start is immutable and fingerprinted;
-- exact completed-session replay resolves the existing execution;
-- conflicting session reuse is typed and creates no second business effect;
-- later `ProvideCustomerData` Updates evolve durable Workflow state without changing the initial fingerprint;
-- PostgreSQL remains canonical Customer + registration truth;
-- MongoDB remains execution/audit context, not shadow Customer truth;
-- mandatory audit milestones must exist before successful terminal outcome;
-- mandatory-audit exhaustion cannot become false success;
-- Worker loss after Customer persistence must not duplicate the Customer;
-- hard duplicate resolves the existing Customer;
-- soft duplicate remains distinguishable and requires policy resolution;
-- `RegisterNewCustomer` creates zero scheduling effects;
-- attachment-bearing success remains blocked while B7 is gated.
-
-> **Current status: ATTACHMENT-FREE MK0 CORE = SYSTEM CERTIFIED. B7 = GATED. FULL MK0 = NOT YET COMPLETE.**
