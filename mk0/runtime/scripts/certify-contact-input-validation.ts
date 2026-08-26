@@ -85,6 +85,11 @@ function mongoAudit(value: JsonRecord): JsonRecord[] {
   return Array.isArray(mongo.audit) ? mongo.audit.map((item) => record(item) ?? {}) : [];
 }
 
+function temporalAcceptedUpdates(value: JsonRecord): number {
+  const temporal = record(value.temporal) ?? {};
+  return Number(temporal.updateAcceptedCount ?? 0);
+}
+
 const token = Date.now().toString();
 const workflowId = await start(token);
 
@@ -97,6 +102,13 @@ await waitFor(
 const nameId = `name-${token}`;
 const name = await update(workflowId, nameId, { name: 'Contact Validation' });
 assert(name.ok === true, 'valid name must be applied');
+
+let current = await waitFor(
+  workflowId,
+  (value) => temporalAcceptedUpdates(value) === 1,
+  'valid name appears in Temporal history',
+);
+const acceptedBeforeInvalid = temporalAcceptedUpdates(current);
 
 const invalidEmailId = `invalid-email-${token}`;
 const invalidEmail = await update(workflowId, invalidEmailId, {
@@ -112,11 +124,15 @@ const invalidPhone = await update(workflowId, invalidPhoneId, {
 });
 assert(invalidPhone.ok === false, 'alphabetic phone must be rejected');
 
-let current = await trace(workflowId);
+current = await trace(workflowId);
 assert(workflow(current).workflowStatus === 'RUNNING', 'invalid contact input must not terminate Workflow');
 assert(workflow(current).phase === 'WAITING_FOR_REQUIRED_DATA', 'invalid contact input must not satisfy contact requirement');
 assert(contact(current).email === undefined, 'invalid email must not enter durable draft');
 assert(!Array.isArray(contact(current).phones) || (contact(current).phones as unknown[]).length === 0, 'invalid phone must not enter durable draft');
+assert(
+  temporalAcceptedUpdates(current) === acceptedBeforeInvalid,
+  'CTA-rejected email/phone must not create Temporal UpdateAccepted history events',
+);
 assert(
   !mongoAudit(current).some((event) => event.logicalKey === `update:${invalidEmailId}` && event.eventType === 'CUSTOMER_DATA_ACCEPTED'),
   'invalid email must not be audited as CUSTOMER_DATA_ACCEPTED',
@@ -151,6 +167,8 @@ console.log('TRACE_CONTACT_VALIDATION_PASS', JSON.stringify({
   workflowId,
   invalidEmailRejected: true,
   invalidPhoneRejected: true,
+  invalidInputsEnteredTemporal: false,
+  invalidInputsAuditedAccepted: false,
   localPhoneAccepted: true,
   nonComEmailAccepted: true,
 }));
