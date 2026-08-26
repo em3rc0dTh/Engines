@@ -1,332 +1,303 @@
-# mk0 — First Engines Laboratory Proof
+# MK0 — Engines Orchestration Laboratory
 
-## Current state
+## Status
 
-mk0 is the first executable proof of **Engines**, not the final scope of the orchestration platform.
+**OBJECTIVE COMPLETE — LOCAL LABORATORY CERTIFIED**
 
-`RegisterNewCustomer` is the first specimen used to prove the reusable architecture spine.
+MK0 exists to answer one architecture question:
 
-Current status:
+> Can Engines provide a reusable durable orchestration spine that survives process loss, keeps channels replaceable, keeps persistence authorities explicit, and can be reused by more than one business workflow?
+
+The answer is **yes**, proven through two executable specimens.
 
 ```text
-B0–B7                              ✅ CERTIFIED
-Golden Dataset                    ✅ 18 / 18 PASS
-WSL2 + Docker Compose laboratory  ✅ PHYSICALLY PROVEN
-Postman manual collection         ✅ 37 / 37 PASS
-Full mk0 laboratory               ✅ SYSTEM_CERTIFIED
-Production deployment             ❌ NOT CERTIFIED
-Broader Engines workflow library  ⏳ NOT IMPLEMENTED BY MK0
+Specimen 01 — RegisterNewCustomer       ✅ CERTIFIED
+Specimen 02 — RegisterNewAppointment    ✅ CERTIFIED
+Reusable Temporal spine                 ✅ PROVEN
+Child Workflow composition              ✅ PROVEN
+PostgreSQL business authority           ✅ PROVEN
+MongoDB semantic audit                  ✅ PROVEN
+AttachmentStore boundary                ✅ PROVEN
+Interactive Lab UX / trace              ✅ PROVEN
+Local Windows + WSL2 + Compose          ✅ PROVEN
+Production deployment                   ❌ OUTSIDE MK0 CERTIFICATION
 ```
 
-Primary current receipt:
+## Canonical architecture
 
 ```text
-Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
+MANY CHANNELS / LAB CLIENTS
+         ↓
+     CTA ADAPTER
+         ↓
+ canonical operation
+         ↓
+┌───────────────────────────────────────┐
+│ TEMPORAL / ENGINES                    │
+│                                       │
+│ Workflow Library                      │
+│ durable execution                     │
+│ Query / Update / Child Workflow       │
+│ retries / replay / recovery           │
+└───────────────────┬───────────────────┘
+                    ↓
+             ACTIVITIES / PORTS
+        ┌───────────┼─────────────┐
+        ↓           ↓             ↓
+   PostgreSQL     MongoDB    AttachmentStore
+   business       semantic   binary/document
+   truth          audit      truth
 ```
 
-## Proven Engines shape
+The CTA can translate transport semantics but cannot become canonical business authority. Workflow code coordinates side effects but does not directly use persistence/network drivers.
+
+## Specimen 01 — RegisterNewCustomer
+
+`RegisterNewCustomer` established the foundation.
+
+Certified behavior includes:
+
+1. legal intent-only Workflow start;
+2. durable `WAITING_FOR_REQUIRED_DATA` interaction;
+3. multiple `ProvideCustomerData` Updates on the same Workflow;
+4. CTA-side contact syntax validation before invalid values enter Temporal;
+5. interactive `EXPLICIT_FINALIZE` laboratory mode;
+6. business-scoped session idempotency;
+7. exact completed-session replay;
+8. PostgreSQL Customer/session truth;
+9. hard duplicate reuse and soft duplicate waiting;
+10. mandatory MongoDB audit before terminal success;
+11. Worker/CTA process-loss recovery;
+12. AttachmentStore staging, SHA-256 integrity and retry-safe commit;
+13. PostgreSQL attachment references without binary business-table storage;
+14. stable ordered multiple-phone drafts while fingerprint comparison stays order-independent;
+15. read-only execution trace across Temporal, PostgreSQL, MongoDB and AttachmentStore.
+
+### Customer Golden Dataset
+
+The frozen Customer Golden Dataset contains:
 
 ```text
-INPUT CHANNELS
-CLI / Postman today
-future form / WhatsApp / Telegram / Web / Mobile / API / Webhook adapters
-                         ↓
-                 CHANNEL / CTA ADAPTER
-                         ↓
-                 canonical operation
-                         ↓
-┌──────────────────────────────────────────────────────┐
-│ ORCHESTRATION ENGINE — TEMPORAL                     │
-│                                                      │
-│ Workflow Library                                     │
-│ durable Workflow Execution                           │
-│ Task Queues / Workers / Activities                   │
-│ Queries / Updates / Signals                          │
-│ retries / timeouts / recovery / replay               │
-│ visibility / durable Event History                   │
-└───────────────────────┬──────────────────────────────┘
-                        ↓
-               ACTIVITIES / PORTS
-       ┌────────────────┼──────────────────┐
-       ↓                ↓                  ↓
-   PostgreSQL        MongoDB         AttachmentStore
-   business truth    audit/context   binary/documents
-       │                │                  │
-       └────────────────┼──────────────────┘
-                        ↓
-              canonical result / outbound adapter
-```
-
-The channel is replaceable. The Workflow is reusable. Temporal remains the durable orchestration authority.
-
-## Certified mk0 local laboratory
-
-```text
-Windows / Postman
-      ↓ localhost:8787
-HTTP CTA
-      ↓
-Temporal
-      ↓
-RegisterNewCustomer Workflow
-      ↓
-Worker / Activities
-      ↓
-PostgreSQL + MongoDB + AttachmentStore
-```
-
-The laboratory is launched with Docker Compose inside WSL2. Public tunnels, cloud deployment and internet exposure are explicitly outside this certification.
-
-## What mk0 proved
-
-The complete first specimen physically demonstrates that the same orchestration model can:
-
-1. receive one canonical operation from replaceable CTA surfaces;
-2. reject structurally invalid session input before business execution;
-3. accept incomplete-but-legal registration intent;
-4. wait durably for versioned policy-required data;
-5. receive multiple `ProvideCustomerData` Updates in the same Workflow;
-6. preserve business-scoped idempotency after completion;
-7. distinguish exact replay from materially conflicting replay;
-8. perform retry-safe PostgreSQL Customer effects;
-9. distinguish new, hard-duplicate and soft-duplicate states;
-10. require MongoDB audit evidence before terminal success;
-11. survive CTA process death;
-12. survive Worker death after a Customer has already been persisted;
-13. recover the same Workflow/Run without duplicating the Customer;
-14. stage, resolve and commit binary attachments outside Workflow history;
-15. verify attachment integrity with SHA-256;
-16. keep logical attachment identity retry-safe while binary blobs are content-addressed;
-17. require PostgreSQL attachment linkage + `ATTACHMENT_COMMITTED` audit before attachment-bearing success;
-18. reject post-stage binary corruption without false success;
-19. enforce staged-ingress TTL and laboratory limits;
-20. keep scheduling effects completely outside `RegisterNewCustomer`.
-
-## Golden Dataset
-
-```text
-GD-001 PASS
-GD-002 PASS
-GD-003 PASS
-GD-004 PASS
-GD-005 PASS
-GD-006 PASS
-GD-007 PASS
-GD-008 PASS
-GD-009 PASS
-GD-010 PASS
-GD-011 PASS
-GD-012 PASS
-GD-013 PASS
-GD-014 PASS
-GD-015 PASS
-GD-016 PASS
-GD-017 PASS
-GD-018 PASS
-
+GD-001 … GD-018
 18 / 18 PASS
 ```
 
-Core 14 cases were re-exercised on B7-capable code. The old core workflow's only failing step was its deliberately obsolete pre-B7 assertion that attachments must remain gated.
+Important evidence nuance: the historical attachment-free core job was a 14-case gate. B7 independently certified the four attachment cases. Effective accounting is 18/18; this must not be rewritten as one historical 18-case runtime artifact that never existed.
 
-The B7 Compose runtime independently certified the four attachment cases in successful GitHub Actions run:
+### Physical manual Customer proof
 
-```text
-32896780937
-```
-
-against source:
+The Windows/WSL2/Postman laboratory produced:
 
 ```text
-80a95d0b9715f91879a9e0cbd7230828098ba997
+37 tests
+37 PASS
+0 failed assertions
+0 errors
 ```
 
-## Physical manual proof
+Primary receipt:
 
-On 2026-08-26 the complete Postman manual-certification collection was executed against the local WSL2/Docker Compose laboratory.
+[`Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md`](Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md)
+
+## Observability / Lab Console
+
+The laboratory added a human-operable execution surface without adding a new authority.
+
+Customer console:
+
+```bash
+npm run lab:console
+```
+
+It can start/resume sessions, provide multiple updates, inspect durable drafts and render a read-only cross-store execution trace.
+
+The trace is evidence projection only; mutation remains through the existing CTA → Temporal paths.
+
+## Specimen 02 — RegisterNewAppointment
+
+The second specimen demonstrates architectural reuse and composition.
+
+Canonical interaction:
 
 ```text
-Tests               37
-Errors              0
-Failed assertions   0
-Verdict             37 / 37 PASS
+RegisterNewAppointment
+        ↓
+Customer resolution
+  ├─ existing Customer → reuse customerId
+  └─ new Customer → Child Workflow RegisterNewCustomer
+        ↓
+load active Services from PostgreSQL
+        ↓
+select Service
+        ↓
+load Products for Service from PostgreSQL
+        ↓
+select Product
+        ↓
+normalize/select date
+        ↓
+load available slots through Activity
+        ↓
+select slot
+        ↓
+READY_TO_FINALIZE
+        ↓
+explicit finish
+        ↓
+atomic PostgreSQL booking
+        ↓
+Mongo appointment audit
+        ↓
+CREATED
 ```
 
-The manual run covered health, interactive waiting/Updates, terminal creation, exact replay, typed session conflict, AttachmentStore stage/resolve, attachment-bearing registration, CTA 400 rejection and typed absent-ingress 404 behavior.
-
-## CTA / Channel Adapter
-
-The CTA is the stable boundary around external channels.
-
-Inbound responsibilities:
-
-- receive source-specific input;
-- identify channel/correlation context;
-- validate transport/session structure;
-- normalize into a canonical operation;
-- start/query/update the appropriate Temporal Workflow;
-- stage binary ingress outside Temporal and pass only metadata/reference identity into orchestration.
-
-The CTA is not Customer-completeness authority and never directly owns canonical persistence.
-
-Current proof adapters:
+### Laboratory catalog fixture
 
 ```text
-CLI
-Postman-compatible HTTP via node:http
+Business: golden-business
+Service : Car Wash
+Products:
+  Basic Clean       — 30 min
+  Executive Clean   — 30 min
+  Salon Clean       — 30 min
+Timezone: America/Lima
+Resource: default
 ```
 
-## Temporal authority
+The duration and simplified single-resource model are specimen fixtures, **not** final Scheduler Engine semantics.
 
-`Temporal` means the real Temporal platform, not an in-process imitation.
+### Appointment certification
 
-The certified mk0 uses:
-
-- Temporal Service;
-- Task Queue `engines-mk0-registration`;
-- Worker processes;
-- Workflow Execution;
-- Activities;
-- Event History;
-- Query `GetRegistrationState`;
-- Update `ProvideCustomerData`;
-- Activity retries;
-- process-loss recovery;
-- deterministic Workflow replay semantics.
-
-Workflow code performs no direct PostgreSQL, MongoDB, filesystem or network side effects.
-
-## Registration session identity
-
-The frozen business session scope is:
+Clean Compose certification source:
 
 ```text
-(operation, businessSlug, idempotencyKeyHash)
+70ab427f34bf353a7239f2f87bbe3b4889ec1efd
 ```
 
-The material initial start is normalized and fingerprinted.
-
-Certified behavior:
+GitHub Actions run:
 
 ```text
-same session identity + same fingerprint
-→ same Workflow ID
-→ same Run ID
-→ no second business effect
-
-same session identity + different fingerprint
-→ SESSION_IDEMPOTENCY_CONFLICT
-→ original execution remains authoritative
+33014515270
 ```
 
-Later Workflow Updates evolve durable state without rewriting the immutable initial fingerprint.
-
-## Persistence authority
-
-### PostgreSQL
-
-Canonical transactional/business truth for:
-
-- Customer;
-- registration/session identity;
-- duplicate/creation outcome;
-- initial fingerprint;
-- terminal registration state;
-- immutable Customer attachment references.
-
-### MongoDB
-
-Mandatory application execution/audit/context evidence.
-
-MongoDB is not canonical Customer truth and is not Temporal Event History.
-
-Applicable success-gating events include:
+Certified receipts:
 
 ```text
-REGISTRATION_SESSION_STARTED
-REGISTRATION_POLICY_LOADED
-REQUIRED_DATA_REQUESTED
-CUSTOMER_DATA_ACCEPTED
-DUPLICATE_CHECK_COMPLETED
-CUSTOMER_CREATED | EXISTING_CUSTOMER_RESOLVED
-ATTACHMENT_COMMITTED
-REGISTRATION_COMPLETED
+APPOINTMENT_NEW_CUSTOMER_CHILD_PASS
+APPOINTMENT_CATALOG_PASS
+APPOINTMENT_PAST_DATE_REJECTED
+APPOINTMENT_DATE_AND_SLOTS_PASS
+APPOINTMENT_BOOKING_PASS
+APPOINTMENT_IDEMPOTENCY_REPLAY_PASS
+APPOINTMENT_SLOT_CONFLICT_PASS
+MK0_REGISTER_NEW_APPOINTMENT_PASS
 ```
 
-### AttachmentStore
-
-Binary/document truth authority for mk0.
-
-Physical laboratory implementation:
+Artifact:
 
 ```text
-filesystem-backed
-content-addressed objects by SHA-256
-opaque staged ingressRef
-stable logical attachmentId
-15-minute staged TTL
-retry-safe commit
-integrity verification before success
+mk0-register-new-appointment-33014515270
+artifact id: 9623938890
+sha256: 768865e38e86d04a761dfd2bb0141f9441c29902144ea5fc1cd1e8391a77e1a2
 ```
 
-Attachment bytes are not carried through Workflow history and are not stored as PostgreSQL binary truth.
+Receipt:
 
-## Frozen invariants
+[`Build/evidence/mk0-register-new-appointment-certification-2026-08-26.md`](Build/evidence/mk0-register-new-appointment-certification-2026-08-26.md)
 
-1. External channels are replaceable adapters.
-2. Durable business orchestration belongs to Temporal.
+### Physical interactive Appointment proof
+
+The manual Lab Console run additionally observed:
+
+- incomplete Customer prevented Service selection;
+- new Customer `Eduardo` was created through the Customer child path;
+- `Car Wash` and three Products were displayed from the catalog;
+- `date ayer` was rejected as `PAST_DATE`;
+- `date mañana` normalized to `2026-08-27`;
+- invalid `slot 4` was rejected;
+- `slot 3` reached `READY_TO_FINALIZE`;
+- explicit `finish` completed as `CREATED` with an `apt_...` result.
+
+This manual observation complements, but does not replace, the automated persistence/slot-race certification.
+
+## Persistence authority matrix
+
+| Authority | Owns | Does not own |
+|---|---|---|
+| Temporal | orchestration state, Event History, retries/replay | canonical Customer/Appointment rows |
+| PostgreSQL | Customers, registration commands, catalog, availability fixture rules, appointment commands, Appointments | orchestration history |
+| MongoDB | semantic execution/audit (`execution_audit`, `appointment_audit`) | canonical Customer/Appointment truth |
+| AttachmentStore | staged/committed binary objects and integrity | Customer/Appointment business truth |
+| CTA | transport validation/normalization and Temporal client calls | direct business persistence |
+
+## Documentation layout
+
+```text
+mk0/
+├── Brainstorming/            problem and architecture framing
+├── mining-site/
+│   └── quarries/             extracted evidence / design constraints
+├── Design/                   normative architecture and specimen designs
+├── Plan/                     gates, approvals and closure state
+├── golden-dataset/           frozen expectations / transparent closure manifests
+├── Build/                    implementation history
+│   ├── evidence/             certification receipts
+│   └── ci-archive/           historical stage workflow definitions
+├── Test/                     test contracts and specimen test notes
+└── runtime/                  executable laboratory
+```
+
+Canonical documentation progression:
+
+```text
+Brainstorming
+→ Mining Site / Quarries
+→ Design
+→ Plan
+→ Golden expectations
+→ Build
+→ Test / Evidence
+```
+
+## Active vs historical CI
+
+B0–B6 were stage-certification workflows. Their exact workflow definitions are retained under `Build/ci-archive/` so they remain inspectable without firing on every modern PR.
+
+Current active CI is intentionally focused on the completed runtime surface and release closure.
+
+Historical runtime receipts remain authoritative for the revision they actually executed.
+
+## Frozen invariants carried forward
+
+1. Channels are replaceable adapters.
+2. Temporal owns durable orchestration.
 3. Workflow definitions are channel-independent.
-4. Workflow code performs no direct external side effects.
-5. Side effects happen through Activities and explicit ports.
-6. PostgreSQL/MongoDB/AttachmentStore retain separate authority boundaries.
+4. Workflow code performs no direct persistence/network side effects.
+5. Side effects happen through Activities/ports.
+6. PostgreSQL, MongoDB and AttachmentStore retain separate authorities.
 7. Accepted Workflow state survives CTA loss.
-8. Worker process loss does not redefine durable Workflow identity.
-9. Exact completed-session replay returns the existing logical execution.
-10. Conflicting replay creates no second business effect.
-11. Mandatory audit evidence is required before terminal success.
-12. Attachment-bearing success requires verified binary commit, PostgreSQL linkage and audit evidence.
-13. Integrity mismatch cannot become false success.
-14. `RegisterNewCustomer` creates zero scheduling effects.
-15. `RegisterNewCustomer` is a specimen, not the final Engines Workflow catalog.
+8. Worker loss does not redefine Workflow identity.
+9. Exact replay cannot create a second business effect.
+10. Mandatory audit must exist before success where required.
+11. Business input validation belongs at the earliest truthful boundary without breaking Workflow replay semantics.
+12. Interactive completeness is not automatically equivalent to human finalization.
+13. Availability shown to a user is not itself a reservation; persistence must revalidate capacity atomically.
+14. A composed Workflow must reuse existing capabilities instead of duplicating their business authority.
 
-## What mk0 does not claim
+## Important limitation — Scheduler semantics
 
-- production deployment certification;
-- public/internet exposure certification;
-- every possible channel adapter;
-- final UI/control room;
-- Agent/Hermes;
-- Scheduler engine;
-- Services engine;
-- Integration engine;
-- every future business Workflow;
-- completion of the Engines platform.
+`RegisterNewAppointment` deliberately uses a minimal local availability fixture (`service_availability_rules` + one `default` resource) to prove orchestration and atomic booking.
 
-## Next transition
+It does **not** supersede the future TimeSlots architecture in which real capacity is expected to involve schedule rules/overrides and `ResourceReservation` semantics. The second specimen proves the orchestration shape, not a final Scheduler Engine.
 
-The first specimen is no longer blocked by B7.
+## MK0 closure
 
-The next step is to select a **second Engines specimen** and prove that the architecture is genuinely reusable rather than merely successful once.
-
-Candidate future Workflows may include:
-
-```text
-CreateAppointment
-RescheduleAppointment
-CancelAppointment
-OpenCase
-RegisterManagedEntity
-CreateAssessment
-CreateQuote
-ApproveQuote
-CreateWorkOrder
-NotifyCustomer
-```
-
-No next specimen is implicitly authorized by mk0 completion. Its contract, authority boundaries, Golden Dataset and quarry protocol should be frozen before implementation.
-
-Current authoritative gate status:
+Current gate ledger:
 
 [`Plan/mk0-gate-status.md`](Plan/mk0-gate-status.md)
 
-> **mk0 full local laboratory = system-certified. Golden = 18/18. Physical Postman proof = 37/37. Production and broader Engines remain future work.**
+Evidence index:
+
+[`Build/evidence/README.md`](Build/evidence/README.md)
+
+> **MK0 is frozen as the certified architecture laboratory. New product work should build on this spine rather than continue expanding MK0 until it becomes the whole platform.**
