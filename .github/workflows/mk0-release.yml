@@ -1,0 +1,124 @@
+name: mk0 release certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/mk0-complete
+    paths:
+      - 'mk0/**'
+      - '.github/workflows/mk0-release.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'mk0/**'
+      - 'README.md'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk0-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mk0-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Run current fast regression surface
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:lab-console
+          npm run test:appointment
+
+      - name: Start clean local-equivalent Compose laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              curl -fsS http://127.0.0.1:8787/health
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify B7 attachment runtime cases
+        run: bash scripts/b7-compose-certification.sh
+
+      - name: Certify contact validation boundary
+        run: npx tsx scripts/certify-contact-input-validation.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Certify unified trace and interactive finalization
+        run: npx tsx scripts/certify-lab-console-trace.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Certify stable phone slot order
+        run: npx tsx scripts/certify-phone-slot-order.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Certify second specimen RegisterNewAppointment
+        run: npx tsx scripts/certify-register-new-appointment.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Capture release evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/mk0-release
+          git rev-parse HEAD > /tmp/mk0-release/git-sha.txt
+          docker compose ps -a > /tmp/mk0-release/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk0-release/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk0-release/cta.log 2>&1 || true
+          docker compose logs temporal > /tmp/mk0-release/temporal.log 2>&1 || true
+          docker compose logs postgres > /tmp/mk0-release/postgres.log 2>&1 || true
+          docker compose logs mongo > /tmp/mk0-release/mongo.log 2>&1 || true
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-release-${{ github.run_id }}
+          path: /tmp/mk0-release
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
