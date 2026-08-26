@@ -2,50 +2,58 @@
 
 ## Current planning position
 
-The original pre-Build plan has been executed through B0–B6 and the attachment-free core has passed an integrated Golden gate.
+The first Engines laboratory specimen has completed its Build and certification cycle.
 
 Current truth:
 
 ```text
-M0–M6 core contracts                  ✅ CLOSED FOR ATTACHMENT-FREE CORE
-B0–B6                                 ✅ CERTIFIED
-attachment-free Golden               ✅ 14 / 14 PASS
-B7 AttachmentStore                    🔒 GATED
-attachment Golden                     ⏳ 4 DEFERRED_B7
-full mk0                               ⏳ NOT YET COMPLETE
+M0–M6 architecture/contracts           ✅ CLOSED FOR MK0
+B0–B7                                  ✅ CERTIFIED
+Golden Dataset                         ✅ 18 / 18 PASS
+WSL2 + Docker Compose laboratory       ✅ PHYSICALLY PROVEN
+Postman manual certification           ✅ 37 / 37 PASS
+full mk0 local laboratory              ✅ SYSTEM_CERTIFIED
+production deployment                  ❌ NOT CERTIFIED
+broader Engines Workflow Library       ⏳ FUTURE WORK
 ```
 
 Current gate ledger:
 
 [`mk0-gate-status.md`](mk0-gate-status.md)
 
-Integrated core receipt:
+Primary current receipt:
+
+```text
+../Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
+```
+
+Historical attachment-free integrated receipt:
 
 ```text
 ../Build/evidence/mk0-core-golden-release-certification-2026-08-25.md
 ```
 
-B7 project-authority package:
+Closed B7 authority record:
 
 [`b7-attachmentstore-authority-decision.md`](b7-attachmentstore-authority-decision.md)
 
-## mk0 objective
+## mk0 objective — achieved for the laboratory
 
-Certify the first reusable Engines architecture pattern without making a channel framework or individual Worker process the durable process authority:
+mk0 was created to certify the first reusable Engines architecture pattern without making a channel framework, HTTP process or individual Worker the durable business-process authority:
 
 ```text
 CTA channel
 → CTA Adapter
 → real Temporal Orchestration Engine
-→ retry-safe Activities
-→ PostgreSQL + MongoDB + AttachmentStore when enabled
+→ retry-safe Activities / ports
+→ PostgreSQL + MongoDB + AttachmentStore
 ```
 
-`RegisterNewCustomer` is the first specimen.
+`RegisterNewCustomer` is the first specimen used to prove that pattern.
 
-## Closed core plan
+It is not the final Engines product scope.
 
-The attachment-free build sequence is complete:
+## Completed Build sequence
 
 ```text
 B0  runtime/repository skeleton                         ✅ CERTIFIED
@@ -55,35 +63,22 @@ B3  CLI CTA Adapter                                     ✅ CERTIFIED
 B4  interactive RegisterNewCustomer Workflow           ✅ CERTIFIED
 B5  PostgreSQL duplicate/Customer/session Activities   ✅ CERTIFIED
 B6  MongoDB mandatory audit + terminal finalization    ✅ CERTIFIED
+B7  AttachmentStore + attachment-bearing registration  ✅ CERTIFIED
 ```
-
-The integrated system gate additionally proved:
-
-- Postman-compatible HTTP CTA through the same canonical adapter;
-- exact completed-session replay;
-- typed conflicting replay;
-- transient PostgreSQL retry;
-- CTA process death + fresh-client reconnect;
-- multi-round Workflow Updates;
-- hard duplicate resolution;
-- soft duplicate decision state;
-- real Temporal Task Queue/Worker/Event History;
-- Worker death after PostgreSQL Customer creation + same-Run recovery;
-- zero scheduling side effects.
 
 ## Golden status
 
 ```text
 GD-001 PASS   minimal valid Customer
 GD-002 PASS   full Customer
-GD-003 DEFERRED_B7   one attachment
-GD-004 DEFERRED_B7   multiple attachments
+GD-003 PASS   one attachment
+GD-004 PASS   multiple attachments
 GD-005 PASS   exact completed-session replay
 GD-006 PASS   conflicting initial start
 GD-007 PASS   invalid structural start
 GD-008 PASS   transient PostgreSQL failure/recovery
-GD-009 DEFERRED_B7   transient AttachmentStore failure
-GD-010 DEFERRED_B7   attachment integrity mismatch
+GD-009 PASS   transient AttachmentStore failure/retry
+GD-010 PASS   attachment integrity mismatch / no false success
 GD-011 PASS   Worker restart after Customer persistence
 GD-012 PASS   zero scheduling side effects
 GD-013 PASS   CTA disconnect/reconnect
@@ -92,109 +87,161 @@ GD-015 PASS   intent-only WAITING
 GD-016 PASS   multi-round Updates
 GD-017 PASS   hard duplicate ALREADY_EXISTS
 GD-018 PASS   soft duplicate decision state
+
+18 / 18 PASS
 ```
 
-## Current gate — B7
+## B7 closure
 
-The next point is no longer a generic Build continuation.
+The former B7 gate is closed.
 
-It is an explicit project-authority decision:
-
-```text
-PROJECT AUTHORITY B7 DECISION
-```
-
-The prepared recommendation is documented in:
+Approved physical laboratory profile:
 
 ```text
-b7-attachmentstore-authority-decision.md
-```
-
-That package recommends, for the mk0 laboratory only:
-
-```text
+Windows + WSL2
+Docker Compose
+real Temporal
+PostgreSQL
+MongoDB
 filesystem-backed content-addressed AttachmentStore
-logical attachmentId separated from SHA-256 blob identity
-provider-neutral AttachmentStorePort
-small deterministic synthetic fixtures
-explicit stage/commit/integrity/TTL/reconciliation contract
+Postman / localhost HTTP CTA
+no tunnel/public exposure
+no cloud storage dependency
 ```
 
-The recommendation is **not** formal authorization.
-
-## Proposed B7 execution sequence
-
-If project authority explicitly approves B7:
+Frozen laboratory limits:
 
 ```text
-B7.0  authority + physical profile closure
-B7.1  commit fixture binaries + freeze SHA-256 / byte lengths
-B7.2  AttachmentStore port + filesystem adapter
-B7.3  stage / resolve / retrieve / TTL / reconciliation
-B7.4  retry-safe commit identity
-B7.5  PostgreSQL customer_attachment_refs
-B7.6  Temporal attachment Activities + Workflow branch
-B7.7  Mongo ATTACHMENT_COMMITTED success gate
-B7.8  GD-003 / GD-004 happy certification
-B7.9  GD-009 transient failure certification
-B7.10 GD-010 permanent integrity-failure certification
-B7.11 full 18-case Golden rerun
-B7.12 full mk0 certification receipt
+max attachments per registration = 4
+max single attachment            = 1 MiB
+max total attachment bytes       = 2 MiB
+staged ingress TTL               = 15 minutes
+integrity hash                   = SHA-256
+Golden media types               = image/png, text/plain
 ```
 
-## B7 success conditions
-
-B7 is not complete merely because files can be saved.
-
-It must prove:
+B7 automated runtime certification:
 
 ```text
-opaque ingressRef
-stable attachmentId
-SHA-256 + byte-length integrity
-no binary in PostgreSQL Customer rows
-no binary in Mongo audit
-no large binary through normal Workflow History
-retry of same ingress → same logical attachment
-expired ingress rejected
-corruption/hash mismatch detected
-orphan/reconciliation candidates observable
-Customer finalization waits for every required attachment
-ATTACHMENT_COMMITTED audit gates success
+Source SHA: 80a95d0b9715f91879a9e0cbd7230828098ba997
+Run ID:     32896780937
+Conclusion: success
+
+GD-003 PASS
+GD-004 PASS
+GD-009 PASS
+GD-010 PASS
 ```
 
-## Full mk0 stable definition
+The 14 core Golden cases were also re-exercised on B7-capable code. Their actual case steps all passed; the historical core job ended red only because its obsolete final pre-B7 assertion required attachments to remain gated.
 
-Full mk0 requires all 18 Golden cases to be accounted for as runtime PASS under the approved profile.
+## Physical operator proof
 
-The complete target proof is:
+On 2026-08-26 the full Postman manual-certification collection was executed against the local WSL2/Docker Compose laboratory.
+
+```text
+Iterations          1
+Duration            2s 668ms
+Tests               37
+Errors              0
+Average response    34 ms
+Failed assertions   0
+Verdict             37 / 37 PASS
+```
+
+The manual proof covered:
+
+- health;
+- intent-only Workflow start;
+- durable waiting state;
+- multiple `ProvideCustomerData` Updates;
+- terminal Customer creation;
+- exact completed-session replay to the same Workflow/Run;
+- typed `SESSION_IDEMPOTENCY_CONFLICT`;
+- AttachmentStore stage and resolve;
+- registration with an attachment;
+- structural CTA rejection;
+- typed valid-format missing-ingress `404`.
+
+The supplied final Postman screenshot does not independently display `git rev-parse HEAD`. Exact source provenance therefore remains tied to the source-pinned automated receipts; the screenshot is physical local-operation evidence for the prescribed B7 laboratory profile.
+
+## Stable mk0 definition
+
+The complete certified mk0 pattern is:
 
 ```text
 Postman / CLI submits RegisterNewCustomer
+→ CTA Adapter normalizes the operation
 → real Temporal Workflow owns durable session
 → incomplete input waits
 → Updates complete the same Workflow
 → duplicate policy resolves NONE / HARD / SOFT
 → PostgreSQL owns Customer/session truth
-→ enabled attachments commit through AttachmentStore
+→ attachments stage/commit through AttachmentStore when applicable
 → PostgreSQL links stable attachment IDs
-→ MongoDB has mandatory success-gating audit
-→ Worker/CTA loss does not duplicate effects
+→ MongoDB contains mandatory success-gating audit
+→ Worker/CTA loss does not redefine durable execution
 → final result is truthful
 → scheduling delta remains zero
-→ 18 / 18 Golden cases PASS
 ```
 
-Only then may the repository call **full mk0 Golden-certified**.
-
-## Explicit boundary
-
-Until B7 approval is recorded:
+## What mk0 completion does not authorize
 
 ```text
-DO NOT implement AttachmentStore as an authorized stage.
-DO NOT mark GD-003/004/009/010 PASS.
-DO NOT call full mk0 complete.
+production deployment
+public internet exposure
+tunnel/ngrok setup
+production object-storage provider selection
+final Engines UI/control room
+Agent/Hermes
+Scheduler
+Services Engine
+Integration Engine
+arbitrary new business Workflows
 ```
 
-The attachment-free core, however, is already system-certified and may be treated as the stable laboratory baseline for the next gate.
+Each of those remains a separate future decision/gate.
+
+## Next project gate
+
+The next point is no longer B7 and is not more work on `RegisterNewCustomer` by default.
+
+The next deliberate decision is:
+
+```text
+SELECT SECOND ENGINES SPECIMEN
+```
+
+The purpose of the second specimen is to test architectural **reuse**, not merely add another feature to the first specimen.
+
+Before implementation of that specimen, freeze:
+
+```text
+1. canonical operation contract
+2. authority boundaries
+3. Temporal interaction model
+4. persistence effects
+5. negative/failure semantics
+6. quarry protocol
+7. Golden Dataset cases
+8. Build/certification gates
+```
+
+Possible future specimens may include:
+
+```text
+CreateAppointment
+RescheduleAppointment
+CancelAppointment
+OpenCase
+RegisterManagedEntity
+CreateAssessment
+CreateQuote
+ApproveQuote
+CreateWorkOrder
+NotifyCustomer
+```
+
+No candidate is implicitly selected by this document.
+
+> **mk0 planning cycle is closed: full local laboratory = SYSTEM_CERTIFIED. The next planning cycle begins only when the second Engines specimen is explicitly selected.**
