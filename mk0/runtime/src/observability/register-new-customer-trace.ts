@@ -636,7 +636,7 @@ export async function buildRegisterNewCustomerExecutionTrace(
   const pgAttachmentIds = new Set(pgAttachments.map((attachment) => attachment.attachmentId));
   const committedIds = new Set<string>([
     ...pgAttachmentIds,
-    ...staged.flatMap((item) => item.metadata?.attachmentId ? [item.metadata.attachmentId] : []),
+    ...staged.flatMap((item) => 'metadata' in item && item.metadata?.attachmentId ? [item.metadata.attachmentId] : []),
   ]);
 
   const committed = await Promise.all(
