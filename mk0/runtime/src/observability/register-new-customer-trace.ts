@@ -8,6 +8,7 @@ import {
   type RegistrationPhase,
   type RegistrationStateProjection,
 } from '../contracts/register-new-customer/index.js';
+import type { CommittedAttachmentMetadata } from '../persistence/attachments/attachment-store.types.js';
 import { FilesystemAttachmentStore } from '../persistence/attachments/filesystem-attachment-store.js';
 import {
   loadMongoAuditEvidence,
@@ -16,6 +17,9 @@ import {
   type PostgresExecutionEvidence,
 } from './execution-evidence.repository.js';
 import { getRegistrationStateQuery } from '../orchestration/temporal/workflows/register-new-customer.workflow.js';
+
+export type TraceEvidenceAvailability = 'AVAILABLE' | 'EMPTY' | 'UNAVAILABLE';
+export type TraceUpdateApplication = 'APPLIED' | 'PENDING_OR_NOT_APPLIED' | 'UNKNOWN';
 
 export type TraceTimelineEntry = Readonly<{
   at?: string;
@@ -65,7 +69,7 @@ export type RegisterNewCustomerExecutionTrace = Readonly<{
       at?: string;
       updateId?: string;
       input: ProvideCustomerDataInput;
-      applied: boolean;
+      application: TraceUpdateApplication;
     }>[];
   }>;
   temporal: Readonly<{
@@ -78,17 +82,25 @@ export type RegisterNewCustomerExecutionTrace = Readonly<{
     history: readonly TemporalHistoryEvidence[];
   }>;
   mongo: Readonly<{
+    availability: TraceEvidenceAvailability;
     eventCount: number;
     audit: readonly MongoAuditEvidence[];
+    error?: string;
   }>;
-  postgres: PostgresExecutionEvidence;
+  postgres: Readonly<{
+    availability: TraceEvidenceAvailability;
+    snapshot: PostgresExecutionEvidence;
+    error?: string;
+  }>;
   attachmentStore: Readonly<{
-    applicable: boolean;
+    availability: 'AVAILABLE' | 'NOT_APPLICABLE' | 'UNKNOWN' | 'INCOMPLETE';
+    applicable: boolean | 'UNKNOWN';
     committed: readonly Readonly<{
       attachmentId: string;
       linkedFromPostgres: boolean;
       storeMetadataFound: boolean;
-      metadata?: unknown;
+      metadata?: CommittedAttachmentMetadata;
+      error?: string;
     }>[];
   }>;
   timeline: readonly TraceTimelineEntry[];
@@ -96,12 +108,23 @@ export type RegisterNewCustomerExecutionTrace = Readonly<{
     temporal: true;
     mongo: boolean;
     postgres: boolean;
-    attachmentStore: 'NOT_APPLICABLE' | 'COMPLETE' | 'INCOMPLETE';
+    attachmentStore: 'NOT_APPLICABLE' | 'COMPLETE' | 'INCOMPLETE' | 'UNKNOWN';
+    sourceStatus: Readonly<{
+      temporal: 'AVAILABLE';
+      mongo: TraceEvidenceAvailability;
+      postgres: TraceEvidenceAvailability;
+      attachmentStore: 'AVAILABLE' | 'NOT_APPLICABLE' | 'UNKNOWN' | 'INCOMPLETE';
+    }>;
     warnings: readonly string[];
   }>;
 }>;
 
 type UnknownRecord = Record<string, unknown>;
+
+type OptionalEvidence<T> = Readonly<
+  | { ok: true; value: T }
+  | { ok: false; error: string }
+>;
 
 const STEP_BY_PHASE: Readonly<Record<RegistrationPhase, Readonly<{ ordinal: number; label: string }>>> = {
   STARTED: { ordinal: 1, label: 'START WORKFLOW' },
@@ -127,6 +150,18 @@ function record(value: unknown): UnknownRecord | undefined {
   return value && typeof value === 'object' ? (value as UnknownRecord) : undefined;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function optionalEvidence<T>(loader: () => Promise<T>): Promise<OptionalEvidence<T>> {
+  try {
+    return { ok: true, value: await loader() };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+}
+
 function eventId(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') return String(value);
   const candidate = record(value);
@@ -146,8 +181,8 @@ function temporalTime(value: unknown): string | undefined {
   else {
     const secondsRecord = record(secondsValue);
     if (secondsRecord && typeof secondsRecord.toNumber === 'function') {
-      const maybe = secondsRecord.toNumber as () => number;
-      seconds = maybe.call(secondsValue);
+      const toNumber = secondsRecord.toNumber as () => number;
+      seconds = toNumber.call(secondsValue);
     } else if (secondsValue !== undefined) {
       const parsed = Number(String(secondsValue));
       if (Number.isFinite(parsed)) seconds = parsed;
@@ -167,10 +202,9 @@ function payloads(value: unknown): readonly unknown[] {
 function decodeJsonPayload(value: unknown): unknown {
   const payload = record(value);
   const data = payload?.data;
-  if (data === undefined || data === null) return undefined;
+  if (!(data instanceof Uint8Array)) return undefined;
   try {
-    const bytes = data instanceof Uint8Array ? data : Buffer.from(data as ArrayBufferLike);
-    return JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown;
+    return JSON.parse(Buffer.from(data).toString('utf8')) as unknown;
   } catch {
     return undefined;
   }
@@ -265,7 +299,7 @@ function acceptedAuditInputIds(audit: readonly MongoAuditEvidence[]): ReadonlySe
 
 function reconstructConversation(
   events: readonly UnknownRecord[],
-  audit: readonly MongoAuditEvidence[],
+  mongoAudit: OptionalEvidence<readonly MongoAuditEvidence[]>,
 ): Readonly<{
   currentDraft: RegisterNewCustomerDraft;
   acceptedInputIds: readonly string[];
@@ -274,19 +308,19 @@ function reconstructConversation(
     at?: string;
     updateId?: string;
     input: ProvideCustomerDataInput;
-    applied: boolean;
+    application: TraceUpdateApplication;
   }>[];
 }> {
   const start = initialStartEnvelope(events);
   let draft = normalizeRegistrationDraft(start?.draft);
-  const accepted = acceptedAuditInputIds(audit);
+  const accepted = mongoAudit.ok ? acceptedAuditInputIds(mongoAudit.value) : undefined;
   const appliedIds = new Set<string>();
   const updates: Array<Readonly<{
     eventId: string;
     at?: string;
     updateId?: string;
     input: ProvideCustomerDataInput;
-    applied: boolean;
+    application: TraceUpdateApplication;
   }>> = [];
 
   for (const event of events) {
@@ -294,20 +328,29 @@ function reconstructConversation(
     if (!attributes) continue;
     const update = updateAccepted(event);
     if (update.updateName !== 'ProvideCustomerData' || !isProvideCustomerDataInput(update.input)) continue;
-    const applied = accepted.has(update.input.inputId) && !appliedIds.has(update.input.inputId);
-    if (applied) {
+
+    let application: TraceUpdateApplication = 'UNKNOWN';
+    if (accepted) {
+      application = accepted.has(update.input.inputId) && !appliedIds.has(update.input.inputId)
+        ? 'APPLIED'
+        : 'PENDING_OR_NOT_APPLIED';
+    }
+
+    if (application === 'APPLIED') {
       draft = {
         ...draft,
         customer: mergeCustomerDraft(draft.customer ?? {}, update.input.customerPatch),
       };
       appliedIds.add(update.input.inputId);
     }
+
+    const at = temporalTime(event.eventTime);
     updates.push({
       eventId: eventId(event.eventId),
-      ...(temporalTime(event.eventTime) ? { at: temporalTime(event.eventTime) } : {}),
+      ...(at ? { at } : {}),
       ...(update.updateId ? { updateId: update.updateId } : {}),
       input: update.input,
-      applied,
+      application,
     });
   }
 
@@ -327,12 +370,13 @@ function summarizeTemporalHistory(events: readonly UnknownRecord[]): readonly Te
     const scheduledId = scheduledEventId(event);
     const inheritedName = scheduledId ? scheduledNames.get(scheduledId) : undefined;
     const update = updateAccepted(event);
+    const resolvedActivityName = scheduledName ?? inheritedName;
 
     result.push({
       eventId: id,
       ...(at ? { at } : {}),
       type,
-      ...(scheduledName ?? inheritedName ? { activityType: scheduledName ?? inheritedName } : {}),
+      ...(resolvedActivityName ? { activityType: resolvedActivityName } : {}),
       ...(scheduledId ? { scheduledEventId: scheduledId } : {}),
       ...(update.updateName ? { updateName: update.updateName } : {}),
       ...(update.updateId ? { updateId: update.updateId } : {}),
@@ -341,6 +385,23 @@ function summarizeTemporalHistory(events: readonly UnknownRecord[]): readonly Te
   }
 
   return result;
+}
+
+function activityTarget(activityType: string | undefined): string {
+  if (!activityType) return 'WORKER';
+  if (
+    activityType === 'reserveRegistrationSession' ||
+    activityType === 'checkCustomerDuplicate' ||
+    activityType === 'recordExistingCustomer' ||
+    activityType === 'recordSoftDuplicate' ||
+    activityType === 'createCustomer' ||
+    activityType === 'linkCustomerAttachment' ||
+    activityType === 'markRegistrationAudited' ||
+    activityType === 'completeRegistration'
+  ) return 'POSTGRESQL';
+  if (activityType === 'persistRegistrationAudit' || activityType === 'verifyRegistrationAudit') return 'MONGODB';
+  if (activityType === 'resolveAttachmentIngress' || activityType === 'commitAttachment') return 'ATTACHMENT_STORE';
+  return 'WORKER';
 }
 
 function timelineFromTemporal(history: readonly TemporalHistoryEvidence[]): TraceTimelineEntry[] {
@@ -364,14 +425,14 @@ function timelineFromTemporal(history: readonly TemporalHistoryEvidence[]): Trac
         source: 'TEMPORAL',
         actor: 'WORKFLOW',
         action: `SCHEDULE_ACTIVITY ${event.activityType ?? 'UNKNOWN'}`,
-        target: 'WORKER',
+        target: activityTarget(event.activityType),
       }];
     }
     if (event.type === 'ACTIVITY_TASK_COMPLETED') {
       return [{
         ...(event.at ? { at: event.at } : {}),
         source: 'TEMPORAL',
-        actor: 'WORKER',
+        actor: activityTarget(event.activityType),
         action: `ACTIVITY_COMPLETED ${event.activityType ?? 'UNKNOWN'}`,
         target: 'WORKFLOW',
       }];
@@ -380,7 +441,7 @@ function timelineFromTemporal(history: readonly TemporalHistoryEvidence[]): Trac
       return [{
         ...(event.at ? { at: event.at } : {}),
         source: 'TEMPORAL',
-        actor: 'WORKER',
+        actor: activityTarget(event.activityType),
         action: `${event.type} ${event.activityType ?? 'UNKNOWN'}`,
         target: 'WORKFLOW',
       }];
@@ -441,6 +502,34 @@ function timelineFromPostgres(postgres: PostgresExecutionEvidence): TraceTimelin
   return result;
 }
 
+function timelineFromAttachmentStore(
+  committed: readonly Readonly<{
+    attachmentId: string;
+    linkedFromPostgres: boolean;
+    storeMetadataFound: boolean;
+    metadata?: CommittedAttachmentMetadata;
+    error?: string;
+  }>[],
+): TraceTimelineEntry[] {
+  return committed.flatMap((item): TraceTimelineEntry[] => {
+    if (!item.metadata) return [];
+    return [{
+      at: item.metadata.committedAt,
+      source: 'ATTACHMENT_STORE',
+      actor: 'ATTACHMENT_STORE',
+      action: 'COMMITTED_ATTACHMENT_PRESENT',
+      target: 'TRACE',
+      detail: {
+        attachmentId: item.attachmentId,
+        ingressRef: item.metadata.ingressRef,
+        sha256: item.metadata.sha256,
+        byteLength: item.metadata.byteLength,
+        mediaType: item.metadata.mediaType,
+      },
+    }];
+  });
+}
+
 function sortTimeline(entries: readonly TraceTimelineEntry[]): readonly TraceTimelineEntry[] {
   return [...entries].sort((left, right) => {
     if (!left.at && !right.at) return 0;
@@ -450,33 +539,63 @@ function sortTimeline(entries: readonly TraceTimelineEntry[]): readonly TraceTim
   });
 }
 
+function availabilityForList<T>(evidence: OptionalEvidence<readonly T[]>): TraceEvidenceAvailability {
+  if (!evidence.ok) return 'UNAVAILABLE';
+  return evidence.value.length > 0 ? 'AVAILABLE' : 'EMPTY';
+}
+
+function availabilityForPostgres(evidence: OptionalEvidence<PostgresExecutionEvidence>): TraceEvidenceAvailability {
+  if (!evidence.ok) return 'UNAVAILABLE';
+  return evidence.value.registration ? 'AVAILABLE' : 'EMPTY';
+}
+
 export async function buildRegisterNewCustomerExecutionTrace(
   client: Client,
   attachmentStore: FilesystemAttachmentStore,
   workflowId: string,
 ): Promise<RegisterNewCustomerExecutionTrace> {
   const handle = client.workflow.getHandle(workflowId);
-  const [state, description, history, mongoAudit, postgresEvidence] = await Promise.all([
+
+  // Temporal is the mandatory orchestration authority for this trace. If the Workflow cannot
+  // be queried/described/read, the endpoint cannot truthfully identify the execution.
+  const [state, description, history] = await Promise.all([
     handle.query(getRegistrationStateQuery),
     handle.describe(),
     handle.fetchHistory(),
-    loadMongoAuditEvidence(workflowId),
-    loadPostgresExecutionEvidence(workflowId),
   ]);
 
+  // Application stores are corroborating evidence planes. Their failure must be visible in
+  // the trace rather than turning observability itself into an all-or-nothing request.
+  const [mongoEvidence, postgresEvidence] = await Promise.all([
+    optionalEvidence(() => loadMongoAuditEvidence(workflowId)),
+    optionalEvidence(() => loadPostgresExecutionEvidence(workflowId)),
+  ]);
+
+  const mongoAudit = mongoEvidence.ok ? mongoEvidence.value : [];
+  const postgresSnapshot = postgresEvidence.ok ? postgresEvidence.value : {};
   const rawEvents = (history.events ?? []) as unknown as readonly UnknownRecord[];
   const temporalHistory = summarizeTemporalHistory(rawEvents);
-  const conversation = reconstructConversation(rawEvents, mongoAudit);
-  const pgAttachments = postgresEvidence.customer?.attachments ?? [];
+  const conversation = reconstructConversation(rawEvents, mongoEvidence);
+  const pgAttachments = postgresSnapshot.customer?.attachments ?? [];
+
   const committed = await Promise.all(
     pgAttachments.map(async (attachment) => {
-      const metadata = await attachmentStore.getCommitted(attachment.attachmentId);
-      return {
-        attachmentId: attachment.attachmentId,
-        linkedFromPostgres: true,
-        storeMetadataFound: Boolean(metadata),
-        ...(metadata ? { metadata } : {}),
-      } as const;
+      try {
+        const metadata = await attachmentStore.getCommitted(attachment.attachmentId);
+        return {
+          attachmentId: attachment.attachmentId,
+          linkedFromPostgres: true,
+          storeMetadataFound: Boolean(metadata),
+          ...(metadata ? { metadata } : {}),
+        } as const;
+      } catch (error) {
+        return {
+          attachmentId: attachment.attachmentId,
+          linkedFromPostgres: true,
+          storeMetadataFound: false,
+          error: errorMessage(error),
+        } as const;
+      }
     }),
   );
 
@@ -489,16 +608,33 @@ export async function buildRegisterNewCustomerExecutionTrace(
   };
 
   const warnings: string[] = [];
-  if (!postgresEvidence.registration) warnings.push('POSTGRES_REGISTRATION_NOT_OBSERVED');
-  if (mongoAudit.length === 0) warnings.push('MONGO_AUDIT_NOT_OBSERVED');
+  if (!mongoEvidence.ok) warnings.push(`MONGO_AUDIT_UNAVAILABLE:${mongoEvidence.error}`);
+  else if (mongoAudit.length === 0) warnings.push('MONGO_AUDIT_NOT_OBSERVED');
+
+  if (!postgresEvidence.ok) warnings.push(`POSTGRES_EVIDENCE_UNAVAILABLE:${postgresEvidence.error}`);
+  else if (!postgresSnapshot.registration) warnings.push('POSTGRES_REGISTRATION_NOT_OBSERVED');
+
   const missingCommitted = committed.filter((item) => !item.storeMetadataFound);
   if (missingCommitted.length > 0) warnings.push('ATTACHMENT_STORE_METADATA_MISSING');
 
-  const attachmentEvidence = pgAttachments.length === 0
+  const mongoAvailability = availabilityForList(mongoEvidence);
+  const postgresAvailability = availabilityForPostgres(postgresEvidence);
+
+  const attachmentSourceStatus = !postgresEvidence.ok
+    ? 'UNKNOWN' as const
+    : pgAttachments.length === 0
+      ? 'NOT_APPLICABLE' as const
+      : missingCommitted.length === 0
+        ? 'AVAILABLE' as const
+        : 'INCOMPLETE' as const;
+
+  const attachmentEvidence = attachmentSourceStatus === 'NOT_APPLICABLE'
     ? 'NOT_APPLICABLE' as const
-    : missingCommitted.length === 0
+    : attachmentSourceStatus === 'AVAILABLE'
       ? 'COMPLETE' as const
-      : 'INCOMPLETE' as const;
+      : attachmentSourceStatus === 'INCOMPLETE'
+        ? 'INCOMPLETE' as const
+        : 'UNKNOWN' as const;
 
   return {
     schemaVersion: 'mk0.execution-trace.v1',
@@ -531,24 +667,38 @@ export async function buildRegisterNewCustomerExecutionTrace(
       history: temporalHistory,
     },
     mongo: {
+      availability: mongoAvailability,
       eventCount: mongoAudit.length,
       audit: mongoAudit,
+      ...(!mongoEvidence.ok ? { error: mongoEvidence.error } : {}),
     },
-    postgres: postgresEvidence,
+    postgres: {
+      availability: postgresAvailability,
+      snapshot: postgresSnapshot,
+      ...(!postgresEvidence.ok ? { error: postgresEvidence.error } : {}),
+    },
     attachmentStore: {
-      applicable: pgAttachments.length > 0,
+      availability: attachmentSourceStatus,
+      applicable: !postgresEvidence.ok ? 'UNKNOWN' : pgAttachments.length > 0,
       committed,
     },
     timeline: sortTimeline([
       ...timelineFromTemporal(temporalHistory),
       ...timelineFromMongo(mongoAudit),
-      ...timelineFromPostgres(postgresEvidence),
+      ...timelineFromPostgres(postgresSnapshot),
+      ...timelineFromAttachmentStore(committed),
     ]),
     evidence: {
       temporal: true,
-      mongo: mongoAudit.length > 0,
-      postgres: Boolean(postgresEvidence.registration),
+      mongo: mongoAvailability === 'AVAILABLE',
+      postgres: postgresAvailability === 'AVAILABLE',
       attachmentStore: attachmentEvidence,
+      sourceStatus: {
+        temporal: 'AVAILABLE',
+        mongo: mongoAvailability,
+        postgres: postgresAvailability,
+        attachmentStore: attachmentSourceStatus,
+      },
       warnings,
     },
   };
