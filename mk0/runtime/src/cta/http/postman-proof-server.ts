@@ -1,6 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
-import type { ProvideCustomerDataInput } from '../../contracts/register-new-customer/index.js';
+import {
+  validateProvideCustomerDataIngress,
+  type ProvideCustomerDataInput,
+} from '../../contracts/register-new-customer/index.js';
 import {
   AttachmentStoreError,
   MK0_ATTACHMENT_MAX_SINGLE_BYTES,
@@ -221,7 +224,7 @@ async function run(): Promise<void> {
       if (request.method === 'POST') {
         const workflowId = pathWorkflowId(url.pathname, '/customer-data');
         if (workflowId) {
-          const input = (await readJson(request)) as ProvideCustomerDataInput;
+          const rawInput = await readJson(request);
           const handle = client.workflow.getHandle(workflowId);
           try {
             const state = await handle.query(getRegistrationStateQuery);
@@ -234,6 +237,24 @@ async function run(): Promise<void> {
               });
               return;
             }
+
+            const validated = validateProvideCustomerDataIngress(rawInput);
+            if (!validated.ok) {
+              const description = await handle.describe();
+              sendJson(response, 200, {
+                ok: true,
+                workflowId,
+                runId: description.runId,
+                result: {
+                  ok: false,
+                  issues: validated.issues,
+                  state,
+                },
+              });
+              return;
+            }
+
+            const input: ProvideCustomerDataInput = validated.value;
             const result = await handle.executeUpdate(provideCustomerDataUpdate, { args: [input] });
             const description = await handle.describe();
             sendJson(response, 200, {
