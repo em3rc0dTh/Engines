@@ -67,11 +67,17 @@ jobs:
           docker compose logs worker cta temporal migrate
           exit 1
 
-      - name: Certify Pepito to Juancito to Andresito ping-pong and unified evidence
+      - name: Certify interactive ping-pong and unified evidence
         working-directory: mk0/runtime
         env:
           ENGINES_CTA_URL: http://127.0.0.1:8787
         run: npx tsx scripts/certify-lab-console-trace.ts
+
+      - name: Certify stable phone slot ordering through PostgreSQL
+        working-directory: mk0/runtime
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-phone-slot-order.ts
 
       - name: Capture diagnostics
         if: always()
