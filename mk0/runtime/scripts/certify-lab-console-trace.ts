@@ -21,7 +21,10 @@ async function json(path: string, init?: RequestInit): Promise<JsonRecord> {
   return parsed;
 }
 
-async function start(idempotencyKey: string, draft: JsonRecord = { customer: {} }): Promise<Readonly<{ workflowId: string; runId: string }>> {
+async function start(
+  idempotencyKey: string,
+  draft: JsonRecord = { customer: {} },
+): Promise<Readonly<{ workflowId: string; runId: string }>> {
   const body = await json('/mk0/register-new-customer', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -58,7 +61,7 @@ async function trace(workflowId: string): Promise<JsonRecord> {
 
 async function waitFor(
   workflowId: string,
-  predicate: (trace: JsonRecord) => boolean,
+  predicate: (traceValue: JsonRecord) => boolean,
   label: string,
   timeoutMs = 12_000,
 ): Promise<JsonRecord> {
@@ -82,6 +85,10 @@ function conversation(traceValue: JsonRecord): JsonRecord {
 
 function customerDraft(traceValue: JsonRecord): JsonRecord {
   return record(record(conversation(traceValue).currentDraft)?.customer) ?? {};
+}
+
+function postgresSnapshot(traceValue: JsonRecord): JsonRecord {
+  return record(record(traceValue.postgres)?.snapshot) ?? {};
 }
 
 async function certifyPingPong(): Promise<void> {
@@ -120,7 +127,9 @@ async function certifyPingPong(): Promise<void> {
   );
   assert(workflow(current).phase === 'WAITING_FOR_REQUIRED_DATA', 'Andresito stage should still wait');
 
-  await update(execution.workflowId, `email-andresito-${token}`, { contact: { email: `andresito.${token}@example.test` } });
+  await update(execution.workflowId, `email-andresito-${token}`, {
+    contact: { email: `andresito.${token}@example.test` },
+  });
   current = await waitFor(
     execution.workflowId,
     (value) => workflow(value).workflowStatus === 'COMPLETED' && workflow(value).phase === 'CREATED',
@@ -130,7 +139,10 @@ async function certifyPingPong(): Promise<void> {
   const conv = conversation(current);
   const updates = Array.isArray(conv.updates) ? conv.updates : [];
   assert(updates.length >= 4, 'all four Update events must be visible');
-  assert(updates.every((item) => record(item)?.applied === true), 'all expected Updates must be applied');
+  assert(
+    updates.every((item) => record(item)?.application === 'APPLIED'),
+    `all expected Updates must be APPLIED: ${JSON.stringify(updates)}`,
+  );
   assert(customerDraft(current).name === 'Andresito', 'final durable draft must contain last name update');
 
   const temporal = record(current.temporal) ?? {};
@@ -140,12 +152,18 @@ async function certifyPingPong(): Promise<void> {
 
   const mongo = record(current.mongo) ?? {};
   const audit = Array.isArray(mongo.audit) ? mongo.audit : [];
+  assert(mongo.availability === 'AVAILABLE', `Mongo evidence unavailable: ${JSON.stringify(mongo)}`);
   assert(audit.some((item) => record(item)?.eventType === 'REGISTRATION_COMPLETED'), 'Mongo terminal audit missing');
-  assert(audit.filter((item) => record(item)?.eventType === 'CUSTOMER_DATA_ACCEPTED').length >= 5, 'Mongo customer data audit incomplete');
+  assert(
+    audit.filter((item) => record(item)?.eventType === 'CUSTOMER_DATA_ACCEPTED').length >= 5,
+    'Mongo customer data audit incomplete',
+  );
 
   const postgres = record(current.postgres) ?? {};
-  const registration = record(postgres.registration) ?? {};
-  const customer = record(postgres.customer) ?? {};
+  assert(postgres.availability === 'AVAILABLE', `PostgreSQL evidence unavailable: ${JSON.stringify(postgres)}`);
+  const snapshot = postgresSnapshot(current);
+  const registration = record(snapshot.registration) ?? {};
+  const customer = record(snapshot.customer) ?? {};
   assert(registration.status === 'COMPLETED_CREATED', 'PostgreSQL registration not terminal created');
   assert(customer.name === 'Andresito', 'PostgreSQL final customer name mismatch');
   assert(customer.email === `andresito.${token}@example.test`, 'PostgreSQL final email mismatch');
@@ -155,13 +173,19 @@ async function certifyPingPong(): Promise<void> {
   assert(evidence.mongo === true, 'Mongo evidence flag false');
   assert(evidence.postgres === true, 'PostgreSQL evidence flag false');
   assert(evidence.attachmentStore === 'NOT_APPLICABLE', 'AttachmentStore should be N/A for ping-pong case');
+  assert(Array.isArray(evidence.warnings) && evidence.warnings.length === 0, `unexpected ping-pong warnings: ${JSON.stringify(evidence.warnings)}`);
 
-  console.log(`TRACE_PING_PONG_PASS ${JSON.stringify({ workflowId: execution.workflowId, runId: execution.runId, updates: updates.length })}`);
+  console.log(`TRACE_PING_PONG_PASS ${JSON.stringify({
+    workflowId: execution.workflowId,
+    runId: execution.runId,
+    updates: updates.length,
+    finalName: customer.name,
+  })}`);
 }
 
 async function certifyAttachmentTrace(): Promise<void> {
   const token = Date.now().toString();
-  const fixturePath = new URL('../golden-dataset/fixtures/synthetic-supporting-document-v1.txt', import.meta.url);
+  const fixturePath = new URL('../../golden-dataset/fixtures/synthetic-supporting-document-v1.txt', import.meta.url);
   const fixture = await readFile(fixturePath);
   const sha256 = createHash('sha256').update(fixture).digest('hex');
   const ingressRef = `ing_trace_${token}`;
@@ -204,11 +228,12 @@ async function certifyAttachmentTrace(): Promise<void> {
   const attachmentStore = record(completed.attachmentStore) ?? {};
   const committed = Array.isArray(attachmentStore.committed) ? attachmentStore.committed : [];
   assert(attachmentStore.applicable === true, 'AttachmentStore should be applicable');
+  assert(attachmentStore.availability === 'AVAILABLE', `AttachmentStore evidence not available: ${JSON.stringify(attachmentStore)}`);
   assert(committed.length === 1, 'exactly one committed attachment expected');
   assert(record(committed[0])?.storeMetadataFound === true, 'committed store metadata missing');
 
-  const postgres = record(completed.postgres) ?? {};
-  const customer = record(postgres.customer) ?? {};
+  const snapshot = postgresSnapshot(completed);
+  const customer = record(snapshot.customer) ?? {};
   const refs = Array.isArray(customer.attachments) ? customer.attachments : [];
   assert(refs.length === 1, 'PostgreSQL attachment link missing');
 
@@ -220,7 +245,11 @@ async function certifyAttachmentTrace(): Promise<void> {
   assert(evidence.attachmentStore === 'COMPLETE', 'AttachmentStore evidence should be COMPLETE');
   assert(Array.isArray(evidence.warnings) && evidence.warnings.length === 0, `unexpected evidence warnings: ${JSON.stringify(evidence.warnings)}`);
 
-  console.log(`TRACE_ATTACHMENT_PASS ${JSON.stringify({ workflowId: execution.workflowId, runId: execution.runId, sha256 })}`);
+  console.log(`TRACE_ATTACHMENT_PASS ${JSON.stringify({
+    workflowId: execution.workflowId,
+    runId: execution.runId,
+    sha256,
+  })}`);
 }
 
 async function main(): Promise<void> {
