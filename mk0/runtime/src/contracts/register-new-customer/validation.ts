@@ -12,6 +12,8 @@ import {
   type RegistrationCompletionMode,
 } from './types.js';
 
+type ContactValidationMode = 'DURABLE_V1' | 'INGRESS_V2';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -28,7 +30,12 @@ function optionalBooleanIsValid(value: unknown): boolean {
   return value === undefined || typeof value === 'boolean';
 }
 
-function emailLooksValid(value: string): boolean {
+function durableV1EmailLooksValid(value: string): boolean {
+  const normalized = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function ingressV2EmailLooksValid(value: string): boolean {
   const normalized = value.trim();
   if (normalized.length === 0 || normalized.length > 254) return false;
 
@@ -74,7 +81,11 @@ function completionModeIsValid(value: unknown): value is RegistrationCompletionM
   return value === 'AUTO_WHEN_COMPLETE' || value === 'EXPLICIT_FINALIZE';
 }
 
-function validateCustomerDraftShape(value: unknown, path: string): readonly ContractIssue[] {
+function validateCustomerDraftShape(
+  value: unknown,
+  path: string,
+  contactMode: ContactValidationMode,
+): readonly ContractIssue[] {
   if (value === undefined) return [];
   if (!isRecord(value)) {
     return [{ code: 'INVALID_DRAFT', path, message: 'customer must be an object when provided' }];
@@ -112,14 +123,20 @@ function validateCustomerDraftShape(value: unknown, path: string): readonly Cont
         issues.push({ code: 'INVALID_DRAFT', path: `${path}.contact.email`, message: 'email must be a string' });
       } else if (
         typeof value.contact.email === 'string' &&
-        value.contact.email.trim().length > 0 &&
-        !emailLooksValid(value.contact.email)
+        value.contact.email.trim().length > 0
       ) {
-        issues.push({
-          code: 'INVALID_DRAFT',
-          path: `${path}.contact.email`,
-          message: 'email must contain one @ and a valid dotted domain, for example user@example.com',
-        });
+        const emailValid = contactMode === 'INGRESS_V2'
+          ? ingressV2EmailLooksValid(value.contact.email)
+          : durableV1EmailLooksValid(value.contact.email);
+        if (!emailValid) {
+          issues.push({
+            code: 'INVALID_DRAFT',
+            path: `${path}.contact.email`,
+            message: contactMode === 'INGRESS_V2'
+              ? 'email must contain one @ and a valid dotted domain, for example user@example.com'
+              : 'email must have a valid address shape',
+          });
+        }
       }
 
       if (value.contact.phones !== undefined) {
@@ -143,37 +160,39 @@ function validateCustomerDraftShape(value: unknown, path: string): readonly Cont
               }
             }
 
-            const number = typeof phone.number === 'string' ? phone.number : undefined;
-            const normalized = typeof phone.normalized === 'string' ? phone.normalized : undefined;
-            const countryCode = typeof phone.countryCode === 'string' ? phone.countryCode : undefined;
+            if (contactMode === 'INGRESS_V2') {
+              const number = typeof phone.number === 'string' ? phone.number : undefined;
+              const normalized = typeof phone.normalized === 'string' ? phone.normalized : undefined;
+              const countryCode = typeof phone.countryCode === 'string' ? phone.countryCode : undefined;
 
-            if (!nonEmptyString(number) && !nonEmptyString(normalized)) {
-              issues.push({
-                code: 'INVALID_DRAFT',
-                path: `${phonePath}.number`,
-                message: 'phone requires number or normalized digits',
-              });
-            }
-            if (nonEmptyString(number) && !formattedPhoneLooksValid(number)) {
-              issues.push({
-                code: 'INVALID_DRAFT',
-                path: `${phonePath}.number`,
-                message: 'phone number may contain digits and common formatting (+, spaces, parentheses, hyphens, dots) and must contain 7 to 15 digits',
-              });
-            }
-            if (nonEmptyString(normalized) && !normalizedPhoneLooksValid(normalized)) {
-              issues.push({
-                code: 'INVALID_DRAFT',
-                path: `${phonePath}.normalized`,
-                message: 'normalized phone must contain only 7 to 15 digits',
-              });
-            }
-            if (nonEmptyString(countryCode) && !countryCodeLooksValid(countryCode)) {
-              issues.push({
-                code: 'INVALID_DRAFT',
-                path: `${phonePath}.countryCode`,
-                message: 'countryCode must contain 1 to 3 digits with an optional leading +',
-              });
+              if (!nonEmptyString(number) && !nonEmptyString(normalized)) {
+                issues.push({
+                  code: 'INVALID_DRAFT',
+                  path: `${phonePath}.number`,
+                  message: 'phone requires number or normalized digits',
+                });
+              }
+              if (nonEmptyString(number) && !formattedPhoneLooksValid(number)) {
+                issues.push({
+                  code: 'INVALID_DRAFT',
+                  path: `${phonePath}.number`,
+                  message: 'phone number may contain digits and common formatting (+, spaces, parentheses, hyphens, dots) and must contain 7 to 15 digits',
+                });
+              }
+              if (nonEmptyString(normalized) && !normalizedPhoneLooksValid(normalized)) {
+                issues.push({
+                  code: 'INVALID_DRAFT',
+                  path: `${phonePath}.normalized`,
+                  message: 'normalized phone must contain only 7 to 15 digits',
+                });
+              }
+              if (nonEmptyString(countryCode) && !countryCodeLooksValid(countryCode)) {
+                issues.push({
+                  code: 'INVALID_DRAFT',
+                  path: `${phonePath}.countryCode`,
+                  message: 'countryCode must contain 1 to 3 digits with an optional leading +',
+                });
+              }
             }
 
             for (const key of ['isWhatsapp', 'primary'] as const) {
@@ -250,7 +269,7 @@ function validateDraftShape(value: unknown): readonly ContractIssue[] {
     return [{ code: 'INVALID_DRAFT', path: 'draft', message: 'draft must be an object when provided' }];
   }
 
-  const issues = [...validateCustomerDraftShape(value.customer, 'draft.customer')];
+  const issues = [...validateCustomerDraftShape(value.customer, 'draft.customer', 'INGRESS_V2')];
   if (value.attachments !== undefined) {
     if (!Array.isArray(value.attachments)) {
       issues.push({
@@ -363,8 +382,9 @@ export function validateRegisterNewCustomerStart(
   return { ok: true, value };
 }
 
-export function validateProvideCustomerData(
+function validateProvideCustomerDataWithMode(
   input: unknown,
+  contactMode: ContactValidationMode,
 ): ContractValidationResult<ProvideCustomerDataInput> {
   if (!isRecord(input)) {
     return {
@@ -378,7 +398,7 @@ export function validateProvideCustomerData(
     issues.push({ code: 'INVALID_INPUT_ID', path: 'inputId', message: 'inputId is required' });
   }
 
-  issues.push(...validateCustomerDraftShape(input.customerPatch, 'customerPatch'));
+  issues.push(...validateCustomerDraftShape(input.customerPatch, 'customerPatch', contactMode));
   if (!isRecord(input.customerPatch)) {
     issues.push({
       code: 'INVALID_CUSTOMER_PATCH',
@@ -396,6 +416,22 @@ export function validateProvideCustomerData(
       customerPatch: input.customerPatch as CustomerDraft,
     },
   };
+}
+
+// Durable Workflow replay contract. Keep this semantic frozen for histories
+// created before stricter CTA contact validation existed.
+export function validateProvideCustomerData(
+  input: unknown,
+): ContractValidationResult<ProvideCustomerDataInput> {
+  return validateProvideCustomerDataWithMode(input, 'DURABLE_V1');
+}
+
+// New transport ingress contract. CTA adapters should apply this before sending
+// a Temporal Update so malformed human contact input never enters Workflow history.
+export function validateProvideCustomerDataIngress(
+  input: unknown,
+): ContractValidationResult<ProvideCustomerDataInput> {
+  return validateProvideCustomerDataWithMode(input, 'INGRESS_V2');
 }
 
 export type ValidatedAttachmentIngress = AttachmentIngressDraft;
