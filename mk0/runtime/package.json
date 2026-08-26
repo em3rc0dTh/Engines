@@ -19,6 +19,7 @@
     "lab:reset": "docker compose down -v",
     "lab:status": "docker compose ps",
     "lab:logs": "docker compose logs -f worker cta",
+    "lab:console": "tsx src/lab-console/main.ts",
     "temporal:dev": "temporal server start-dev --ui-port 8233",
     "worker:b0": "tsx src/orchestration/temporal/workers/b0.worker.ts",
     "smoke:b0": "tsx src/orchestration/temporal/clients/b0.client.ts",
