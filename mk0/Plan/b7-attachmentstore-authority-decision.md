@@ -1,56 +1,61 @@
-# B7 — AttachmentStore project-authority decision package
+# B7 — AttachmentStore project-authority decision record
 
 ## Status
 
-**READY FOR PROJECT AUTHORITY DECISION — NOT B7 AUTHORIZATION**
+**APPROVED → IMPLEMENTED → CERTIFIED**
 
-This document prepares the next mk0 gate after the attachment-free core became system-certified.
+This file began as the pre-B7 decision package. It now records the resolved authority decision and the resulting certified laboratory profile.
 
-It does not authorize B7 by itself.
-
-Current proven state:
+## Authorization record
 
 ```text
-B0–B6                            ✅ CERTIFIED
-attachment-free integrated core ✅ 14 / 14 Golden PASS
-B7 AttachmentStore              🔒 GATED
-attachment Golden cases         GD-003 / GD-004 / GD-009 / GD-010
-full mk0                         NOT YET COMPLETE
+Decision:             APPROVED
+Decision date:        2026-08-25
+Approved baseline:    cert/mk0-core-golden-release
+Approved baseline SHA: 5e36064936a4621191412d8676b957bc0998ad5e
+Project authority:    repository/project owner
+Record authored by:   Engines engineering documentation
+
+Physical AttachmentStore profile:
+  local filesystem-backed content-addressed store
+  behind provider-neutral AttachmentStorePort
+
+Laboratory environment:
+  Windows + WSL2
+  Linux runtime
+  Docker Compose
+  Postman / localhost CTA
+  real Temporal
+  PostgreSQL
+  MongoDB
+  no tunnel/public exposure
+  no cloud dependency
+
+Laboratory limits accepted:
+  max attachments / registration = 4
+  max single attachment          = 1 MiB
+  max total attachment bytes     = 2 MiB
+  staged ingress TTL             = 15 minutes
+  integrity hash                 = SHA-256
+  Golden media types             = image/png, text/plain
+
+Fixture plan accepted:
+  synthetic-id-front-v1.png
+  synthetic-supporting-document-v1.txt
+
+First authorized B7 ticket:
+  B7.1 fixture commit + SHA-256/length freeze
+
+Explicit authorization to implement B7: YES
 ```
 
-Integrated core receipt:
-
-```text
-Source SHA: f0896c58d918e8f3971c78867870243e16a8b604
-Run ID:     32873848134
-Artifact:   mk0-core-golden-release-32873848134
-Digest:     sha256:25fea20c892ea7cd758788ac63a53ba9048b8809599f2b972c5ef77942c2b4e8
-```
+The authorization was explicitly tied to a **local WSL laboratory**. Public exposure, ngrok/tunnels and cloud object storage were not part of the B7 decision.
 
 ---
 
-# 1. Decision required
+# Frozen authority model
 
-Project authority must decide whether to authorize B7 and, if so, freeze the physical laboratory AttachmentStore profile before implementation begins.
-
-The decision must answer:
-
-```text
-1. What physically stores staged/committed binary bytes in mk0?
-2. How is logical attachment identity separated from binary integrity identity?
-3. How is stage → commit made retry-safe?
-4. How are SHA-256 / byte length / media type verified?
-5. How are unused staged objects expired?
-6. How are orphan/reconciliation candidates surfaced?
-7. Which synthetic fixture binaries and expected hashes are normative?
-8. Which limits are frozen for the mk0 laboratory?
-```
-
----
-
-# 2. Existing architecture constraints
-
-B7 must preserve the already-approved authority split:
+B7 preserves the mk0 authority split:
 
 ```text
 binary/document truth → AttachmentStore
@@ -58,8 +63,6 @@ business reference     → PostgreSQL
 orchestration          → Temporal
 interaction audit      → MongoDB
 ```
-
-A staged attachment is technical ingress only.
 
 A registration with attachments cannot reach successful terminal finalization until every applicable attachment is:
 
@@ -71,17 +74,15 @@ linked from PostgreSQL
 represented by mandatory ATTACHMENT_COMMITTED audit evidence
 ```
 
-Raw attachment bytes must not be carried through normal Temporal Workflow History payloads and must not be copied into MongoDB audit.
+Raw attachment bytes are not carried through normal Temporal Workflow History payloads and are not copied into MongoDB audit.
 
 ---
 
-# 3. Physical technology options
+# Certified physical implementation
 
-## Option A — local filesystem-backed AttachmentStore
+B7 selected the filesystem-backed content-addressed laboratory store.
 
-Use the local filesystem as the physical binary store behind an explicit `AttachmentStore` port.
-
-Recommended logical layout:
+Logical layout:
 
 ```text
 attachment-store/
@@ -97,235 +98,108 @@ attachment-store/
 └── quarantine-or-orphans/
 ```
 
-Logical identity and binary identity remain separate:
+Identity separation:
 
 ```text
-ingressRef    = stable staging identity
-attachmentId  = stable logical committed attachment identity
-sha256        = immutable binary integrity/content identity
+ingressRef   = staging identity
+attachmentId = stable logical committed attachment identity
+sha256       = binary integrity/content identity
 ```
 
-Two distinct logical attachments may contain identical bytes while sharing the same content-addressed blob. A retry of the **same ingressRef**, however, must always resolve the same logical `attachmentId`.
+A retry of the same ingress resolves the same logical attachment. Distinct logical attachments may share one content-addressed blob if their bytes are identical.
 
-### Advantages
+This is a laboratory technology decision, **not** a permanent production object-storage choice.
 
-- deterministic GitHub Actions certification;
-- no external service or vendor dependency;
-- no credentials/secrets required for mk0;
-- exercises the exact architecture contract rather than a provider API;
-- easy synthetic corruption, expiry and orphan fault injection;
-- simple atomic commit using temporary files + rename;
-- easy later replacement with S3-compatible/cloud/object-store adapters behind the same port.
+Future S3-compatible/cloud adapters may replace the filesystem adapter behind the same port without redefining Workflow business semantics.
 
-### Limitations
+---
 
-- not itself a production distributed object store;
-- production replication/durability/encryption is not proven by this laboratory backend;
-- multi-host coordination remains a later deployment concern.
+# Frozen synthetic fixtures
 
-Classification:
+## F1 — synthetic identity image
 
 ```text
-BEST FIT FOR MK0 LABORATORY
+file:
+mk0/golden-dataset/fixtures/synthetic-id-front-v1.png
+
+mediaType:  image/png
+byteLength: 75
+sha256:
+248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84
+```
+
+The fixture contains no real identity document or customer PII.
+
+## F2 — synthetic supporting document
+
+```text
+file:
+mk0/golden-dataset/fixtures/synthetic-supporting-document-v1.txt
+
+mediaType:  text/plain
+byteLength: 67
+sha256:
+c4de8a6ee133dfc935ccb27071170ea692d1261f30cb18cd35269a1d09cf1609
+```
+
+Frozen payload:
+
+```text
+ENGINES_MK0_SYNTHETIC_SUPPORTING_DOCUMENT_V1
+NO_REAL_CUSTOMER_DATA
 ```
 
 ---
 
-## Option B — S3-compatible/object-storage service in the laboratory
-
-Use a local or remote S3-compatible service as the AttachmentStore implementation.
-
-### Advantages
-
-- closer to a typical production object-storage API;
-- object-store semantics are exercised directly.
-
-### Costs for mk0
-
-- additional service/runtime dependency;
-- image/version/credential configuration becomes part of certification;
-- provider behavior can distract from proving the Engines AttachmentStore contract;
-- more moving parts for four small Golden cases.
-
-Classification:
-
-```text
-VALID, BUT NOT REQUIRED TO PROVE MK0 ARCHITECTURE
-```
-
----
-
-## Option C — MongoDB GridFS
-
-Use GridFS for binary storage while MongoDB also hosts application audit/context.
-
-### Advantages
-
-- existing MongoDB runtime already exists;
-- mature binary-chunk storage model.
-
-### Architectural disadvantage
-
-It physically couples two authorities that the design intentionally separates conceptually:
-
-```text
-MongoDB audit/context
-AttachmentStore binary truth
-```
-
-The contract boundary could still be preserved in code, but the laboratory would teach us less about independent attachment capability replacement.
-
-Classification:
-
-```text
-TECHNICALLY POSSIBLE / NOT RECOMMENDED FOR THIS PROOF
-```
-
----
-
-# 4. Recommended B7 technology decision
-
-**Recommendation: Option A — filesystem-backed content-addressed AttachmentStore for the mk0 laboratory.**
-
-This recommendation is deliberately about **mk0 proof quality**, not a permanent production storage selection.
-
-The production-facing contract remains provider-neutral:
-
-```text
-AttachmentStorePort
-  stage(...)
-  resolveIngress(...)
-  commit(...)
-  getMetadata(...)
-  open/read(...)
-  expire(...)
-  listReconciliationCandidates(...)
-```
-
-Future adapters can target S3-compatible storage, cloud object storage or another approved system without changing `RegisterNewCustomer` Workflow semantics.
-
----
-
-# 5. Recommended physical identity model
-
-## Ingress identity
-
-`ingressRef` is opaque and generated at staging time.
-
-Conceptual value:
-
-```text
-ing_<random-or-uuid>
-```
-
-It identifies one staged logical ingress, not file content.
-
-Required stage metadata:
-
-```text
-ingressRef
-mediaType
-byteLength
-expectedSha256
-createdAt
-expiresAt
-original/display name when safe
-state = STAGED
-```
-
-## Committed logical identity
-
-`attachmentId` is opaque and stable for a committed ingress.
-
-Conceptual value:
-
-```text
-att_<random-or-uuid>
-```
-
-Retry rule:
-
-```text
-same ingressRef + same expected integrity
-→ same attachmentId
-→ no second logical committed attachment
-```
-
-Conflict rule:
-
-```text
-same ingressRef + materially different expected integrity
-→ ATTACHMENT_INGRESS_CONFLICT
-```
-
-## Binary identity
-
-The binary object is content-addressed by lowercase SHA-256:
-
-```text
-objects/sha256/<64-hex-digest>
-```
-
-Binary deduplication is an implementation optimization only. Business logic continues to reference `attachmentId`, not raw storage path/hash.
-
----
-
-# 6. Recommended atomic stage / commit model
+# Frozen stage / resolve / commit semantics
 
 ## Stage
 
 ```text
 receive bytes outside Workflow History
-→ stream bytes to temporary ingress payload
-→ calculate SHA-256 and byte length while streaming
-→ compare with declared integrity metadata
-→ atomically publish STAGED metadata + payload
-→ return ingressRef
+→ verify media type and size
+→ calculate SHA-256
+→ compare expected integrity when supplied
+→ atomically publish ingress payload + metadata
+→ return opaque ingressRef
 ```
 
-If stage integrity does not match declared metadata:
+## Resolve
+
+`resolveIngress(ingressRef)` returns metadata only.
+
+A syntactically valid but absent ingress resolves as missing and the HTTP proof surface returns typed `ATTACHMENT_INGRESS_NOT_FOUND`.
+
+## Commit
+
+```text
+resolve ingressRef
+→ reject expired/missing ingress
+→ re-read staged payload
+→ verify SHA-256 + byte length again
+→ atomically ensure content-addressed object
+→ resolve stable attachmentId
+→ write committed logical metadata
+→ persist PostgreSQL Customer attachment reference
+→ persist ATTACHMENT_COMMITTED audit
+→ only then permit registration finalization
+```
+
+Corruption after stage becomes:
 
 ```text
 ATTACHMENT_INTEGRITY_MISMATCH
 ```
 
-No Temporal Workflow start should receive a supposedly-valid ingressRef for a stage operation that failed integrity validation.
-
-## Resolve ingress
-
-`resolveIngress(ingressRef)` returns metadata only, not an unrestricted binary payload through Workflow state.
-
-It must distinguish:
-
-```text
-STAGED
-EXPIRED
-COMMITTED
-MISSING
-CONFLICT / CORRUPT
-```
-
-## Commit
-
-Conceptual Activity flow:
-
-```text
-resolve ingressRef
-→ reject expired/missing/corrupt ingress
-→ re-read or stream-verify binary integrity
-→ ensure content-addressed object exists atomically
-→ create stable committed logical metadata for attachmentId
-→ mark ingress committed/resolved
-→ return attachmentId + integrity metadata
-```
-
-Atomic filesystem publication should use same-filesystem temporary paths and rename semantics rather than exposing partially-written committed objects.
+and cannot become false terminal success.
 
 ---
 
-# 7. PostgreSQL reference contract
+# PostgreSQL contract
 
-B7 should add a canonical Customer attachment-reference relation, conceptually:
+B7 adds canonical immutable Customer attachment linkage.
+
+Conceptual authority:
 
 ```text
 customer_id
@@ -338,272 +212,104 @@ sha256
 committed_at
 ```
 
-PostgreSQL stores the business linkage and immutable integrity evidence required for Customer truth.
+PostgreSQL stores business linkage and integrity reference metadata, not binary payload bytes.
 
-It does **not** store the attachment bytes.
-
-Retry of the same logical link must be idempotent.
+Retry of the same logical link is idempotent; materially different metadata for the same logical identity is rejected.
 
 ---
 
-# 8. MongoDB audit contract
+# MongoDB audit contract
 
-For every attachment successfully committed as part of the registration, the applicable mandatory audit milestone must exist:
+For each successfully committed registration attachment, applicable mandatory audit includes:
 
 ```text
 ATTACHMENT_COMMITTED
 ```
 
-Recommended safe metadata:
+Audit metadata may include safe logical/integrity metadata but not raw bytes/base64 payloads.
+
+---
+
+# Certified Golden closure
+
+B7 closed the exact four cases that were previously deferred:
 
 ```text
-attachmentId
-ingress identity hash or safe opaque ingressRef
-kind
-mediaType
-byteLength
-sha256
+GD-003 one attachment                    PASS
+GD-004 multiple attachments              PASS
+GD-009 transient AttachmentStore failure PASS
+GD-010 permanent integrity mismatch      PASS
 ```
 
-Do not store:
+Certified B7 runtime source:
 
 ```text
-raw attachment bytes
-base64 copies
-unrestricted file contents
-credentials
-storage filesystem paths as business API contract
+80a95d0b9715f91879a9e0cbd7230828098ba997
+```
+
+GitHub Actions run:
+
+```text
+32896780937
+```
+
+Conclusion:
+
+```text
+success
+```
+
+GD-009 proved Temporal retry after an injected transient commit failure while preserving one logical attachment.
+
+GD-010 proved post-stage corruption fails typed with no PostgreSQL attachment link, no `ATTACHMENT_COMMITTED`, no `REGISTRATION_COMPLETED` and no false successful registration.
+
+Combined with the 14 core Golden cases:
+
+```text
+Golden Dataset = 18 / 18 PASS
 ```
 
 ---
 
-# 9. Recommended mk0 laboratory limits
+# Physical local confirmation
 
-These values are proposed for **mk0 certification only** and are not production limits.
+On 2026-08-26 the operator executed the full Postman manual-certification collection against the WSL2/Docker Compose laboratory.
 
 ```text
-maximum attachment count per RegisterNewCustomer = 4
-maximum single attachment byte length            = 1 MiB
-maximum total attachment bytes per registration  = 2 MiB
-staged ingress TTL                                = 15 minutes
-SHA algorithm                                     = SHA-256
-allowed Golden fixture media types                = image/png, text/plain
+37 tests
+0 errors
+0 failed assertions
+37 / 37 PASS
 ```
 
-Rationale:
+This included physical local AttachmentStore stage/resolve and Customer+attachment registration through Postman → CTA → Temporal → Worker → persistence authorities.
 
-- enough to exercise one/multiple-attachment behavior;
-- small enough to keep CI deterministic and fast;
-- avoids teaching the Workflow to transport large payloads;
-- production policy remains a later configuration/security decision.
+Receipt:
 
-Project authority may change these before approval; once approved, B7 tests must treat them as frozen laboratory policy.
+```text
+mk0/Build/evidence/mk0-full-local-laboratory-certification-2026-08-26.md
+```
 
 ---
 
-# 10. Proposed synthetic fixture set
+# Decision boundary that remains
 
-The fixture binaries themselves must be committed before B7 runtime certification. Hashes are **not considered frozen until the committed bytes exist**.
-
-Recommended fixture identities:
-
-## Fixture F1 — synthetic identity image
-
-```text
-fixtureId:  synthetic-id-front-v1
-file:       mk0/golden-dataset/fixtures/synthetic-id-front-v1.png
-mediaType:  image/png
-purpose:    GD-003 + first object in GD-004
-sha256:     TO_BE_COMPUTED_FROM_COMMITTED_BINARY
-byteLength: TO_BE_COMPUTED_FROM_COMMITTED_BINARY
-```
-
-Requirements:
-
-- tiny valid PNG;
-- contains no real document/PII;
-- deterministic committed bytes.
-
-## Fixture F2 — synthetic supporting document
-
-```text
-fixtureId:  synthetic-supporting-document-v1
-file:       mk0/golden-dataset/fixtures/synthetic-supporting-document-v1.txt
-mediaType:  text/plain
-purpose:    second object in GD-004
-sha256:     TO_BE_COMPUTED_FROM_COMMITTED_BINARY
-byteLength: TO_BE_COMPUTED_FROM_COMMITTED_BINARY
-```
-
-Proposed deterministic textual payload:
-
-```text
-ENGINES_MK0_SYNTHETIC_SUPPORTING_DOCUMENT_V1
-NO_REAL_CUSTOMER_DATA
-```
-
-Again: the expected digest is frozen only after the exact file bytes are committed and independently hashed in the B7 closure commit.
-
----
-
-# 11. Golden case closure plan
-
-## GD-003 — one attachment
-
-Must prove:
-
-```text
-one ingress staged
-one attachment committed
-one PostgreSQL Customer attachment ref
-binary absent from PostgreSQL Customer
-ATTACHMENT_COMMITTED audit exists
-terminal success only after attachment + reference + audit
-```
-
-## GD-004 — multiple attachments
-
-Must prove:
-
-```text
-two independent ingress refs
-both commit successfully
-both PostgreSQL refs exist
-finalization waits for both
-retry does not duplicate either logical attachment
-```
-
-## GD-009 — transient AttachmentStore failure
-
-Inject one transient `commitAttachment` failure.
-
-Must prove:
-
-```text
-Temporal Activity retry observed
-same ingressRef resolves same attachmentId
-committed attachment delta = 1
-Customer finalization did not occur before recovery
-mandatory audit complete before success
-```
-
-## GD-010 — permanent integrity mismatch
-
-Corrupt or deliberately mismatch the expected SHA-256.
-
-Must prove:
-
-```text
-Workflow terminal = FAILED
-failureCode = ATTACHMENT_INTEGRITY_MISMATCH
-Customer not reported successful
-no false ATTACHMENT_COMMITTED success marker
-no successful registration completion
-```
-
-Whether a pre-created Customer remains in a pending/failed technical state or is avoided entirely must be frozen in the B7 implementation plan before runtime certification; it must never be reported as a successful registration.
-
----
-
-# 12. B7 implementation boundaries
-
-If authorized, B7 may implement:
-
-```text
-AttachmentStore port
-filesystem-backed mk0 adapter
-stage/resolve/commit/retrieve/expiry/reconciliation semantics
-synthetic fixture binaries
-Customer attachment reference migration/repository
-Temporal attachment Activities
-RegisterNewCustomer attachment branch
-ATTACHMENT_COMMITTED audit integration
-GD-003/004/009/010 certification harness
-```
-
-B7 must not expand into:
+This B7 approval **does not** authorize or certify:
 
 ```text
 production cloud storage selection
-production PII retention program
+public upload service
+internet/tunnel exposure
+production retention/encryption program
 virus/malware scanning platform
 OCR/document extraction
 Agent/Hermes
 Scheduler
 new business Workflows
-arbitrary public upload product
-final UI/control room
+final Engines UI/control room
+production deployment
 ```
 
-Those may be future gates.
+Those remain future explicit gates.
 
----
-
-# 13. Recommended B7 ticket sequence
-
-```text
-B7.0  authority + physical profile closure
-B7.1  commit fixture binaries + freeze SHA-256 / lengths
-B7.2  AttachmentStore port + filesystem adapter
-B7.3  stage/resolve/retrieve + TTL/reconciliation
-B7.4  retry-safe commit identity
-B7.5  PostgreSQL customer_attachment_refs
-B7.6  Temporal Activities + Workflow attachment branch
-B7.7  Mongo ATTACHMENT_COMMITTED success gate
-B7.8  GD-003 / GD-004 happy certification
-B7.9  GD-009 transient failure certification
-B7.10 GD-010 integrity-failure certification
-B7.11 full 18-case mk0 Golden rerun
-B7.12 full mk0 certification receipt
-```
-
-No later ticket should be called certified before its identified runtime gate passes.
-
----
-
-# 14. Recommended project-authority decision
-
-Independent engineering recommendation:
-
-```text
-DECISION RECOMMENDED: APPROVE B7
-PHYSICAL PROFILE:     filesystem-backed content-addressed mk0 AttachmentStore
-PRODUCTION STORAGE:   explicitly NOT selected by this decision
-FIXTURES:             F1 PNG + F2 text fixture, committed/frozen in B7.1
-FIRST B7 TICKET:      B7.0 / B7.1 closure before executable storage code
-```
-
-Rationale:
-
-The attachment-free core is already system-certified. B7 is now a narrow, well-bounded missing capability with four explicit Golden cases. A local provider-neutral storage adapter gives the highest signal-to-complexity ratio for proving the AttachmentStore contract without binding Engines to a production provider.
-
----
-
-# 15. Authorization record — intentionally blank
-
-B7 is authorized only when project authority records an explicit decision below.
-
-```text
-Decision:             APPROVED | REJECTED | CHANGES_REQUIRED
-Decision date:
-Approved repository SHA:
-Approved by:
-Record authored by:
-
-Physical AttachmentStore profile:
-Laboratory limits accepted:
-Fixture plan accepted:
-First authorized B7 ticket:
-
-Explicit authorization to implement B7: YES | NO
-```
-
-A blank record, a recommendation, or a generic request to continue work is **not** itself the formal B7 authorization recorded by this document.
-
-Until an explicit decision is entered:
-
-```text
-B7 = GATED
-GD-003 / GD-004 / GD-009 / GD-010 = DEFERRED_B7
-FULL MK0 = NOT YET COMPLETE
-```
+> **B7 authority decision is closed. B7 = CERTIFIED. Full mk0 local laboratory = SYSTEM_CERTIFIED.**
