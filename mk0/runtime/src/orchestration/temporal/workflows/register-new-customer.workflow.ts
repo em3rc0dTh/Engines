@@ -73,12 +73,21 @@ export type ProvideCustomerDataUpdateResult =
   | Readonly<{ ok: true; duplicateInput: boolean; state: RegistrationStateProjection }>
   | Readonly<{ ok: false; issues: readonly ContractIssue[]; state: RegistrationStateProjection }>;
 
+export type FinalizeRegistrationInput = Readonly<{ inputId: string }>;
+export type FinalizeRegistrationUpdateResult =
+  | Readonly<{ ok: true; duplicateInput: boolean; state: RegistrationStateProjection }>
+  | Readonly<{ ok: false; issues: readonly ContractIssue[]; state: RegistrationStateProjection }>;
+
 export const getRegistrationStateQuery = defineQuery<RegistrationStateProjection>('GetRegistrationState');
 export const getInitialStartFingerprintQuery = defineQuery<string>('GetInitialStartFingerprint');
 export const provideCustomerDataUpdate = defineUpdate<
   ProvideCustomerDataUpdateResult,
   [ProvideCustomerDataInput]
 >('ProvideCustomerData');
+export const finalizeRegistrationUpdate = defineUpdate<
+  FinalizeRegistrationUpdateResult,
+  [FinalizeRegistrationInput]
+>('FinalizeRegistration');
 
 function resolveMk0Policy(businessSlug: string) {
   return businessSlug === GOLDEN_REGISTRATION_POLICY_V1.businessSlug
@@ -96,15 +105,18 @@ export async function registerNewCustomerWorkflow(
   const info = workflowInfo();
   const policy = resolveMk0Policy(start.businessSlug);
   const initialStartFingerprint = serializeInitialStartFingerprintMaterial(start);
+  const explicitFinalize = start.request.completionMode === 'EXPLICIT_FINALIZE';
 
   let phase: RegistrationStateProjection['phase'] = 'STARTED';
   let draft: RegisterNewCustomerDraft = normalizeRegistrationDraft(start.draft);
   const acceptedInputIds = new Set<string>();
+  const acceptedFinalizeInputIds = new Set<string>();
   const requiredAuditEvents: Array<Readonly<{ eventType: RegistrationAuditEventInput['eventType']; logicalKey: string }>> = [];
   let workflowFailure: Readonly<{ code: string; message: string }> | undefined;
   let possibleDuplicate: RegistrationStateProjection['possibleDuplicate'];
   let customerId: string | undefined;
   let dataCollectionClosed = false;
+  let finalizeRequested = false;
   let registrationId: string | undefined;
   let terminalResult: RegistrationResult | undefined;
 
@@ -119,9 +131,11 @@ export async function registerNewCustomerWorkflow(
       ? 'NONE'
       : phase === 'WAITING_FOR_DUPLICATE_DECISION'
         ? 'RESOLVE_DUPLICATE'
-        : current.complete
-          ? 'NONE'
-          : 'PROVIDE_CUSTOMER_DATA';
+        : explicitFinalize && current.complete && !finalizeRequested && !dataCollectionClosed
+          ? 'FINALIZE_REGISTRATION'
+          : current.complete
+            ? 'NONE'
+            : 'PROVIDE_CUSTOMER_DATA';
 
     return {
       workflowId: info.workflowId,
@@ -298,7 +312,79 @@ export async function registerNewCustomerWorkflow(
     acceptedInputIds.add(validated.value.inputId);
 
     const current = completeness();
-    phase = current.complete ? 'REQUIRED_DATA_COMPLETE' : 'WAITING_FOR_REQUIRED_DATA';
+    phase = current.complete
+      ? explicitFinalize
+        ? 'READY_TO_FINALIZE'
+        : 'REQUIRED_DATA_COMPLETE'
+      : 'WAITING_FOR_REQUIRED_DATA';
+
+    return { ok: true, duplicateInput: false, state: projectState() };
+  });
+
+  setHandler(finalizeRegistrationUpdate, async (input: FinalizeRegistrationInput): Promise<FinalizeRegistrationUpdateResult> => {
+    if (!explicitFinalize) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'INVALID_CUSTOMER_PATCH',
+          path: 'request.completionMode',
+          message: 'FinalizeRegistration is only valid for EXPLICIT_FINALIZE sessions',
+        }],
+        state: projectState(),
+      };
+    }
+
+    const inputId = input.inputId?.trim();
+    if (!inputId) {
+      return {
+        ok: false,
+        issues: [{ code: 'INVALID_INPUT_ID', path: 'inputId', message: 'inputId is required' }],
+        state: projectState(),
+      };
+    }
+
+    if (acceptedFinalizeInputIds.has(inputId)) {
+      return { ok: true, duplicateInput: true, state: projectState() };
+    }
+
+    if (workflowFailure || terminalResult || dataCollectionClosed) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'INVALID_CUSTOMER_PATCH',
+          path: 'phase',
+          message: `Registration cannot be finalized in phase ${phase}`,
+        }],
+        state: projectState(),
+      };
+    }
+
+    const current = completeness();
+    if (!current.complete) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'INVALID_CUSTOMER_PATCH',
+          path: 'draft',
+          message: `Required registration data is still missing: ${current.missingFields.join(', ')}`,
+        }],
+        state: projectState(),
+      };
+    }
+
+    acceptedFinalizeInputIds.add(inputId);
+    finalizeRequested = true;
+    dataCollectionClosed = true;
+    phase = 'REQUIRED_DATA_COMPLETE';
+
+    await persistMandatoryAudit([
+      auditEvent(
+        'REGISTRATION_FINALIZE_REQUESTED',
+        `finalize:${inputId}`,
+        'READY_TO_FINALIZE',
+        { source: 'WORKFLOW_UPDATE', inputId },
+      ),
+    ]);
 
     return { ok: true, duplicateInput: false, state: projectState() };
   });
@@ -329,6 +415,7 @@ export async function registerNewCustomerWorkflow(
     auditEvent('REGISTRATION_SESSION_STARTED', 'session', 'STARTED', {
       operation: start.operation,
       channel: start.request.channel ?? 'unknown',
+      completionMode: start.request.completionMode ?? 'AUTO_WHEN_COMPLETE',
       attachmentCount: (start.draft?.attachments ?? []).length,
     }),
     auditEvent('REGISTRATION_POLICY_LOADED', 'policy', 'LOADING_REGISTRATION_POLICY', {
@@ -350,6 +437,16 @@ export async function registerNewCustomerWorkflow(
     ]);
     phase = 'WAITING_FOR_REQUIRED_DATA';
     await condition(() => completeness().complete || Boolean(workflowFailure));
+  }
+
+  if (workflowFailure) {
+    phase = 'FAILED';
+    throw ApplicationFailure.nonRetryable(workflowFailure.message, workflowFailure.code);
+  }
+
+  if (explicitFinalize && !finalizeRequested) {
+    phase = 'READY_TO_FINALIZE';
+    await condition(() => finalizeRequested || Boolean(workflowFailure));
   }
 
   if (workflowFailure) {
