@@ -19,6 +19,8 @@ export type AppointmentActivities = Readonly<{
     workflowId: string;
   }>): Promise<ReserveAppointmentCommandResult>;
 
+  getBusinessToday(input: Readonly<{ timeZone: string }>): Promise<string>;
+
   resolveAppointmentCustomer(input: Readonly<{
     businessSlug: string;
     customerId?: string;
