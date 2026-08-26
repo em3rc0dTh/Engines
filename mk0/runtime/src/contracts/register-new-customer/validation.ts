@@ -30,7 +30,44 @@ function optionalBooleanIsValid(value: unknown): boolean {
 
 function emailLooksValid(value: string): boolean {
   const normalized = value.trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+  if (normalized.length === 0 || normalized.length > 254) return false;
+
+  const at = normalized.indexOf('@');
+  if (at <= 0 || at !== normalized.lastIndexOf('@') || at === normalized.length - 1) return false;
+
+  const local = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  if (local.length > 64 || local.startsWith('.') || local.endsWith('.') || local.includes('..')) return false;
+  if (/\s/.test(local) || /\s/.test(domain)) return false;
+
+  const labels = domain.split('.');
+  if (labels.length < 2) return false;
+  if (labels.some((label) => (
+    label.length === 0 ||
+    label.length > 63 ||
+    label.startsWith('-') ||
+    label.endsWith('-') ||
+    !/^[A-Za-z0-9-]+$/.test(label)
+  ))) return false;
+
+  const suffix = labels.at(-1) ?? '';
+  return /^[A-Za-z]{2,63}$/.test(suffix) || /^xn--[A-Za-z0-9-]{2,59}$/.test(suffix);
+}
+
+function formattedPhoneLooksValid(value: string): boolean {
+  const normalized = value.trim();
+  if (normalized.length === 0 || normalized.length > 32) return false;
+  if (!/^\+?[0-9\s().-]+$/.test(normalized)) return false;
+  const digits = normalized.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function normalizedPhoneLooksValid(value: string): boolean {
+  return /^\d{7,15}$/.test(value.trim());
+}
+
+function countryCodeLooksValid(value: string): boolean {
+  return /^\+?\d{1,3}$/.test(value.trim());
 }
 
 function completionModeIsValid(value: unknown): value is RegistrationCompletionMode {
@@ -81,7 +118,7 @@ function validateCustomerDraftShape(value: unknown, path: string): readonly Cont
         issues.push({
           code: 'INVALID_DRAFT',
           path: `${path}.contact.email`,
-          message: 'email must have a valid address shape',
+          message: 'email must contain one @ and a valid dotted domain, for example user@example.com',
         });
       }
 
@@ -104,6 +141,39 @@ function validateCustomerDraftShape(value: unknown, path: string): readonly Cont
                   message: `${key} must be a string`,
                 });
               }
+            }
+
+            const number = typeof phone.number === 'string' ? phone.number : undefined;
+            const normalized = typeof phone.normalized === 'string' ? phone.normalized : undefined;
+            const countryCode = typeof phone.countryCode === 'string' ? phone.countryCode : undefined;
+
+            if (!nonEmptyString(number) && !nonEmptyString(normalized)) {
+              issues.push({
+                code: 'INVALID_DRAFT',
+                path: `${phonePath}.number`,
+                message: 'phone requires number or normalized digits',
+              });
+            }
+            if (nonEmptyString(number) && !formattedPhoneLooksValid(number)) {
+              issues.push({
+                code: 'INVALID_DRAFT',
+                path: `${phonePath}.number`,
+                message: 'phone number may contain digits and common formatting (+, spaces, parentheses, hyphens, dots) and must contain 7 to 15 digits',
+              });
+            }
+            if (nonEmptyString(normalized) && !normalizedPhoneLooksValid(normalized)) {
+              issues.push({
+                code: 'INVALID_DRAFT',
+                path: `${phonePath}.normalized`,
+                message: 'normalized phone must contain only 7 to 15 digits',
+              });
+            }
+            if (nonEmptyString(countryCode) && !countryCodeLooksValid(countryCode)) {
+              issues.push({
+                code: 'INVALID_DRAFT',
+                path: `${phonePath}.countryCode`,
+                message: 'countryCode must contain 1 to 3 digits with an optional leading +',
+              });
             }
 
             for (const key of ['isWhatsapp', 'primary'] as const) {
