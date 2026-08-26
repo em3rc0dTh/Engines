@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build/mk0-b7-attachmentstore-local-lab
+      - feat/mk0-lab-console-trace
   workflow_dispatch:
 
 jobs:
