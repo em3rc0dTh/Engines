@@ -15,6 +15,8 @@ import {
   provideCustomerDataUpdate,
 } from '../../orchestration/temporal/workflows/register-new-customer.workflow.js';
 import { adaptRegisterNewCustomerCtaInput } from '../register-new-customer.adapter.js';
+import { buildRegisterNewCustomerExecutionTrace } from '../../observability/register-new-customer-trace.js';
+import { closeExecutionEvidenceRepository } from '../../observability/execution-evidence.repository.js';
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_HOST = '127.0.0.1';
@@ -57,6 +59,15 @@ function pathWorkflowId(pathname: string, suffix = ''): string | undefined {
   }
   if (!rest || rest.includes('/')) return undefined;
   return decodeURIComponent(rest);
+}
+
+function pathExecutionTraceWorkflowId(pathname: string): string | undefined {
+  const prefix = '/mk0/executions/';
+  const suffix = '/trace';
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) return undefined;
+  const encoded = pathname.slice(prefix.length, -suffix.length);
+  if (!encoded || encoded.includes('/')) return undefined;
+  return decodeURIComponent(encoded);
 }
 
 function pathIngressRef(pathname: string): string | undefined {
@@ -128,6 +139,15 @@ async function run(): Promise<void> {
           throw error;
         }
         return;
+      }
+
+      if (request.method === 'GET') {
+        const traceWorkflowId = pathExecutionTraceWorkflowId(url.pathname);
+        if (traceWorkflowId) {
+          const trace = await buildRegisterNewCustomerExecutionTrace(client, attachmentStore, traceWorkflowId);
+          sendJson(response, 200, { ok: true, trace });
+          return;
+        }
       }
 
       if (request.method === 'GET') {
@@ -235,7 +255,10 @@ async function run(): Promise<void> {
 
   const shutdown = async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    await temporalPort.close();
+    await Promise.all([
+      temporalPort.close(),
+      closeExecutionEvidenceRepository(),
+    ]);
   };
 
   process.once('SIGTERM', () => void shutdown().then(() => process.exit(0)));
