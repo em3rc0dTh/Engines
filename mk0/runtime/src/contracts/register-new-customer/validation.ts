@@ -9,6 +9,7 @@ import {
   type ProvideCustomerDataInput,
   type RegisterNewCustomerDraft,
   type RegisterNewCustomerStartEnvelope,
+  type RegistrationCompletionMode,
 } from './types.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +26,15 @@ function optionalStringIsValid(value: unknown): boolean {
 
 function optionalBooleanIsValid(value: unknown): boolean {
   return value === undefined || typeof value === 'boolean';
+}
+
+function emailLooksValid(value: string): boolean {
+  const normalized = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function completionModeIsValid(value: unknown): value is RegistrationCompletionMode {
+  return value === 'AUTO_WHEN_COMPLETE' || value === 'EXPLICIT_FINALIZE';
 }
 
 function validateCustomerDraftShape(value: unknown, path: string): readonly ContractIssue[] {
@@ -63,6 +73,16 @@ function validateCustomerDraftShape(value: unknown, path: string): readonly Cont
     } else {
       if (!optionalStringIsValid(value.contact.email)) {
         issues.push({ code: 'INVALID_DRAFT', path: `${path}.contact.email`, message: 'email must be a string' });
+      } else if (
+        typeof value.contact.email === 'string' &&
+        value.contact.email.trim().length > 0 &&
+        !emailLooksValid(value.contact.email)
+      ) {
+        issues.push({
+          code: 'INVALID_DRAFT',
+          path: `${path}.contact.email`,
+          message: 'email must have a valid address shape',
+        });
       }
 
       if (value.contact.phones !== undefined) {
@@ -233,6 +253,16 @@ export function validateRegisterNewCustomerStart(
         });
       }
     }
+    if (
+      input.request.completionMode !== undefined &&
+      !completionModeIsValid(input.request.completionMode)
+    ) {
+      issues.push({
+        code: 'INVALID_ENVELOPE',
+        path: 'request.completionMode',
+        message: 'request.completionMode must be AUTO_WHEN_COMPLETE or EXPLICIT_FINALIZE',
+      });
+    }
   }
 
   issues.push(...validateDraftShape(input.draft));
@@ -243,6 +273,9 @@ export function validateRegisterNewCustomerStart(
   const rawDraft = input.draft as RegisterNewCustomerDraft | undefined;
   const correlationId = typeof request.correlationId === 'string' ? request.correlationId.trim() : undefined;
   const channel = typeof request.channel === 'string' ? request.channel.trim() : undefined;
+  const completionMode = completionModeIsValid(request.completionMode)
+    ? request.completionMode
+    : undefined;
 
   const value: RegisterNewCustomerStartEnvelope = {
     operation: REGISTER_NEW_CUSTOMER_OPERATION,
@@ -252,6 +285,7 @@ export function validateRegisterNewCustomerStart(
       idempotencyKey: (request.idempotencyKey as string).trim(),
       ...(correlationId ? { correlationId } : {}),
       ...(channel ? { channel } : {}),
+      ...(completionMode ? { completionMode } : {}),
     },
     schemaVersion: REGISTER_NEW_CUSTOMER_SCHEMA_VERSION,
   };
