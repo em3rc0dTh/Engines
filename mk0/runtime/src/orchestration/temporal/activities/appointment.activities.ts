@@ -1,3 +1,4 @@
+import { todayInTimeZone } from '../../../contracts/register-new-appointment/index.js';
 import {
   bookAppointment,
   closeAppointmentRepository,
@@ -12,6 +13,7 @@ import type { AppointmentActivities } from './appointment.types.js';
 
 export const appointmentActivities: AppointmentActivities = {
   reserveAppointmentCommand: (input) => reserveAppointmentCommand(input.start, input.workflowId),
+  getBusinessToday: (input) => Promise.resolve(todayInTimeZone(input.timeZone)),
   resolveAppointmentCustomer: (input) =>
     resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer),
   listAppointmentServices: (input) => listAppointmentServices(input.businessSlug),
