@@ -46,10 +46,13 @@ export type RegisterNewCustomerDraft = Readonly<{
   attachments?: readonly AttachmentIngressDraft[];
 }>;
 
+export type RegistrationCompletionMode = 'AUTO_WHEN_COMPLETE' | 'EXPLICIT_FINALIZE';
+
 export type RegistrationRequestMetadata = Readonly<{
   idempotencyKey: string;
   correlationId?: string;
   channel?: string;
+  completionMode?: RegistrationCompletionMode;
 }>;
 
 export type RegisterNewCustomerStartEnvelope = Readonly<{
@@ -75,6 +78,7 @@ export type RegistrationPhase =
   | 'COLLECTING_DATA'
   | 'VALIDATING_DRAFT'
   | 'WAITING_FOR_REQUIRED_DATA'
+  | 'READY_TO_FINALIZE'
   | 'REQUIRED_DATA_COMPLETE'
   | 'CHECKING_EXISTING_CUSTOMER'
   | 'WAITING_FOR_DUPLICATE_DECISION'
@@ -110,7 +114,7 @@ export type RegistrationStateProjection = Readonly<{
   knownFields: readonly string[];
   missingFields: readonly string[];
   validationErrors: readonly ContractIssue[];
-  nextAction?: 'PROVIDE_CUSTOMER_DATA' | 'RESOLVE_DUPLICATE' | 'NONE';
+  nextAction?: 'PROVIDE_CUSTOMER_DATA' | 'FINALIZE_REGISTRATION' | 'RESOLVE_DUPLICATE' | 'NONE';
   possibleDuplicate?: PossibleDuplicate;
   customerId?: string;
   created?: boolean;
