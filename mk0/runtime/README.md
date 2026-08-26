@@ -1,185 +1,263 @@
-# mk0 Runtime — B0
+# MK0 Runtime
 
-## Status
+Executable local laboratory for the completed MK0 Engines orchestration proof.
 
-**B0 CERTIFIED**
-
-Certification record:
+## Current status
 
 ```text
-mk0/Build/evidence/B0-runtime-certification-2026-08-24.md
+RegisterNewCustomer       ✅ certified
+AttachmentStore/B7        ✅ certified
+Lab Console / trace       ✅ certified
+RegisterNewAppointment    ✅ certified
+MK0 local objective       ✅ complete
+Production deployment     ❌ not certified
 ```
 
-This directory is the first executable layer of mk0.
+Historical B0 runtime details remain in [`../Build/evidence/B0-runtime-certification-2026-08-24.md`](../Build/evidence/B0-runtime-certification-2026-08-24.md). This README describes the **current** runtime rather than the first stage that created it.
 
-It deliberately contains no Customer registration business logic yet. B1 is the active Build stage for pure canonical contracts and versioned RegistrationPolicy semantics.
-
-## Certified runtime profile
+## Runtime profile
 
 ```text
-Node.js              >= 20
-Certified Node       v24.19.0
-TypeScript           7.0.2
-Temporal TS SDK      1.22.0
-Temporal CLI         1.8.1
-Temporal Server      1.31.2 observed in certification
-Temporal Web UI      2.50.1 observed in certification
-Temporal endpoint    localhost:7233
-Temporal Web UI      localhost:8233
-Namespace            default
-Task Queue           engines-mk0-registration
-PostgreSQL           17.8
-MongoDB              8.0.29
-Web framework        none
+Node.js            >= 20
+Certified CI Node  24.19.0
+TypeScript         7.0.2
+Temporal TS SDK    1.22.0
+Temporal CLI       1.8.1 in Compose image
+Task Queue         engines-mk0-registration
+PostgreSQL         17.8
+MongoDB            8.0.29
+Web framework      none
+CTA HTTP           127.0.0.1:8787
+Temporal gRPC      localhost:7233
+Temporal UI        localhost:8233
 ```
 
-Temporal's local dev server is used only for the mk0 laboratory runtime. Application PostgreSQL/MongoDB remain independent persistence planes.
+## Runtime structure
 
-The npm dependency graph is frozen by the committed `package-lock.json`.
+```text
+src/
+├── contracts/
+│   ├── register-new-customer/
+│   └── register-new-appointment/
+├── cta/
+│   ├── cli/
+│   └── http/
+├── lab-console/
+├── observability/
+├── orchestration/temporal/
+│   ├── activities/
+│   ├── clients/
+│   ├── ports/
+│   ├── workers/
+│   └── workflows/
+└── persistence/
+    ├── attachments/
+    ├── mongo/
+    └── postgres/
 
-## Prerequisites
-
-- Node.js 20+;
-- npm;
-- Docker + Docker Compose;
-- Temporal CLI 1.8.1 available in `PATH` for parity with the certified laboratory profile.
+migrations/
+scripts/
+postman/
+```
 
 ## Install
+
+From WSL/Linux:
 
 ```bash
 cd mk0/runtime
 npm ci
-cp .env.example .env
-```
-
-Use `npm ci` for certified reproduction. Do not silently regenerate the dependency graph during ordinary B0 verification.
-
-The current B0 code uses defaults matching `.env.example`; exporting equivalent environment variables is also valid.
-
-## Start application persistence
-
-```bash
-npm run infra:up
-npm run infra:status
-npm run probe:stores
-```
-
-Expected logical evidence:
-
-```text
-B0_POSTGRES_OK
-B0_MONGO_OK
-B0_STORES_SMOKE_OK
-```
-
-## Start Temporal
-
-In a separate terminal:
-
-```bash
-cd mk0/runtime
-npm run temporal:dev
-```
-
-Expected local endpoints:
-
-```text
-Temporal gRPC  localhost:7233
-Temporal UI    http://localhost:8233
-```
-
-## Start the B0 Worker
-
-In another terminal:
-
-```bash
-cd mk0/runtime
-npm run worker:b0
-```
-
-Expected evidence includes:
-
-```text
-B0_WORKER_STARTED
-Task Queue = engines-mk0-registration
-Worker state = RUNNING
-```
-
-## Execute the real Temporal smoke Workflow
-
-In another terminal:
-
-```bash
-cd mk0/runtime
-npm run smoke:b0
-```
-
-Expected terminal evidence:
-
-```text
-B0_TEMPORAL_SMOKE_OK
-```
-
-The JSON result contains a real Temporal `workflowId`, `runId` and Task Queue. The same Workflow Execution is observable in Temporal Web UI/Event History during the live laboratory run.
-
-## Static check
-
-```bash
 npm run check
 ```
 
-## Stop
-
-Stop the Worker and Temporal dev server with their process shutdown controls, then:
+Fast regression surface:
 
 ```bash
-npm run infra:down
+npm run test:b1
+npm run test:b3
+npm run test:b7
+npm run test:lab-console
+npm run test:appointment
 ```
 
-## Certified B0 evidence
+## Start the complete local laboratory
 
-The final locked certification recorded:
+```bash
+docker compose up --build -d
+docker compose ps
+```
+
+The Compose dependency chain is deliberate:
 
 ```text
-source commit                 f66b37a22a2591d98085d528b2afe6675c094a24
-GitHub Actions run            32806301801
-artifact                      mk0-b0-runtime-evidence-32806301801
-artifact digest               sha256:090548b7e4a6073a0f36c0439ae3461309c871b3ad0df5c8720230acb523f03b
-Temporal Workflow ID          mk0-b0-smoke:3961d684-6447-4fc5-ab24-df14daebb341
-Temporal Run ID               01a03705-b65d-7ee3-a833-0f1e6f80b6ab
-Task Queue                    engines-mk0-registration
-PostgreSQL probe              PASS
-MongoDB probe                 PASS
-locked npm install            PASS
-TypeScript type-check         PASS
-Temporal Service              PASS
-Temporal Web UI               PASS
-Temporal Worker               PASS
-Temporal Workflow             PASS
-no business schema in B0      PASS
+PostgreSQL + MongoDB
+        ↓
+      migrate
+        ↓
+      Temporal
+        ↓
+       Worker
+        ↓
+        CTA
 ```
 
-The detailed immutable record is stored under `mk0/Build/evidence/` and the corresponding GitHub Actions artifact contains the structured JSON, lockfile and logs.
+Do not use `--no-deps` when starting CTA as if it were standalone.
 
-## Explicit non-goals preserved
+Health:
 
-B0 does not implement:
+```bash
+curl -fsS http://127.0.0.1:8787/health
+```
 
-- `RegistrationPolicy` runtime model;
-- `RegisterNewCustomer` business Workflow;
-- Query/Update data collection;
-- Customer duplicate policy execution;
-- PostgreSQL Customer tables;
-- MongoDB audit schema;
-- AttachmentStore;
-- Postman transport;
-- Agent/Hermes;
-- scheduling.
+Expected operation advertisement:
 
-Those remain correctly assigned to later authorized stages.
+```json
+{
+  "ok": true,
+  "service": "engines-mk0-cta",
+  "temporalAddress": "temporal:7233",
+  "operations": [
+    "RegisterNewCustomer",
+    "RegisterNewAppointment"
+  ]
+}
+```
 
-## Next stage
+## Customer Lab Console
 
-> **B1 — Canonical Contracts + Versioned RegistrationPolicy**
+```bash
+npm run lab:console
+```
 
-B1 is pure/deterministic contract work. It must not collapse B2–B6 concerns into the contract layer.
+The launcher waits for CTA health rather than assuming the HTTP process is ready immediately after Docker reports `Started`.
+
+Key commands:
+
+```text
+new <alias>
+attach <alias> <workflowId>
+sessions
+use <alias>
+show
+set name <value>
+set email <value>
+set phone[1] <value>
+set phone[2] <value>
+finish
+watch [seconds]
+trace
+exit
+```
+
+The Customer console demonstrates durable multi-round state, explicit finalization and unified read-only evidence projection.
+
+## Appointment Lab Console
+
+```bash
+npm run lab:appointment
+```
+
+Key commands:
+
+```text
+new <alias>
+customer name <value>
+customer email <value>
+customer phone <value>
+customer id <customerId>
+customer resolve
+services
+service <n|id|code|name>
+products
+product <n|id|code|name>
+date <human date>
+slots
+slot <n|HH:MM>
+show
+finish
+watch [seconds]
+trace
+exit
+```
+
+Supported laboratory date forms include canonical/numeric dates, English/Spanish weekday names and selected relative terms (`hoy/today`, `mañana/tomorrow`, `ayer/yesterday`). Past dates are rejected.
+
+## Persistence
+
+### PostgreSQL
+
+Application business truth includes:
+
+```text
+customers
+customer_contacts
+customer_phones
+customer_documents
+registration_commands
+customer_attachment_refs
+service_catalog
+service_products
+service_availability_rules
+appointment_commands
+appointments
+```
+
+### MongoDB
+
+Semantic audit collections:
+
+```text
+execution_audit
+appointment_audit
+```
+
+MongoDB is not canonical Customer/Appointment truth.
+
+### AttachmentStore
+
+Local laboratory implementation uses the shared filesystem volume under `/data/attachments` with staged ingress, content-addressed committed objects and SHA-256 integrity.
+
+## Current migrations
+
+```text
+001_b5_registration_customer.sql
+002_b6_registration_finalization.sql
+003_b7_customer_attachment_refs.sql
+004_appointment_catalog_and_booking.sql
+```
+
+Compose executes all current migrations before Worker startup.
+
+## Certification scripts
+
+Current high-value scripts:
+
+```text
+scripts/b7-compose-certification.sh
+scripts/certify-contact-input-validation.ts
+scripts/certify-lab-console-trace.ts
+scripts/certify-phone-slot-order.ts
+scripts/certify-register-new-appointment.ts
+```
+
+The consolidated release workflow runs the current regression surface and these clean-laboratory certifications.
+
+## Stop vs reset
+
+Preserve data/history:
+
+```bash
+docker compose down
+```
+
+Destructive laboratory reset:
+
+```bash
+docker compose down -v --remove-orphans
+```
+
+Do not use the destructive reset casually when a physical run/history is still useful as evidence.
+
+## Scope boundary
+
+This runtime is a local architecture laboratory. It does not certify production deployment, public exposure/security hardening, a complete Scheduler/ResourceReservation engine, Agent/Hermes or the final Engines UI.
