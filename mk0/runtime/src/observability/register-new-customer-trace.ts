@@ -8,7 +8,10 @@ import {
   type RegistrationPhase,
   type RegistrationStateProjection,
 } from '../contracts/register-new-customer/index.js';
-import type { CommittedAttachmentMetadata } from '../persistence/attachments/attachment-store.types.js';
+import type {
+  CommittedAttachmentMetadata,
+  StagedAttachmentMetadata,
+} from '../persistence/attachments/attachment-store.types.js';
 import { FilesystemAttachmentStore } from '../persistence/attachments/filesystem-attachment-store.js';
 import {
   loadMongoAuditEvidence,
@@ -93,8 +96,14 @@ export type RegisterNewCustomerExecutionTrace = Readonly<{
     error?: string;
   }>;
   attachmentStore: Readonly<{
-    availability: 'AVAILABLE' | 'NOT_APPLICABLE' | 'UNKNOWN' | 'INCOMPLETE';
-    applicable: boolean | 'UNKNOWN';
+    availability: 'AVAILABLE' | 'NOT_APPLICABLE' | 'INCOMPLETE';
+    applicable: boolean;
+    staged: readonly Readonly<{
+      ingressRef: string;
+      metadataFound: boolean;
+      metadata?: StagedAttachmentMetadata;
+      error?: string;
+    }>[];
     committed: readonly Readonly<{
       attachmentId: string;
       linkedFromPostgres: boolean;
@@ -108,12 +117,12 @@ export type RegisterNewCustomerExecutionTrace = Readonly<{
     temporal: true;
     mongo: boolean;
     postgres: boolean;
-    attachmentStore: 'NOT_APPLICABLE' | 'COMPLETE' | 'INCOMPLETE' | 'UNKNOWN';
+    attachmentStore: 'NOT_APPLICABLE' | 'COMPLETE' | 'INCOMPLETE';
     sourceStatus: Readonly<{
       temporal: 'AVAILABLE';
       mongo: TraceEvidenceAvailability;
       postgres: TraceEvidenceAvailability;
-      attachmentStore: 'AVAILABLE' | 'NOT_APPLICABLE' | 'UNKNOWN' | 'INCOMPLETE';
+      attachmentStore: 'AVAILABLE' | 'NOT_APPLICABLE' | 'INCOMPLETE';
     }>;
     warnings: readonly string[];
   }>;
@@ -503,6 +512,12 @@ function timelineFromPostgres(postgres: PostgresExecutionEvidence): TraceTimelin
 }
 
 function timelineFromAttachmentStore(
+  staged: readonly Readonly<{
+    ingressRef: string;
+    metadataFound: boolean;
+    metadata?: StagedAttachmentMetadata;
+    error?: string;
+  }>[],
   committed: readonly Readonly<{
     attachmentId: string;
     linkedFromPostgres: boolean;
@@ -511,7 +526,25 @@ function timelineFromAttachmentStore(
     error?: string;
   }>[],
 ): TraceTimelineEntry[] {
-  return committed.flatMap((item): TraceTimelineEntry[] => {
+  const stagedEntries = staged.flatMap((item): TraceTimelineEntry[] => {
+    if (!item.metadata) return [];
+    return [{
+      at: item.metadata.createdAt,
+      source: 'ATTACHMENT_STORE',
+      actor: 'ATTACHMENT_STORE',
+      action: `INGRESS_${item.metadata.state}`,
+      target: 'TRACE',
+      detail: {
+        ingressRef: item.ingressRef,
+        sha256: item.metadata.sha256,
+        byteLength: item.metadata.byteLength,
+        mediaType: item.metadata.mediaType,
+        expiresAt: item.metadata.expiresAt,
+        ...(item.metadata.attachmentId ? { attachmentId: item.metadata.attachmentId } : {}),
+      },
+    }];
+  });
+  const committedEntries = committed.flatMap((item): TraceTimelineEntry[] => {
     if (!item.metadata) return [];
     return [{
       at: item.metadata.committedAt,
@@ -525,9 +558,11 @@ function timelineFromAttachmentStore(
         sha256: item.metadata.sha256,
         byteLength: item.metadata.byteLength,
         mediaType: item.metadata.mediaType,
+        linkedFromPostgres: item.linkedFromPostgres,
       },
     }];
   });
+  return [...stagedEntries, ...committedEntries];
 }
 
 function sortTimeline(entries: readonly TraceTimelineEntry[]): readonly TraceTimelineEntry[] {
@@ -576,22 +611,48 @@ export async function buildRegisterNewCustomerExecutionTrace(
   const rawEvents = (history.events ?? []) as unknown as readonly UnknownRecord[];
   const temporalHistory = summarizeTemporalHistory(rawEvents);
   const conversation = reconstructConversation(rawEvents, mongoEvidence);
+  const draftAttachments = conversation.currentDraft.attachments ?? [];
   const pgAttachments = postgresSnapshot.customer?.attachments ?? [];
 
-  const committed = await Promise.all(
-    pgAttachments.map(async (attachment) => {
+  const staged = await Promise.all(
+    draftAttachments.map(async (attachment) => {
       try {
-        const metadata = await attachmentStore.getCommitted(attachment.attachmentId);
+        const metadata = await attachmentStore.resolveIngress(attachment.ingressRef);
         return {
-          attachmentId: attachment.attachmentId,
-          linkedFromPostgres: true,
+          ingressRef: attachment.ingressRef,
+          metadataFound: Boolean(metadata),
+          ...(metadata ? { metadata } : {}),
+        } as const;
+      } catch (error) {
+        return {
+          ingressRef: attachment.ingressRef,
+          metadataFound: false,
+          error: errorMessage(error),
+        } as const;
+      }
+    }),
+  );
+
+  const pgAttachmentIds = new Set(pgAttachments.map((attachment) => attachment.attachmentId));
+  const committedIds = new Set<string>([
+    ...pgAttachmentIds,
+    ...staged.flatMap((item) => item.metadata?.attachmentId ? [item.metadata.attachmentId] : []),
+  ]);
+
+  const committed = await Promise.all(
+    [...committedIds].map(async (attachmentId) => {
+      try {
+        const metadata = await attachmentStore.getCommitted(attachmentId);
+        return {
+          attachmentId,
+          linkedFromPostgres: pgAttachmentIds.has(attachmentId),
           storeMetadataFound: Boolean(metadata),
           ...(metadata ? { metadata } : {}),
         } as const;
       } catch (error) {
         return {
-          attachmentId: attachment.attachmentId,
-          linkedFromPostgres: true,
+          attachmentId,
+          linkedFromPostgres: pgAttachmentIds.has(attachmentId),
           storeMetadataFound: false,
           error: errorMessage(error),
         } as const;
@@ -614,27 +675,24 @@ export async function buildRegisterNewCustomerExecutionTrace(
   if (!postgresEvidence.ok) warnings.push(`POSTGRES_EVIDENCE_UNAVAILABLE:${postgresEvidence.error}`);
   else if (!postgresSnapshot.registration) warnings.push('POSTGRES_REGISTRATION_NOT_OBSERVED');
 
+  const missingStaged = staged.filter((item) => !item.metadataFound);
   const missingCommitted = committed.filter((item) => !item.storeMetadataFound);
-  if (missingCommitted.length > 0) warnings.push('ATTACHMENT_STORE_METADATA_MISSING');
+  if (missingStaged.length > 0) warnings.push('ATTACHMENT_STORE_INGRESS_METADATA_MISSING');
+  if (missingCommitted.length > 0) warnings.push('ATTACHMENT_STORE_COMMITTED_METADATA_MISSING');
 
   const mongoAvailability = availabilityForList(mongoEvidence);
   const postgresAvailability = availabilityForPostgres(postgresEvidence);
-
-  const attachmentSourceStatus = !postgresEvidence.ok
-    ? 'UNKNOWN' as const
-    : pgAttachments.length === 0
-      ? 'NOT_APPLICABLE' as const
-      : missingCommitted.length === 0
-        ? 'AVAILABLE' as const
-        : 'INCOMPLETE' as const;
-
+  const attachmentApplicable = draftAttachments.length > 0 || pgAttachments.length > 0;
+  const attachmentSourceStatus = !attachmentApplicable
+    ? 'NOT_APPLICABLE' as const
+    : missingStaged.length === 0 && missingCommitted.length === 0
+      ? 'AVAILABLE' as const
+      : 'INCOMPLETE' as const;
   const attachmentEvidence = attachmentSourceStatus === 'NOT_APPLICABLE'
     ? 'NOT_APPLICABLE' as const
     : attachmentSourceStatus === 'AVAILABLE'
       ? 'COMPLETE' as const
-      : attachmentSourceStatus === 'INCOMPLETE'
-        ? 'INCOMPLETE' as const
-        : 'UNKNOWN' as const;
+      : 'INCOMPLETE' as const;
 
   return {
     schemaVersion: 'mk0.execution-trace.v1',
@@ -679,14 +737,15 @@ export async function buildRegisterNewCustomerExecutionTrace(
     },
     attachmentStore: {
       availability: attachmentSourceStatus,
-      applicable: !postgresEvidence.ok ? 'UNKNOWN' : pgAttachments.length > 0,
+      applicable: attachmentApplicable,
+      staged,
       committed,
     },
     timeline: sortTimeline([
       ...timelineFromTemporal(temporalHistory),
       ...timelineFromMongo(mongoAudit),
       ...timelineFromPostgres(postgresSnapshot),
-      ...timelineFromAttachmentStore(committed),
+      ...timelineFromAttachmentStore(staged, committed),
     ]),
     evidence: {
       temporal: true,
