@@ -142,17 +142,18 @@ const STEP_BY_PHASE: Readonly<Record<RegistrationPhase, Readonly<{ ordinal: numb
   COLLECTING_DATA: { ordinal: 4, label: 'COLLECT CUSTOMER DATA' },
   VALIDATING_DRAFT: { ordinal: 5, label: 'VALIDATE CUSTOMER COMPLETENESS' },
   WAITING_FOR_REQUIRED_DATA: { ordinal: 6, label: 'WAIT FOR REQUIRED CUSTOMER DATA' },
-  REQUIRED_DATA_COMPLETE: { ordinal: 7, label: 'REQUIRED DATA COMPLETE' },
-  CHECKING_EXISTING_CUSTOMER: { ordinal: 8, label: 'CHECK DUPLICATES' },
-  WAITING_FOR_DUPLICATE_DECISION: { ordinal: 9, label: 'WAIT FOR DUPLICATE DECISION' },
-  PERSISTING_CUSTOMER: { ordinal: 10, label: 'PERSIST CUSTOMER' },
-  PERSISTING_ATTACHMENTS: { ordinal: 11, label: 'COMMIT ATTACHMENTS' },
-  LINKING_ATTACHMENTS: { ordinal: 12, label: 'LINK ATTACHMENTS' },
-  PERSISTING_AUDIT_CONTEXT: { ordinal: 13, label: 'PERSIST AUDIT CONTEXT' },
-  FINALIZING_CUSTOMER: { ordinal: 14, label: 'FINALIZE REGISTRATION' },
-  ALREADY_EXISTS: { ordinal: 15, label: 'COMPLETE — ALREADY EXISTS' },
-  CREATED: { ordinal: 15, label: 'COMPLETE — CREATED' },
-  FAILED: { ordinal: 15, label: 'TERMINAL FAILURE' },
+  READY_TO_FINALIZE: { ordinal: 7, label: 'READY — WAIT FOR EXPLICIT FINALIZE' },
+  REQUIRED_DATA_COMPLETE: { ordinal: 8, label: 'REQUIRED DATA COMPLETE' },
+  CHECKING_EXISTING_CUSTOMER: { ordinal: 9, label: 'CHECK DUPLICATES' },
+  WAITING_FOR_DUPLICATE_DECISION: { ordinal: 10, label: 'WAIT FOR DUPLICATE DECISION' },
+  PERSISTING_CUSTOMER: { ordinal: 11, label: 'PERSIST CUSTOMER' },
+  PERSISTING_ATTACHMENTS: { ordinal: 12, label: 'COMMIT ATTACHMENTS' },
+  LINKING_ATTACHMENTS: { ordinal: 13, label: 'LINK ATTACHMENTS' },
+  PERSISTING_AUDIT_CONTEXT: { ordinal: 14, label: 'PERSIST AUDIT CONTEXT' },
+  FINALIZING_CUSTOMER: { ordinal: 15, label: 'FINALIZE REGISTRATION' },
+  ALREADY_EXISTS: { ordinal: 16, label: 'COMPLETE — ALREADY EXISTS' },
+  CREATED: { ordinal: 16, label: 'COMPLETE — CREATED' },
+  FAILED: { ordinal: 16, label: 'TERMINAL FAILURE' },
 };
 
 function record(value: unknown): UnknownRecord | undefined {
@@ -591,16 +592,12 @@ export async function buildRegisterNewCustomerExecutionTrace(
 ): Promise<RegisterNewCustomerExecutionTrace> {
   const handle = client.workflow.getHandle(workflowId);
 
-  // Temporal is the mandatory orchestration authority for this trace. If the Workflow cannot
-  // be queried/described/read, the endpoint cannot truthfully identify the execution.
   const [state, description, history] = await Promise.all([
     handle.query(getRegistrationStateQuery),
     handle.describe(),
     handle.fetchHistory(),
   ]);
 
-  // Application stores are corroborating evidence planes. Their failure must be visible in
-  // the trace rather than turning observability itself into an all-or-nothing request.
   const [mongoEvidence, postgresEvidence] = await Promise.all([
     optionalEvidence(() => loadMongoAuditEvidence(workflowId)),
     optionalEvidence(() => loadPostgresExecutionEvidence(workflowId)),
