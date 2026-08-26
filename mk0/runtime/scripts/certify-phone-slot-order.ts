@@ -86,6 +86,15 @@ function assertPhoneOrder(values: readonly JsonRecord[], expected: readonly stri
 
 async function main(): Promise<void> {
   const token = Date.now().toString();
+  const suffix = token.slice(-8);
+  // Deliberately make slot 2 numerically smaller than slot 1. The old generic
+  // normalization sorted by normalized phone and would therefore swap them.
+  // The timestamp suffix also prevents SOFT_MATCH collisions with earlier
+  // certification customers in the same Compose database.
+  const firstNumber = `9${suffix}`;
+  const secondNumber = `2${suffix}`;
+  const replacementSecondNumber = `1${suffix}`;
+
   const start = await json('/mk0/register-new-customer', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -102,11 +111,11 @@ async function main(): Promise<void> {
   assert(typeof start.workflowId === 'string', 'workflowId missing');
   const workflowId = start.workflowId;
 
-  await update(workflowId, `name-${token}`, { name: 'Ronald Slot Proof' });
+  await update(workflowId, `name-${token}`, { name: `Ronald Slot Proof ${token}` });
 
   const firstPhone: JsonRecord = {
-    number: '933075200',
-    normalized: '933075200',
+    number: firstNumber,
+    normalized: firstNumber,
     primary: true,
   };
   await update(workflowId, `phone-1-${token}`, { contact: { phones: [firstPhone] } });
@@ -115,27 +124,35 @@ async function main(): Promise<void> {
     (value) => workflow(value).phase === 'READY_TO_FINALIZE' && phones(value).length === 1,
     'first phone ready',
   );
-  assertPhoneOrder(phones(current), ['933075200'], 'durable draft after phone[1]');
+  assertPhoneOrder(phones(current), [firstNumber], 'durable draft after phone[1]');
 
   // Mirror Lab Console behavior: read the durable array, append slot 2, then
   // submit the whole phone collection as one Customer patch.
   const afterFirst = phones(current);
-  afterFirst[1] = { number: '2831400', normalized: '2831400' };
+  afterFirst[1] = { number: secondNumber, normalized: secondNumber };
   await update(workflowId, `phone-2-${token}`, { contact: { phones: afterFirst } });
   current = await waitFor(workflowId, (value) => phones(value).length === 2, 'second phone visible');
-  assertPhoneOrder(phones(current), ['933075200', '2831400'], 'durable draft after phone[2]');
+  assertPhoneOrder(phones(current), [firstNumber, secondNumber], 'durable draft after phone[2]');
 
   // Read the durable array again and replace only slot 2. If normalization had
   // silently canonical-sorted by number, this step would mutate the wrong slot.
   const beforeReplace = phones(current);
-  beforeReplace[1] = { ...beforeReplace[1], number: '2831500', normalized: '2831500' };
+  beforeReplace[1] = {
+    ...beforeReplace[1],
+    number: replacementSecondNumber,
+    normalized: replacementSecondNumber,
+  };
   await update(workflowId, `phone-2-replace-${token}`, { contact: { phones: beforeReplace } });
   current = await waitFor(
     workflowId,
-    (value) => phones(value)[1]?.normalized === '2831500',
+    (value) => phones(value)[1]?.normalized === replacementSecondNumber,
     'second phone replacement visible',
   );
-  assertPhoneOrder(phones(current), ['933075200', '2831500'], 'durable draft after replacing phone[2]');
+  assertPhoneOrder(
+    phones(current),
+    [firstNumber, replacementSecondNumber],
+    'durable draft after replacing phone[2]',
+  );
   assert(workflow(current).phase === 'READY_TO_FINALIZE', 'slot edits must not auto-finalize explicit session');
 
   await finalize(workflowId, `finish-${token}`);
@@ -144,7 +161,7 @@ async function main(): Promise<void> {
     (value) => workflow(value).workflowStatus === 'COMPLETED' && workflow(value).phase === 'CREATED',
     'completed created',
   );
-  assertPhoneOrder(phones(current), ['933075200', '2831500'], 'final durable draft');
+  assertPhoneOrder(phones(current), [firstNumber, replacementSecondNumber], 'final durable draft');
 
   const postgres = record(current.postgres) ?? {};
   const snapshot = record(postgres.snapshot) ?? {};
@@ -152,7 +169,7 @@ async function main(): Promise<void> {
   const persistedPhones = Array.isArray(customer.phones)
     ? customer.phones.map((phone) => ({ ...(record(phone) ?? {}) }))
     : [];
-  assertPhoneOrder(persistedPhones, ['933075200', '2831500'], 'PostgreSQL phone_index order');
+  assertPhoneOrder(persistedPhones, [firstNumber, replacementSecondNumber], 'PostgreSQL phone_index order');
   assert(persistedPhones[0]?.primary === true, 'phone[1] must remain primary');
 
   console.log(`TRACE_PHONE_SLOT_ORDER_PASS ${JSON.stringify({
