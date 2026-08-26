@@ -49,6 +49,17 @@ function traceObject(body: JsonRecord): JsonRecord {
   return record(body.trace) ?? {};
 }
 
+function currentPhones(body: JsonRecord): JsonRecord[] {
+  const trace = traceObject(body);
+  const conversation = record(trace.conversation) ?? {};
+  const draft = record(conversation.currentDraft) ?? {};
+  const customer = record(draft.customer) ?? {};
+  const contact = record(customer.contact) ?? {};
+  return Array.isArray(contact.phones)
+    ? contact.phones.map((phone) => ({ ...(record(phone) ?? {}) }))
+    : [];
+}
+
 function patchSummary(input: unknown): string {
   const update = record(input) ?? {};
   const patch = record(update.customerPatch) ?? {};
@@ -57,8 +68,11 @@ function patchSummary(input: unknown): string {
   if (typeof patch.name === 'string') parts.push(`name=${patch.name}`);
   if (typeof contact.email === 'string') parts.push(`email=${contact.email}`);
   if (Array.isArray(contact.phones) && contact.phones.length > 0) {
-    const phone = record(contact.phones[0]) ?? {};
-    parts.push(`phone=${String(phone.normalized ?? phone.number ?? '?')}`);
+    const values = contact.phones.map((raw, index) => {
+      const phone = record(raw) ?? {};
+      return `phone[${index + 1}]=${String(phone.normalized ?? phone.number ?? '?')}`;
+    });
+    parts.push(values.join(' '));
   }
   return parts.length > 0 ? parts.join(' ') : compact(patch);
 }
@@ -143,6 +157,7 @@ async function newSession(alias: string): Promise<void> {
       businessSlug: 'golden-business',
       idempotencyKey,
       correlationId: `lab-${alias}-${token}`,
+      completionMode: 'EXPLICIT_FINALIZE',
       draft: { customer: {} },
     }),
   });
@@ -153,7 +168,7 @@ async function newSession(alias: string): Promise<void> {
   const session: Session = { alias, workflowId, runId };
   sessions.set(alias, session);
   activeAlias = alias;
-  output.write(`\n✓ session ${alias} created\n`);
+  output.write(`\n✓ session ${alias} created in EXPLICIT_FINALIZE mode\n`);
   renderTrace(await fetchTrace(session));
 }
 
@@ -176,10 +191,30 @@ async function setField(field: string, value: string): Promise<void> {
   const session = activeSession();
   if (!value) throw new Error(`Usage: set ${field} <value>`);
   let customerPatch: JsonRecord;
-  if (field === 'name') customerPatch = { name: value };
-  else if (field === 'email') customerPatch = { contact: { email: value } };
-  else if (field === 'phone') customerPatch = { contact: { phones: [{ number: value, normalized: value, primary: true }] } };
-  else throw new Error('Supported fields: name, email, phone');
+
+  if (field === 'name') {
+    customerPatch = { name: value };
+  } else if (field === 'email') {
+    customerPatch = { contact: { email: value } };
+  } else {
+    const phoneMatch = /^phone(?:\[(\d+)\])?$/.exec(field);
+    if (!phoneMatch) throw new Error('Supported fields: name, email, phone, phone[1], phone[2], ...');
+    const trace = await fetchTrace(session);
+    const phones = currentPhones(trace);
+    const index = phoneMatch[1] ? Number.parseInt(phoneMatch[1], 10) - 1 : 0;
+    if (!Number.isSafeInteger(index) || index < 0) throw new Error('Phone indexes are 1-based: phone[1], phone[2], ...');
+    if (index > phones.length) {
+      throw new Error(`Cannot skip phone slots. Next available index is phone[${phones.length + 1}]`);
+    }
+    const existing = phones[index] ?? {};
+    phones[index] = {
+      ...existing,
+      number: value,
+      normalized: value,
+      ...(index === 0 && existing.primary === undefined ? { primary: true } : {}),
+    };
+    customerPatch = { contact: { phones } };
+  }
 
   const inputId = `lab-${session.alias}-${field}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const body = await requestJson(`/mk0/register-new-customer/${encodeURIComponent(session.workflowId)}/customer-data`, {
@@ -190,6 +225,28 @@ async function setField(field: string, value: string): Promise<void> {
   const result = record(body.result) ?? {};
   const ok = result.ok;
   output.write(`\n→ ProvideCustomerData(${field}) ${ok === false ? 'REJECTED' : 'ACCEPTED'}\n`);
+  if (ok === false && Array.isArray(result.issues)) {
+    output.write(`${compact(result.issues)}\n`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  renderTrace(await fetchTrace(session));
+}
+
+async function finalizeSession(): Promise<void> {
+  const session = activeSession();
+  const inputId = `lab-${session.alias}-finalize-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const body = await requestJson(`/mk0/register-new-customer/${encodeURIComponent(session.workflowId)}/finalize`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ inputId }),
+  });
+  const result = record(body.result) ?? {};
+  if (result.ok === false) {
+    output.write('\n→ FinalizeRegistration REJECTED\n');
+    if (Array.isArray(result.issues)) output.write(`${compact(result.issues)}\n`);
+  } else {
+    output.write('\n→ FinalizeRegistration ACCEPTED\n');
+  }
   await new Promise((resolve) => setTimeout(resolve, 120));
   renderTrace(await fetchTrace(session));
 }
@@ -245,40 +302,39 @@ function help(): void {
   output.write(`
 Commands
 ────────
-new <alias>                         start a new intent-only RegisterNewCustomer Workflow
+new <alias>                         start an EXPLICIT_FINALIZE RegisterNewCustomer Workflow
 attach <alias> <workflowId>         reconnect this console to an existing durable Workflow
 resume <alias> <workflowId>         alias for attach
 sessions                            list local aliases/workflows
 use <alias>                         switch active Workflow
 show                                current durable state + ping-pong + evidence + trace
-set name <value>                    ProvideCustomerData Update
-set email <value>                   ProvideCustomerData Update
-set phone <value>                   ProvideCustomerData Update
+set name <value>                    update customer name
+set email <value>                   update email (must have valid email shape)
+set phone <value>                   set/replace phone[1]
+set phone[1] <value>                set/replace first phone
+set phone[2] <value>                add/replace second phone; indexes are 1-based
+finish                              explicitly close data collection and persist registration
+submit                              alias for finish
 trace                               print the complete unified evidence JSON
 watch [seconds]                     observe phase/timeline changes (default 10s)
 raw                                 alias for trace
 help                                show commands
 exit                                close console
 
-Try one Workflow with several revisions:
-  new test01
-  set name Pepito
-  set name Juancito
-  set name Andresito
+Try the exact scenario that exposed the previous behavior:
+  new ronald
+  set name Ronald
+  set email Zavaleta
+  set phone[1] 933075200
+  set phone[2] 955111222
+  set email ronald@example.test
   show
-  set email andresito@example.test
+  finish
   watch 5
   trace
 
-Try several durable Workflows:
-  new pepito
-  new juancito
-  sessions
-  use pepito
-  use juancito
-
-Close the console, reopen it, then reconnect:
-  attach old-flow register-customer:golden-business:...
+The invalid email must be rejected, the Workflow must stay open while you add both phones,
+and only finish/submit may release an EXPLICIT_FINALIZE session into persistence.
 `);
 }
 
@@ -306,6 +362,7 @@ async function main(): Promise<void> {
         else if (command === 'use') await useSession(first ?? '');
         else if (command === 'show') renderTrace(await fetchTrace(activeSession()));
         else if (command === 'set') await setField(first ?? '', rest.join(' '));
+        else if (command === 'finish' || command === 'submit') await finalizeSession();
         else if (command === 'watch') await watch(first);
         else if (command === 'trace' || command === 'raw') output.write(`${compact(await fetchTrace(activeSession()))}\n`);
         else output.write(`Unknown command: ${command}. Type help.\n`);
