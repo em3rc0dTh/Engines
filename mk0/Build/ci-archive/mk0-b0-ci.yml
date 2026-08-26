@@ -1,0 +1,210 @@
+name: mk0 B0 runtime certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b0-runtime-skeleton
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-b0-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-b0-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b0-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Validate Compose model
+        run: docker compose config
+
+      - name: Start PostgreSQL and MongoDB
+        run: docker compose up -d --wait postgres mongo
+
+      - name: Probe application stores
+        run: npm run probe:stores
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-temporal.log
+          exit 1
+
+      - name: Verify Temporal Web UI responds
+        run: curl --fail --retry 10 --retry-delay 1 http://localhost:8233/ >/dev/null
+
+      - name: Start B0 Worker
+        run: |
+          npm run worker:b0 > /tmp/mk0-worker.log 2>&1 &
+          echo $! > /tmp/mk0-worker.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B0_WORKER_STARTED' /tmp/mk0-worker.log; then
+              cat /tmp/mk0-worker.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-worker.pid)" 2>/dev/null; then
+              cat /tmp/mk0-worker.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-worker.log
+          exit 1
+
+      - name: Execute B0 Temporal smoke Workflow
+        run: |
+          timeout 60 npm run smoke:b0 | tee /tmp/mk0-smoke.log
+          grep -q 'B0_TEMPORAL_SMOKE_OK' /tmp/mk0-smoke.log
+
+      - name: Assert no premature business persistence implementation
+        run: |
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          test ! -f src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+
+      - name: Create structured B0 regression evidence
+        run: |
+          mkdir -p evidence/ci
+          SMOKE_JSON="$(grep 'B0_TEMPORAL_SMOKE_OK' /tmp/mk0-smoke.log | tail -1)"
+          test -n "$SMOKE_JSON"
+
+          NODE_VERSION="$(node --version)"
+          NPM_VERSION="$(npm --version)"
+          TEMPORAL_CLI_VERSION="$(temporal --version | tr -d '\r')"
+          TEMPORAL_SDK_VERSION="$(npm ls @temporalio/client --json | jq -r '.dependencies["@temporalio/client"].version')"
+          POSTGRES_VERSION="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc 'show server_version')"
+          MONGO_VERSION="$(docker compose exec -T mongo mongosh --quiet --eval 'db.version()')"
+
+          jq -n \
+            --arg schemaVersion 'mk0.b0.evidence.v2' \
+            --arg repository '${{ github.repository }}' \
+            --arg checkoutCommit "$GITHUB_SHA" \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg node "$NODE_VERSION" \
+            --arg npm "$NPM_VERSION" \
+            --arg temporalCli "$TEMPORAL_CLI_VERSION" \
+            --arg temporalSdk "$TEMPORAL_SDK_VERSION" \
+            --arg temporalAddress 'localhost:7233' \
+            --arg temporalUi 'http://localhost:8233' \
+            --arg temporalNamespace 'default' \
+            --arg taskQueue 'engines-mk0-registration' \
+            --arg postgres "$POSTGRES_VERSION" \
+            --arg mongo "$MONGO_VERSION" \
+            --argjson smoke "$SMOKE_JSON" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              checkoutCommit: $checkoutCommit,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $runId, runAttempt: $runAttempt},
+              runtime: {node: $node, npm: $npm},
+              temporal: {
+                cli: $temporalCli,
+                sdk: $temporalSdk,
+                address: $temporalAddress,
+                ui: $temporalUi,
+                namespace: $temporalNamespace,
+                taskQueue: $taskQueue,
+                workflowSmoke: $smoke
+              },
+              applicationStores: {
+                postgres: {version: $postgres, probe: "PASS"},
+                mongo: {version: $mongo, probe: "PASS"}
+              },
+              assertions: {
+                lockedInstall: "PASS",
+                typecheck: "PASS",
+                composeModel: "PASS",
+                temporalService: "PASS",
+                temporalWebUi: "PASS",
+                temporalWorker: "PASS",
+                temporalWorkflow: "PASS",
+                noPrematureBusinessPersistence: "PASS"
+              }
+            }' > evidence/ci/b0-runtime-evidence.json
+
+          cp package-lock.json evidence/ci/package-lock.json
+          cp /tmp/mk0-worker.log evidence/ci/worker.log
+          cp /tmp/mk0-smoke.log evidence/ci/smoke.log
+          cat evidence/ci/b0-runtime-evidence.json
+
+      - name: Upload B0 regression evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b0-runtime-evidence-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Capture versions
+        if: always()
+        run: |
+          node --version
+          npm --version
+          docker --version
+          docker compose version
+          temporal --version || true
+
+      - name: Diagnostic logs
+        if: failure()
+        run: |
+          echo '--- Temporal ---'
+          cat /tmp/mk0-temporal.log || true
+          echo '--- Worker ---'
+          cat /tmp/mk0-worker.log || true
+          echo '--- Compose ---'
+          docker compose ps || true
+          docker compose logs postgres mongo || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/mk0-worker.pid ]; then kill "$(cat /tmp/mk0-worker.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-temporal.pid ]; then kill "$(cat /tmp/mk0-temporal.pid)" 2>/dev/null || true; fi
+          docker compose down -v || true

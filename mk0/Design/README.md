@@ -1,59 +1,61 @@
-# Design — mk0
+# Design — MK0
 
-This folder freezes the first stable vertical before code exists.
+This folder contains the normative design package for the MK0 orchestration laboratory.
 
 ## Architecture scope
 
 ```text
-CTA channels
-Postman / CLI now
-Form / WhatsApp / Telegram / API / Webhook later
+replaceable CTA channels
         ↓
 CTA Adapter contract
         ↓
-Full Temporal Orchestration Engine
+Temporal Orchestration Engine
         ↓
-PostgreSQL + MongoDB + optional AttachmentStore
+Activities / ports
+        ↓
+PostgreSQL + MongoDB + AttachmentStore
 ```
 
-No application framework is selected by mk0 Design.
+No application framework is part of the architecture authority boundary.
 
 ## Design package
 
-1. [`01-system-architecture.md`](01-system-architecture.md) — omnichannel CTA Adapter, full Temporal authority, persistence boundaries and control flow.
-2. [`02-register-new-customer-contract.md`](02-register-new-customer-contract.md) — framework-agnostic canonical command/input contract, validation, idempotency and observable outcomes.
-3. [`03-temporal-workflow.md`](03-temporal-workflow.md) — full Temporal platform model, durable Workflow, Activities, Task Queues/Workers, retry/restart semantics and status projection.
-4. [`04-persistence-boundaries.md`](04-persistence-boundaries.md) — PostgreSQL Customer authority, MongoDB audit/context authority and separate attachment boundary.
-5. [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md) — physical persistence design choices that are frozen vs intentionally deferred.
-6. [`06-mk0-closure-decisions.md`](06-mk0-closure-decisions.md) — normative closure decisions for interactive start semantics, business-scoped idempotency, immutable session fingerprints, mandatory audit evidence, current channel vocabulary and attachment deferral.
+1. [`01-system-architecture.md`](01-system-architecture.md) — system architecture, CTA boundary, Temporal authority and persistence roles.
+2. [`02-register-new-customer-contract.md`](02-register-new-customer-contract.md) — canonical Customer registration operation, validation and outcomes.
+3. [`03-temporal-workflow.md`](03-temporal-workflow.md) — Workflow/Activity/Worker/Task Queue durability model.
+4. [`04-persistence-boundaries.md`](04-persistence-boundaries.md) — PostgreSQL, MongoDB and attachment authority separation.
+5. [`05-mk0-persistence-profile.md`](05-mk0-persistence-profile.md) — physical persistence profile and deferred choices.
+6. [`06-mk0-closure-decisions.md`](06-mk0-closure-decisions.md) — first-specimen closure decisions and precedence rules.
+7. [`07-register-new-appointment-specimen.md`](07-register-new-appointment-specimen.md) — second specimen proving workflow composition, catalog reads, date/slot interaction and atomic appointment booking.
 
-## Design acceptance gate
+## Design acceptance now proven
 
-Design closes only when all are explicit:
+MK0 has evidence that:
 
-- every current/future CTA converges through one canonical CTA Adapter contract;
-- malformed structural/session input cannot create business side effects;
-- a legal registration session may start with incomplete Customer data and wait durably for policy-required fields;
-- no web/application framework is required to prove the vertical;
-- the real Temporal platform owns durable `RegisterNewCustomer` sequencing;
-- Workflows, Activities, Workers and Task Queues have explicit roles;
-- retry/recovery is Temporal-managed, not recreated in the CTA;
-- Temporal Workflow code has no direct persistence side effects;
-- the workflow maps approved TimeSlots Customer semantics into explicit persistence inputs;
-- registration session idempotency is scoped by `(operation, businessSlug, idempotencyKeyHash)`;
-- the evolving Customer draft is not treated as the immutable start fingerprint;
-- PostgreSQL is canonical Customer + registration/idempotency truth;
-- MongoDB is execution/audit/workflow-context authority;
-- success-gating MongoDB audit milestones are explicit and retry-safe;
-- optional attachments use a separate persistence contract;
-- retries and worker restarts cannot duplicate logical business effects;
-- final success requires every mandatory business and audit effect;
-- CTA disconnect/reconnect does not change the accepted workflow outcome;
-- `RegisterNewCustomer` creates zero scheduling side effects;
-- tests and Golden Dataset can be derived without reading implementation code.
+- external channels converge through one CTA boundary;
+- legal incomplete input can enter a durable conversation;
+- invalid transport/contact/date material can be rejected before it corrupts durable business state;
+- Temporal owns durable sequencing, recovery and replay;
+- Workflow code has no direct persistence-driver authority;
+- `RegisterNewCustomer` persists Customer truth through Activities and can be reused as a Child Workflow;
+- `RegisterNewAppointment` composes the Customer capability rather than duplicating it;
+- Service/Product/availability fixture truth is read from PostgreSQL through Activities;
+- an available slot is revalidated atomically at final persistence time;
+- MongoDB remains semantic audit rather than shadow business truth;
+- explicit finalization is distinct from minimum input completeness;
+- retries/replay cannot create duplicate logical effects.
+
+## Scheduler boundary preserved
+
+The second specimen intentionally uses a minimal local capacity fixture to prove orchestration. It does not claim completion of the future Scheduler/TimeSlots model.
+
+The preserved future distinction remains:
+
+```text
+Appointment = customer-facing schedule
+ResourceReservation = real capacity block
+```
 
 ## Rule
 
-A future framework or channel-specific SDK is only a replaceable CTA Adapter implementation detail. It must never become orchestration authority or create a direct persistence path around Temporal.
-
-When interpreting older extracted material during closure, [`06-mk0-closure-decisions.md`](06-mk0-closure-decisions.md) resolves known cross-document drift until each originating artifact is corrected.
+A future framework, channel SDK, Scheduler, Agent or Integration layer may extend Engines only if it preserves the authority boundaries proven here. It must not create a second business path around Temporal.

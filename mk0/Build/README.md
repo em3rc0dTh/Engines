@@ -1,150 +1,208 @@
-# Build — mk0
+# Build — MK0
 
-## Status
+## Final status
 
-**NOT AUTHORIZED YET**
-
-This directory is intentionally documentation-only.
-
-No application framework is selected or required for mk0.
-
-## Future build target
-
-When authorized, Build must realize only:
+**MK0 BUILD OBJECTIVE COMPLETE**
 
 ```text
-CTA channel
-   Postman / CLI first
-        ↓
-CTA Adapter contract
-        ↓
-FULL TEMPORAL ORCHESTRATION ENGINE
-   Temporal Service
-   Workflow
-   Task Queue
-   Worker
-   Activities
-   durable Event History
-   retry/recovery/query/update semantics
-        ↓
-Persistence Activities
-   ├── PostgreSQL → Customer + registration/idempotency truth
-   ├── MongoDB    → execution/audit/workflow context
-   └── AttachmentStore → optional binary/document persistence
+B0–B7 Customer foundation                  ✅ CERTIFIED
+Customer Golden effective accounting       ✅ 18 / 18 PASS
+Physical Customer Postman laboratory        ✅ 37 / 37 PASS
+Observability / Lab Console                 ✅ CERTIFIED
+RegisterNewAppointment second specimen      ✅ CERTIFIED
+Reusable Child Workflow composition         ✅ PROVEN
+Atomic slot-conflict protection             ✅ PROVEN
+Production deployment                       ❌ NOT CERTIFIED
 ```
 
-## Non-negotiable Temporal rule
-
-mk0 must not use:
-
-- an in-process fake Workflow engine;
-- a hand-written state-machine loop presented as Temporal;
-- database flags as a substitute for Temporal Workflow state;
-- a CTA process that must remain alive for Workflow progress;
-- a reduced custom orchestrator that bypasses Task Queue/Worker semantics.
-
-The first proof must use a real Temporal Service, real Workflow execution, real Task Queue dispatch, real Worker execution and real Activity retry/recovery behavior.
-
-## CTA rule
-
-The channel and adapter remain replaceable.
+## Build progression
 
 ```text
-Postman
-CLI
-Form later
-WhatsApp later
-Telegram later
-API/Webhook later
-...
-    ↓
-CTA Adapter
-    ↓
+B0 runtime/repository skeleton
+→ B1 canonical contracts / RegistrationPolicy
+→ B2 Temporal topology / continuity
+→ B3 CLI CTA boundary
+→ B4 durable interactive Customer Workflow
+→ B5 PostgreSQL authority
+→ B6 Mongo mandatory audit / finalization
+→ B7 AttachmentStore
+→ integrated local Customer laboratory
+→ observability / Lab Console
+→ second specimen RegisterNewAppointment
+→ MK0 closure
+```
+
+The B0–B6 stages remain important provenance, but they are not separate pending releases anymore.
+
+## Current executable shape
+
+```text
+CTA / Lab Consoles
+        ↓
 Temporal
+  ├── RegisterNewCustomer
+  └── RegisterNewAppointment
+          └── Child Workflow RegisterNewCustomer when needed
+        ↓
+Activities
+        ↓
+PostgreSQL + MongoDB + AttachmentStore
 ```
 
-A CLI may be the first executable CTA Adapter because it can speak to Temporal through the official client/SDK without introducing a web framework.
+## Customer certification
 
-Postman can be proven through a thin transport-compatible CTA Adapter. That adapter remains transport only and cannot own orchestration or persistence sequencing.
-
-A structurally legal registration session may start with incomplete Customer business data. Customer completeness is resolved by the versioned `RegistrationPolicy` inside Temporal, producing durable waiting/Update behavior when required.
-
-## Expected logical boundaries
+### Integrated attachment-free core
 
 ```text
-contracts/
-  register-new-customer/
-
-cta/
-  adapter-contract/
-  cli/
-  postman-transport/          later in mk0 proof
-
-orchestration/
-  temporal/
-    workflows/
-    activities/
-    workers/
-    task-queues/
-
-persistence/
-  postgres/
-    customer/
-    registration-command/
-    attachment-reference/
-
-  mongo/
-    execution-audit/
-    workflow-context/
-
-  attachments/
-    attachment-store-adapter/
+source   f0896c58d918e8f3971c78867870243e16a8b604
+run      32873848134
+job      97886979323
+artifact 9573135809
+sha256   25fea20c892ea7cd758788ac63a53ba9048b8809599f2b972c5ef77942c2b4e8
 ```
 
-This is conceptual and does not authorize scaffolding yet.
+Actual case steps: 14/14 attachment-free Golden cases PASS.
 
-## Frozen constraints
+### B7 AttachmentStore
 
-- no web framework dependency in the architecture;
-- all channels converge on one CTA Adapter contract;
-- CTA validates structural/session input before Temporal start, not final Customer completeness;
-- CTA/adapter never writes business persistence directly;
-- full Temporal owns durable sequencing/retries/recovery;
-- real Task Queue/Worker semantics are required;
-- Workflow code calls no DB/file/network driver directly;
-- Activities are retry-safe/idempotent;
-- registration session identity is business-scoped by `(operation, businessSlug, idempotencyKeyHash)`;
-- normalized material initial-start input is fingerprinted for exact replay/conflict detection;
-- later `ProvideCustomerData` Updates evolve Workflow state without rewriting the initial-start fingerprint;
-- PostgreSQL is canonical Customer + registration/idempotency truth;
-- Customer persistence follows approved DataModel v3 / TimeSlots semantics;
-- MongoDB stores execution/audit/workflow context, not a shadow Customer truth;
-- required MongoDB success-gating milestones must exist before `CREATED` or `ALREADY_EXISTS` is reported as successful;
-- exhausted mandatory-audit failure cannot be converted into success;
-- attachments use a separate persistence contract;
-- CTA disconnect must not stop an accepted Workflow;
-- Worker restart must not lose accepted Workflow progress;
-- CTA reconnect/query must resolve the same durable outcome;
-- RegisterNewCustomer creates zero scheduling side effects.
+```text
+source 80a95d0b9715f91879a9e0cbd7230828098ba997
+run    32896780937
+```
 
-## Authorization record
+Certified:
 
-When Build is approved, record:
+```text
+GD-003 PASS
+GD-004 PASS
+GD-009 PASS
+GD-010 PASS
+```
 
-- approval date;
-- approved Design commit;
-- approved Golden Dataset version;
-- Temporal Service topology;
-- namespace;
-- Task Queue/Worker topology;
-- Temporal SDK language/version;
-- PostgreSQL topology;
-- MongoDB topology;
-- chosen AttachmentStore technology if attachment cases are enabled;
-- chosen first CTA Adapter implementation;
-- Postman transport decision;
-- exact Build ticket sequence.
+Truthful effective accounting:
 
-Until then:
+```text
+14 core + 4 attachment = 18 / 18 PASS
+```
 
-> **No code in Build.**
+### Physical local Customer laboratory
+
+Receipt:
+
+[`evidence/mk0-full-local-laboratory-certification-2026-08-26.md`](evidence/mk0-full-local-laboratory-certification-2026-08-26.md)
+
+Observed:
+
+```text
+37 tests
+37 PASS
+0 failures
+0 errors
+```
+
+## Observability build
+
+The laboratory subsequently added:
+
+- read-only cross-store execution trace;
+- Customer draft reconstruction from durable evidence;
+- interactive Customer Lab Console;
+- explicit finalization semantics;
+- CTA contact validation before invalid input enters Temporal;
+- stable ordered phone-slot semantics;
+- CTA startup readiness retry.
+
+These are laboratory/operability capabilities, not new business authorities.
+
+## RegisterNewAppointment build
+
+Second specimen source certified in clean Compose:
+
+```text
+70ab427f34bf353a7239f2f87bbe3b4889ec1efd
+```
+
+Run:
+
+```text
+33014515270
+```
+
+Receipt:
+
+[`evidence/mk0-register-new-appointment-certification-2026-08-26.md`](evidence/mk0-register-new-appointment-certification-2026-08-26.md)
+
+Certified markers:
+
+```text
+APPOINTMENT_NEW_CUSTOMER_CHILD_PASS
+APPOINTMENT_CATALOG_PASS
+APPOINTMENT_PAST_DATE_REJECTED
+APPOINTMENT_DATE_AND_SLOTS_PASS
+APPOINTMENT_BOOKING_PASS
+APPOINTMENT_IDEMPOTENCY_REPLAY_PASS
+APPOINTMENT_SLOT_CONFLICT_PASS
+MK0_REGISTER_NEW_APPOINTMENT_PASS
+```
+
+This proves that a second Workflow can reuse the existing Customer capability, read business catalog/availability truth through Activities and protect final booking atomically.
+
+## Evidence navigation
+
+Canonical evidence index:
+
+[`evidence/README.md`](evidence/README.md)
+
+Historical stage workflow definitions:
+
+[`ci-archive/README.md`](ci-archive/README.md)
+
+The historical stage workflows were moved out of `.github/workflows/` during closure so modern PRs are not judged by obsolete intermediate assumptions.
+
+## Current active CI
+
+The active workflow directory now focuses on current runtime/release gates:
+
+```text
+mk0-b7-ci.yml
+mk0-b7-compose-certification.yml
+mk0-lab-console-trace.yml
+mk0-register-new-appointment.yml
+mk0-release.yml
+```
+
+`mk0-release.yml` is the consolidated closure gate for integration into `main`.
+
+## Physical local profile
+
+```text
+Host             Windows + WSL2
+Runtime          Linux / Node / TypeScript
+Deployment       Docker Compose
+Temporal         local Compose service
+PostgreSQL       local Compose service
+MongoDB          local Compose service
+AttachmentStore shared filesystem volume
+CTA              localhost:8787
+Temporal UI      localhost:8233
+Public tunnel    none
+Cloud dependency none
+```
+
+## Build closure rule
+
+MK0 should no longer absorb unrelated product features.
+
+New Engines work should start a new stage and reuse this certified spine:
+
+```text
+Brainstorming
+→ Mining Site / Quarries
+→ Design
+→ Plan
+→ predeclared expectations
+→ Build
+→ Test / Evidence
+```
+
+> MK0 is now a reference implementation and certification laboratory, not an indefinitely growing product branch.

@@ -1,102 +1,235 @@
 # Engines
 
-`Engines` is the design and implementation home for the reusable operational architecture that will support future agentic systems.
+`Engines` is a reusable operational orchestration architecture built around durable workflows rather than channel-specific business logic.
 
-## Current version
+## Current milestone
 
-**mk0 — documentation-first foundation**
+**MK0 — OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED**
 
-mk0 intentionally contains **no production implementation** yet. Its job is to freeze the first real operational spine before choosing application frameworks or channel-specific products.
-
-## mk0 scope — first three architecture zones
+MK0 proved that the same orchestration spine can support more than one business workflow without moving authority into the CTA/channel layer.
 
 ```text
-1. CTA / OMNICHANNEL ENTRY
-   Postman / CLI now
-   Form / WhatsApp / Telegram / API / Webhook later
-                 ↓
-             CTA Adapter
-                 ↓ canonical command
-
-2. ORCHESTRATION ENGINE
-   Full Temporal platform
-   ├── workflow routing
-   ├── Workflow Library
-   ├── durable Workflow Execution
-   ├── Activities
-   ├── Task Queues / Workers
-   ├── retries / timeouts / recovery
-   ├── Queries / Signals / Updates when required
-   └── visibility / durable history
-                 ↓
-      RegisterNewCustomer first workflow
-
-3. PERSISTENCE / STORAGE
-   PostgreSQL      → canonical Customer + registration/idempotency truth
-   MongoDB         → execution/audit/workflow context
-   AttachmentStore → binary/document objects when present
+MK0 foundation / RegisterNewCustomer       ✅ CERTIFIED
+Golden Customer dataset                   ✅ 18 / 18 PASS
+WSL2 + Docker Compose laboratory           ✅ PHYSICALLY PROVEN
+Postman Customer collection                ✅ 37 / 37 PASS
+Observability + Lab Console                ✅ CERTIFIED
+Second specimen / RegisterNewAppointment   ✅ CERTIFIED
+Customer Child Workflow reuse              ✅ PROVEN
+Service / Product catalog reads            ✅ PROVEN
+Date / slot conversation                    ✅ PROVEN
+Atomic appointment slot conflict            ✅ PROVEN
+Production deployment                       ❌ NOT CERTIFIED
+Public/internet exposure                    ❌ NOT CERTIFIED
 ```
 
-Canonical first path:
+The primary MK0 closure index is [`mk0/README.md`](mk0/README.md). Certification receipts are indexed in [`mk0/Build/evidence/README.md`](mk0/Build/evidence/README.md).
+
+## Proven architecture
 
 ```text
-CTA channel
-→ CTA Adapter
-→ Temporal Orchestration Engine
-→ PostgreSQL + MongoDB + optional AttachmentStore
+CHANNELS / LAB CLIENTS
+CLI · Postman-compatible HTTP · Lab Consoles
+                ↓
+          CTA ADAPTER
+ transport parsing / canonicalization
+                ↓
+       TEMPORAL / ENGINES
+ durable Workflow Executions
+ Query / Update / Child Workflow
+ retry / replay / recovery
+                ↓
+          ACTIVITIES / PORTS
+       ┌────────┼──────────┐
+       ↓        ↓          ↓
+ PostgreSQL   MongoDB   AttachmentStore
+ business    semantic    binary/document
+ truth       audit       truth
 ```
 
-**No NestJS, Express, Fastify or other web/application framework is part of mk0 architecture.** A future HTTP adapter may use a framework, but the framework remains replaceable and outside the orchestration authority.
+Authority remains separated:
 
-## Architectural meaning of the CTA Adapter
+- **Temporal** — durable orchestration and Event History.
+- **PostgreSQL** — canonical transactional/business truth.
+- **MongoDB** — application execution/audit context; not shadow business truth.
+- **AttachmentStore** — binary/document integrity and lifecycle.
+- **CTA/channel** — replaceable transport boundary; not business authority.
 
-The CTA Adapter is a contract boundary, not a chosen framework.
+## Specimen 01 — `RegisterNewCustomer`
 
-It converts channel-specific input into the same canonical command. Today the sender can be Postman or CLI. Later the sender can be a form, WhatsApp message, Telegram message, mobile app, voice channel, API/webhook or another future channel explicitly admitted by a later design decision.
+The first specimen proved:
 
-All channels must converge on the same orchestration contract instead of creating channel-specific business workflows.
+- legal intent-only starts;
+- durable multi-round Customer input;
+- pragmatic contact validation at the CTA boundary;
+- explicit finalization for interactive laboratory sessions;
+- business-scoped idempotency and exact completed-session replay;
+- hard/soft duplicate semantics;
+- PostgreSQL Customer persistence;
+- mandatory MongoDB audit before terminal success;
+- Worker/CTA process-loss recovery;
+- AttachmentStore stage/resolve/commit with SHA-256 integrity;
+- stable multiple-phone ordering while fingerprinting remains order-independent;
+- read-only unified execution trace and Lab Console.
 
-## What mk0 must prove
+The Customer Golden Dataset contains 18 certified cases.
 
-- controlled input can enter from the CTA boundary;
-- structurally invalid input is rejected before business side effects;
-- a structurally valid registration intent may start with incomplete Customer business data and wait durably for policy-required fields;
-- the accepted command starts the full Temporal-managed workflow;
-- Temporal durably owns state, retries, worker recovery and workflow progress;
-- the first Workflow is `RegisterNewCustomer`;
-- the workflow follows the approved DataModel v3 / TimeSlots Customer semantics;
-- PostgreSQL persists canonical Customer and registration/idempotency state;
-- MongoDB persists required execution/audit/context evidence;
-- attachments, when present, are persisted through a separate attachment capability and safely referenced from business data;
-- CTA disconnect/reconnect does not interrupt an accepted workflow;
-- retries/restarts do not duplicate Customers, logs or logical attachments;
-- the final outcome is queryable and auditable.
+## Specimen 02 — `RegisterNewAppointment`
 
-## First workflow
+The second specimen proves reuse of the Engines spine rather than a one-off Customer application.
 
-> **Register New Customer**
+```text
+RegisterNewAppointment
+        ↓
+resolve existing Customer
+        │
+        └─ new Customer → Child Workflow: RegisterNewCustomer
+        ↓
+load Services from PostgreSQL
+        ↓
+select Service
+        ↓
+load Products from PostgreSQL
+        ↓
+select Product
+        ↓
+normalize/select date
+        ↓
+load available slots through Activity
+        ↓
+select slot
+        ↓
+READY_TO_FINALIZE
+        ↓
+finish
+        ↓
+atomic PostgreSQL booking
+        ↓
+Mongo appointment audit
+        ↓
+CREATED
+```
 
-The CTA does not register the Customer itself. It submits the controlled command. Temporal manages the workflow and Activities that produce the persistence effects.
+The clean Compose certification proved:
 
-## Data-model baseline
+- new Customer creation through the existing Child Workflow;
+- Car Wash Service and three Product fixtures loaded from PostgreSQL;
+- `ayer` / `yesterday` past-date rejection;
+- English/Spanish weekday normalization (`Friday` / `viernes`);
+- deterministic 30-minute laboratory slots;
+- no Appointment before explicit `finish`;
+- persisted Appointment creation;
+- exact idempotency replay;
+- two Workflows selecting the same slot while only one may persist it;
+- losing slot-race Workflow returns to durable slot selection with refreshed availability.
 
-mk0 uses **DataModel v3 / TimeSlots** as the canonical business-model baseline.
+The 30-minute slot size and the simplified `default` resource are **MK0 laboratory fixtures**, not a claim that the future Scheduler Engine is complete.
 
-For the first workflow the relevant concern is `Customer`. `RegisterNewCustomer` creates no `Appointment`, `ResourceReservation`, availability mutation, service execution or scheduling side effect.
+## Repository map
 
-## Persistence authority
+```text
+.
+├── README.md
+├── .github/workflows/          # current active certification workflows only
+└── mk0/
+    ├── README.md               # canonical MK0 closure/index
+    ├── Brainstorming/          # problem framing
+    ├── Design/                 # architecture + specimen contracts
+    ├── Plan/                   # gates, decisions, closure ledger
+    ├── Build/                  # build history + evidence + archived historical CI
+    ├── Test/                   # test contracts / specimen certification notes
+    ├── mining-site/
+    │   └── quarries/           # extracted evidence packages
+    ├── golden-dataset/         # Golden / expectation manifests + synthetic fixtures
+    └── runtime/                # executable TypeScript/Temporal local laboratory
+```
 
-- **PostgreSQL**: canonical Customer + registration/idempotency truth.
-- **MongoDB**: application execution/audit/workflow context.
-- **AttachmentStore**: separate binary/document persistence capability; physical technology remains a Build decision.
-- **Temporal**: orchestration authority and durable execution history, not Customer truth.
+The canonical documentation progression remains:
 
-Temporal may use its own infrastructure database. That persistence is isolated from the Engines application business databases.
+```text
+Brainstorming
+→ Mining Site / Quarries
+→ Design
+→ Plan
+→ Golden expectations
+→ Build
+→ Test / Evidence
+```
 
-## Repository structure
+## Current active CI
 
-See [`mk0/README.md`](mk0/README.md).
+Historical B0–B6 stage workflows and the obsolete attachment-free core workflow are preserved under [`mk0/Build/ci-archive/`](mk0/Build/ci-archive/) rather than running on every new PR.
 
-## Build rule
+Current active workflows focus on the latest laboratory surface:
 
-**No application framework and no production implementation is selected until Design, Plan, Test contract and Golden Dataset gates are approved.**
+- B7/AttachmentStore regression;
+- B7 clean Compose certification;
+- Lab Console / trace certification;
+- `RegisterNewAppointment` certification;
+- MK0 release/closure certification.
+
+Historical GitHub Actions runs and their receipts remain part of the evidence chain.
+
+## Local laboratory
+
+```text
+Host             Windows + WSL2
+Runtime          Linux / Node / TypeScript
+Deployment       Docker Compose
+CTA              http://127.0.0.1:8787
+Temporal gRPC    localhost:7233
+Temporal UI      http://localhost:8233
+PostgreSQL       private Compose network
+MongoDB          private Compose network
+AttachmentStore shared Docker filesystem volume
+Cloud dependency none
+```
+
+From `mk0/runtime`:
+
+```bash
+npm ci
+npm run check
+docker compose up --build -d
+curl -fsS http://127.0.0.1:8787/health
+```
+
+Interactive Customer laboratory:
+
+```bash
+npm run lab:console
+```
+
+Interactive Appointment laboratory:
+
+```bash
+npm run lab:appointment
+```
+
+## Evidence discipline
+
+MK0 preserves these rules:
+
+```text
+UNKNOWN != PASS
+documented != verified
+CI green != product-ready unless the gate proves the product claim
+observed != supported
+```
+
+A runtime claim must point to an identified source revision and receipt. Documentation-only heads must not be presented as if the runtime was executed against them.
+
+## What MK0 does not claim
+
+MK0 does **not** certify:
+
+- production deployment;
+- public exposure/security hardening;
+- every channel;
+- a finished Scheduler Engine;
+- final ResourceReservation/WorkTeam capacity semantics;
+- Agent/Hermes;
+- a complete Services or Integration Engine;
+- the final Engines product/control-room UI.
+
+> MK0 answered the architecture question: **Engines can durably orchestrate and compose multiple business workflows while keeping channels replaceable and persistence authorities explicit.**

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "mk0.appointment.closure-manifest.v0",
+  "operation": "RegisterNewAppointment",
+  "classification": "POST_CERTIFICATION_CLOSURE_MANIFEST",
+  "predeclaredBeforeBuild": false,
+  "warning": "This file records the expectations exercised by the certified second-specimen harness after implementation. It must not be cited as a predeclared Golden Dataset. Future stages must freeze their Golden expectations before Build.",
+  "certifiedRuntimeSource": "70ab427f34bf353a7239f2f87bbe3b4889ec1efd",
+  "githubActionsRun": 33014515270,
+  "artifact": {
+    "id": 9623938890,
+    "name": "mk0-register-new-appointment-33014515270",
+    "sha256": "768865e38e86d04a761dfd2bb0141f9441c29902144ea5fc1cd1e8391a77e1a2"
+  },
+  "fixture": {
+    "businessSlug": "golden-business",
+    "timeZone": "America/Lima",
+    "service": {
+      "serviceId": "svc_car_wash",
+      "name": "Car Wash"
+    },
+    "products": [
+      {
+        "productId": "prd_car_wash_basic",
+        "name": "Basic Clean",
+        "durationMinutes": 30
+      },
+      {
+        "productId": "prd_car_wash_executive",
+        "name": "Executive Clean",
+        "durationMinutes": 30
+      },
+      {
+        "productId": "prd_car_wash_salon",
+        "name": "Salon Clean",
+        "durationMinutes": 30
+      }
+    ],
+    "resourceKey": "default",
+    "slots": [
+      "06:00-06:30",
+      "06:30-07:00",
+      "07:00-07:30"
+    ]
+  },
+  "cases": [
+    {
+      "id": "AP-001",
+      "name": "new Customer through child workflow",
+      "expectedMarker": "APPOINTMENT_NEW_CUSTOMER_CHILD_PASS"
+    },
+    {
+      "id": "AP-002",
+      "name": "Service and Product catalog loaded from business authority",
+      "expectedMarker": "APPOINTMENT_CATALOG_PASS"
+    },
+    {
+      "id": "AP-003",
+      "name": "past relative date is rejected without advancing durable date state",
+      "input": "ayer",
+      "expectedMarker": "APPOINTMENT_PAST_DATE_REJECTED"
+    },
+    {
+      "id": "AP-004",
+      "name": "Spanish weekday normalizes to canonical date and loads slots",
+      "input": "viernes",
+      "expectedMarker": "APPOINTMENT_DATE_AND_SLOTS_PASS"
+    },
+    {
+      "id": "AP-005",
+      "name": "explicit finalize persists selected Appointment",
+      "expectedMarker": "APPOINTMENT_BOOKING_PASS"
+    },
+    {
+      "id": "AP-006",
+      "name": "exact idempotency replay returns same Workflow and Run",
+      "expectedMarker": "APPOINTMENT_IDEMPOTENCY_REPLAY_PASS"
+    },
+    {
+      "id": "AP-007",
+      "name": "two workflows competing for one slot produce one winner and one durable conflict",
+      "expectedMarker": "APPOINTMENT_SLOT_CONFLICT_PASS"
+    },
+    {
+      "id": "AP-008",
+      "name": "complete second-specimen certification",
+      "expectedMarker": "MK0_REGISTER_NEW_APPOINTMENT_PASS"
+    }
+  ]
+}

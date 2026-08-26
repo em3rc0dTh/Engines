@@ -1,0 +1,352 @@
+name: mk0 B5 PostgreSQL authority certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b5-postgres-authority
+    paths:
+      - 'mk0/runtime/migrations/**'
+      - 'mk0/runtime/scripts/migrate-postgres.ts'
+      - 'mk0/runtime/scripts/b5-postgres-semantics.ts'
+      - 'mk0/runtime/src/persistence/postgres/**'
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b5-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/migrations/**'
+      - 'mk0/runtime/scripts/migrate-postgres.ts'
+      - 'mk0/runtime/scripts/b5-postgres-semantics.ts'
+      - 'mk0/runtime/src/persistence/postgres/**'
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - '.github/workflows/mk0-b5-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b5-postgres-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Regress B1 contracts
+        run: npm run test:b1
+
+      - name: Regress B3 CTA
+        run: npm run test:b3
+
+      - name: Start PostgreSQL
+        run: docker compose up -d --wait postgres
+
+      - name: Apply B5 migration twice
+        run: |
+          npm run migrate:b5
+          npm run migrate:b5
+
+      - name: Verify relational schema
+        run: |
+          for table in customers customer_contacts customer_phones customer_documents registration_commands; do
+            docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select to_regclass('public.$table')" | grep -qx "$table"
+          done
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from pg_indexes where indexname in ('idx_customer_contacts_business_email','idx_customer_phones_business_normalized','idx_customer_documents_business_identity','idx_registration_commands_workflow')" | grep -qx '4'
+
+      - name: Probe registration idempotency and concurrent hard uniqueness
+        run: npm run probe:b5 | tee /tmp/mk0-b5-postgres-probe.log
+
+      - name: Assert raw opaque idempotency key is not persisted
+        run: |
+          if docker compose exec -T postgres pg_dump -U engines -d engines_mk0 --data-only | grep -q 'opaque-probe-key-do-not-store-raw'; then
+            echo 'Raw idempotency key leaked into PostgreSQL'
+            exit 1
+          fi
+          echo 'B5_RAW_IDEMPOTENCY_KEY_ABSENT'
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-b5-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-b5-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b5-temporal.log
+          exit 1
+
+      - name: Start B5 Worker with PostgreSQL Activities
+        run: |
+          npm run worker:b5 > /tmp/mk0-b5-worker.log 2>&1 &
+          echo $! > /tmp/mk0-b5-worker.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B5_WORKER_STARTED' /tmp/mk0-b5-worker.log; then
+              cat /tmp/mk0-b5-worker.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b5-worker.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b5-worker.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b5-worker.log
+          exit 1
+
+      - name: Start new Customer intent-only session
+        id: new_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b5-new-001","correlationId":"b5-new-corr"}' \
+            | tee /tmp/mk0-b5-new-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b5-new-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for intent-only durable state and freeze initial fingerprint evidence
+        id: new_reservation
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+        run: |
+          for i in $(seq 1 40); do
+            npm run b4:interact -- query > /tmp/mk0-b5-new-waiting.log 2>&1 || true
+            if grep -q 'WAITING_FOR_REQUIRED_DATA' /tmp/mk0-b5-new-waiting.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b5-new-waiting.log
+          grep -q 'WAITING_FOR_REQUIRED_DATA' /tmp/mk0-b5-new-waiting.log
+          REGISTRATION_ID="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select registration_id from registration_commands where workflow_id='${B4_WORKFLOW_ID}'")"
+          FINGERPRINT="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select command_fingerprint from registration_commands where registration_id='${REGISTRATION_ID}'")"
+          test -n "$REGISTRATION_ID"
+          test -n "$FINGERPRINT"
+          echo "registration_id=$REGISTRATION_ID" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+
+      - name: Complete Customer data through Workflow Update
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+        run: |
+          npm run b4:interact -- update '{"inputId":"b5-new-data-1","customerPatch":{"name":"Primary Customer","document":{"type":"dni","country":"pe","value":"12345678"},"contact":{"email":" PRIMARY@EXAMPLE.TEST ","phones":[{"countryCode":"+51","number":"999 888 777","primary":true}]}}}' \
+            | tee /tmp/mk0-b5-new-update.log
+          grep -q 'REQUIRED_DATA_COMPLETE' /tmp/mk0-b5-new-update.log
+
+      - name: Wait for new Customer PostgreSQL pre-audit state
+        id: new_customer
+        env:
+          B4_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+          REGISTRATION_ID: ${{ steps.new_reservation.outputs.registration_id }}
+          INITIAL_FINGERPRINT: ${{ steps.new_reservation.outputs.fingerprint }}
+        run: |
+          for i in $(seq 1 60); do
+            npm run b4:interact -- query > /tmp/mk0-b5-new-final.log 2>&1 || true
+            if grep -q 'PERSISTING_AUDIT_CONTEXT' /tmp/mk0-b5-new-final.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b5-new-final.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b5-new-final.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e '.state.phase == "PERSISTING_AUDIT_CONTEXT" and .state.customerId != null and .state.result == null and .state.created == null' >/dev/null
+          CUSTOMER_ID="$(echo "$JSON" | jq -r '.state.customerId')"
+          STATUS="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where registration_id='${REGISTRATION_ID}'")"
+          AFTER_FINGERPRINT="$(docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select command_fingerprint from registration_commands where registration_id='${REGISTRATION_ID}'")"
+          test "$STATUS" = 'CUSTOMER_CREATED_PENDING_AUDIT'
+          test "$AFTER_FINGERPRINT" = "$INITIAL_FINGERPRINT"
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where business_slug='golden-business' and customer_id='${CUSTOMER_ID}'" | grep -qx '1'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select email_normalized from customer_contacts where customer_id='${CUSTOMER_ID}'" | grep -qx 'primary@example.test'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select document_type || ':' || country || ':' || document_value from customer_documents where customer_id='${CUSTOMER_ID}'" | grep -qx 'DNI:PE:12345678'
+          echo "customer_id=$CUSTOMER_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Start hard duplicate session
+        id: hard_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b5-hard-002","draft":{"customer":{"name":"Hard Duplicate","document":{"type":"DNI","country":"PE","value":"12345678"},"contact":{"email":"hard-other@example.test"}}}}' \
+            | tee /tmp/mk0-b5-hard-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b5-hard-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify hard duplicate resolves existing Customer without second row
+        env:
+          B4_WORKFLOW_ID: ${{ steps.hard_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.hard_start.outputs.run_id }}
+          EXPECTED_CUSTOMER_ID: ${{ steps.new_customer.outputs.customer_id }}
+        run: |
+          for i in $(seq 1 60); do
+            npm run b4:interact -- query > /tmp/mk0-b5-hard-state.log 2>&1 || true
+            if grep -q 'PERSISTING_AUDIT_CONTEXT' /tmp/mk0-b5-hard-state.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b5-hard-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b5-hard-state.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e --arg customerId "$EXPECTED_CUSTOMER_ID" '.state.phase == "PERSISTING_AUDIT_CONTEXT" and .state.customerId == $customerId and .state.result == null and .state.created == null' >/dev/null
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where business_slug='golden-business'" | grep -qx '1'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'EXISTING_CUSTOMER_PENDING_AUDIT'
+
+      - name: Start soft duplicate session
+        id: soft_start
+        run: |
+          npm run b4:start-cli -- '{"businessSlug":"golden-business","idempotencyKey":"b5-soft-003","draft":{"customer":{"name":"Soft Duplicate","contact":{"email":"primary@example.test"}}}}' \
+            | tee /tmp/mk0-b5-soft-start.log
+          LINE="$(grep 'B4_WORKFLOW_ACCEPTED' /tmp/mk0-b5-soft-start.log | tail -1)"
+          JSON="${LINE#B4_WORKFLOW_ACCEPTED }"
+          echo "workflow_id=$(echo "$JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify soft duplicate waits for explicit decision
+        env:
+          B4_WORKFLOW_ID: ${{ steps.soft_start.outputs.workflow_id }}
+          B4_RUN_ID: ${{ steps.soft_start.outputs.run_id }}
+          EXPECTED_CUSTOMER_ID: ${{ steps.new_customer.outputs.customer_id }}
+        run: |
+          for i in $(seq 1 60); do
+            npm run b4:interact -- query > /tmp/mk0-b5-soft-state.log 2>&1 || true
+            if grep -q 'WAITING_FOR_DUPLICATE_DECISION' /tmp/mk0-b5-soft-state.log; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/mk0-b5-soft-state.log
+          LINE="$(grep 'B4_STATE' /tmp/mk0-b5-soft-state.log | tail -1)"
+          JSON="${LINE#B4_STATE }"
+          echo "$JSON" | jq -e --arg customerId "$EXPECTED_CUSTOMER_ID" '
+            .state.phase == "WAITING_FOR_DUPLICATE_DECISION" and
+            .state.nextAction == "RESOLVE_DUPLICATE" and
+            .state.possibleDuplicate.classification == "SOFT_MATCH" and
+            (.state.possibleDuplicate.candidateCustomerIds | index($customerId)) != null and
+            .state.result == null and .state.created == null
+          ' >/dev/null
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select count(*) from customers where business_slug='golden-business'" | grep -qx '1'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc "select status from registration_commands where workflow_id='${B4_WORKFLOW_ID}'" | grep -qx 'SOFT_DUPLICATE_PENDING_DECISION'
+
+      - name: Assert Workflow remains persistence-driver free
+        run: |
+          if grep -n -E "from ['\"](pg|mongodb)" src/orchestration/temporal/workflows/register-new-customer.workflow.ts; then
+            echo 'Workflow imported a database driver'
+            exit 1
+          fi
+          grep -q 'proxyActivities' src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          grep -q "from 'pg'" src/persistence/postgres/registration.repository.ts
+          echo 'B5_ACTIVITY_ONLY_DB_ACCESS_OK'
+
+      - name: Capture PostgreSQL evidence
+        env:
+          GOLDEN_CUSTOMER_ID: ${{ steps.new_customer.outputs.customer_id }}
+        run: |
+          mkdir -p evidence/ci/b5
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select customer_id,business_slug,customer_type,customer_name,status from customers order by business_slug,customer_id" > evidence/ci/b5/customers.txt
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select registration_id,operation,business_slug,idempotency_key_hash,command_fingerprint,workflow_id,customer_id,status from registration_commands order by business_slug,registration_id" > evidence/ci/b5/registration-commands.txt
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select customer_id,business_slug,email_normalized from customer_contacts order by customer_id" > evidence/ci/b5/customer-contacts.txt
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c "select customer_id,business_slug,document_type,country,document_value from customer_documents order by customer_id" > evidence/ci/b5/customer-documents.txt
+          cp /tmp/mk0-b5-postgres-probe.log evidence/ci/b5/postgres-semantics.log
+          cp /tmp/mk0-b5-new-waiting.log evidence/ci/b5/new-waiting.log
+          cp /tmp/mk0-b5-new-update.log evidence/ci/b5/new-update.log
+          cp /tmp/mk0-b5-new-final.log evidence/ci/b5/new-pre-audit.log
+          cp /tmp/mk0-b5-hard-state.log evidence/ci/b5/hard-duplicate.log
+          cp /tmp/mk0-b5-soft-state.log evidence/ci/b5/soft-duplicate.log
+
+          jq -n \
+            --arg schemaVersion 'mk0.b5.evidence.v1' \
+            --arg repository '${{ github.repository }}' \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --arg goldenCustomerId "$GOLDEN_CUSTOMER_ID" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $githubRunId},
+              postgres: {goldenCustomerId: $goldenCustomerId},
+              assertions: {
+                migrationIdempotent: "PASS",
+                relationalCustomerSchema: "PASS",
+                rawIdempotencyKeyNotPersisted: "PASS",
+                exactRegistrationReplay: "PASS",
+                fingerprintConflict: "PASS",
+                businessScopedKeyIsolation: "PASS",
+                repeatedCustomerCreateIdempotent: "PASS",
+                concurrentHardUniqueSingleCustomer: "PASS",
+                initialFingerprintImmutableAcrossUpdates: "PASS",
+                newCustomerCreatedOnce: "PASS",
+                hardDuplicateNoSecondCustomer: "PASS",
+                softDuplicateRequiresDecision: "PASS",
+                activityOnlyDatabaseAccess: "PASS",
+                noFinalSuccessBeforeB6: "PASS"
+              }
+            }' > evidence/ci/b5/b5-postgres-evidence.json
+          cat evidence/ci/b5/b5-postgres-evidence.json
+
+      - name: Terminate B5 laboratory Workflows
+        env:
+          NEW_WORKFLOW_ID: ${{ steps.new_start.outputs.workflow_id }}
+          NEW_RUN_ID: ${{ steps.new_start.outputs.run_id }}
+          HARD_WORKFLOW_ID: ${{ steps.hard_start.outputs.workflow_id }}
+          HARD_RUN_ID: ${{ steps.hard_start.outputs.run_id }}
+          SOFT_WORKFLOW_ID: ${{ steps.soft_start.outputs.workflow_id }}
+          SOFT_RUN_ID: ${{ steps.soft_start.outputs.run_id }}
+        run: |
+          B4_WORKFLOW_ID="$NEW_WORKFLOW_ID" B4_RUN_ID="$NEW_RUN_ID" npm run b4:interact -- terminate
+          B4_WORKFLOW_ID="$HARD_WORKFLOW_ID" B4_RUN_ID="$HARD_RUN_ID" npm run b4:interact -- terminate
+          B4_WORKFLOW_ID="$SOFT_WORKFLOW_ID" B4_RUN_ID="$SOFT_RUN_ID" npm run b4:interact -- terminate
+
+      - name: Upload B5 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b5-postgres-authority-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/b5/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo '--- Worker ---'
+          cat /tmp/mk0-b5-worker.log || true
+          echo '--- Temporal ---'
+          cat /tmp/mk0-b5-temporal.log || true
+          echo '--- Postgres schema/status ---'
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c '\dt' || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select * from registration_commands' || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -P pager=off -c 'select * from customers' || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/mk0-b5-worker.pid ]; then kill -KILL "$(cat /tmp/mk0-b5-worker.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b5-temporal.pid ]; then kill "$(cat /tmp/mk0-b5-temporal.pid)" 2>/dev/null || true; fi
+          docker compose down -v || true

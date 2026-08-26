@@ -1,0 +1,110 @@
+name: mk0-lab-console-trace
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/mk0-lab-console-trace
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-lab-console-trace.yml'
+  pull_request:
+    branches:
+      - build/mk0-b7-attachmentstore-local-lab
+    paths:
+      - 'mk0/runtime/**'
+      - '.github/workflows/mk0-lab-console-trace.yml'
+
+jobs:
+  lab-console-trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: mk0/runtime
+        run: npm ci
+
+      - name: Type-check runtime and trace harness
+        working-directory: mk0/runtime
+        run: npm run check
+
+      - name: Regress existing fast gates and console startup readiness
+        working-directory: mk0/runtime
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:lab-console
+
+      - name: Start clean local-equivalent Compose lab
+        working-directory: mk0/runtime
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA health
+        working-directory: mk0/runtime
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              curl -fsS http://127.0.0.1:8787/health
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify interactive ping-pong and unified evidence
+        working-directory: mk0/runtime
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-lab-console-trace.ts
+
+      - name: Certify contact input validation before durable mutation
+        working-directory: mk0/runtime
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-contact-input-validation.ts
+
+      - name: Certify stable phone slot ordering through PostgreSQL
+        working-directory: mk0/runtime
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+        run: npx tsx scripts/certify-phone-slot-order.ts
+
+      - name: Capture diagnostics
+        if: always()
+        working-directory: mk0/runtime
+        run: |
+          mkdir -p /tmp/mk0-lab-console-trace
+          docker compose ps > /tmp/mk0-lab-console-trace/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk0-lab-console-trace/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk0-lab-console-trace/cta.log 2>&1 || true
+          docker compose logs temporal > /tmp/mk0-lab-console-trace/temporal.log 2>&1 || true
+
+      - name: Upload trace certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-lab-console-trace-${{ github.run_id }}
+          path: /tmp/mk0-lab-console-trace
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        working-directory: mk0/runtime
+        run: docker compose down -v --remove-orphans || true

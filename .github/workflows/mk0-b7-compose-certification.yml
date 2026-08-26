@@ -1,0 +1,80 @@
+name: mk0 B7 Compose attachment runtime certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b7-attachmentstore-local-lab
+      - feat/mk0-lab-console-trace
+    paths:
+      - 'mk0/runtime/**'
+      - 'mk0/golden-dataset/**'
+      - '.github/workflows/mk0-b7-compose-certification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  b7-compose-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Compose model
+        run: docker compose config >/tmp/b7-compose-expanded.yml
+
+      - name: Start clean local-equivalent Compose laboratory
+        run: |
+          set -euo pipefail
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null 2>&1; then
+              docker compose ps
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps
+          docker compose logs temporal migrate worker cta
+          exit 1
+
+      - name: Certify GD-003 GD-004 GD-009 GD-010
+        run: bash scripts/b7-compose-certification.sh
+
+      - name: Capture runtime topology
+        if: always()
+        run: |
+          docker compose ps -a > /tmp/b7-compose-ps.txt || true
+          docker compose logs --no-color temporal migrate worker cta > /tmp/b7-compose-runtime.log 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -Atc \
+            "select status,count(*) from registration_commands group by status order by status" \
+            > /tmp/b7-registration-statuses.txt 2>&1 || true
+          docker compose exec -T mongo mongosh engines_mk0 --quiet --eval \
+            "printjson(db.execution_audit.aggregate([{\$group:{_id:'\$eventType',count:{\$sum:1}}},{\$sort:{_id:1}}]).toArray())" \
+            > /tmp/b7-audit-counts.txt 2>&1 || true
+
+      - name: Upload B7 Compose evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b7-compose-runtime-${{ github.run_id }}
+          path: |
+            /tmp/b7-compose-evidence.json
+            /tmp/b7-compose-expanded.yml
+            /tmp/b7-compose-ps.txt
+            /tmp/b7-compose-runtime.log
+            /tmp/b7-registration-statuses.txt
+            /tmp/b7-audit-counts.txt
+            /tmp/gd009-cert-worker.log
+          if-no-files-found: warn
+
+      - name: Tear down laboratory
+        if: always()
+        run: docker compose down -v --remove-orphans || true

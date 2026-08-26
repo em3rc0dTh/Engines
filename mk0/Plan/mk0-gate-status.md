@@ -1,298 +1,206 @@
-# mk0 — Pre-Build Gate Status Ledger
+# MK0 Gate Status — CLOSED
 
-## Purpose
+## Final authority state
 
-This ledger answers one question:
+**MK0 OBJECTIVE COMPLETE**
 
-> **What is specified, what is formally approved, and what still prevents `Build/` from becoming executable?**
+Date of closure: `2026-08-26`
 
-It does not replace Design, Plan, Test or Golden Dataset. It prevents documentation maturity from being mistaken for Build authorization.
+MK0 is frozen as the certified local orchestration laboratory for Engines.
 
-Status vocabulary:
+It is no longer an open Build stage and should not accumulate unrelated product features.
 
-```text
-SPECIFIED             contract exists and is materially explicit
-ALIGNED               known cross-document conflicts are resolved
-OPEN                  a required decision/evidence item remains
-READY_FOR_APPROVAL    independent pre-Build review found no known contract blocker
-APPROVAL_NOT_RECORDED project authority has not yet recorded authorization
-BLOCKS_BUILD           Build authorization must not be declared while this remains
-BUILD_TIME             intentionally selected during authorized Build, not a pre-Build architecture gap
-RUNTIME_GATE           cannot be proven until implementation exists
-```
+## Closure question
 
----
+MK0 was created to determine whether a reusable orchestration spine could be proven with real execution.
 
-## Formal review checkpoint
-
-A formal agnostic pre-Build review is now recorded at:
+Required proof:
 
 ```text
-Plan/pre-build-review-2026-08-24.md
-```
-
-Review result:
-
-```text
-RECOMMENDATION: READY_FOR_APPROVAL
-BUILD AUTHORIZED BY REVIEW: NO
-RECOMMENDED FIRST BUILD TICKET: B0
-RECOMMENDED ATTACHMENT DISPOSITION: OPTION B / B7 GATED
-```
-
-The review found no known unresolved architecture, core Golden Dataset or Test-contract contradiction after the closure pass.
-
-The remaining transition is a **project authority decision**, not another architecture-discovery cycle.
-
----
-
-## M0 — Reality / source lock
-
-**Status: SPECIFIED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-Materially present:
-
-- TimeSlots/DataModel Customer source is identified;
-- Temporal official documentation is identified as runtime source;
-- no-framework project decision is explicit;
-- first architecture slice is explicit;
-- PostgreSQL/MongoDB/AttachmentStore authority split is explicit;
-- evidence classifications exist in `mining-site`.
-
-Open approval evidence:
-
-- no explicit approved Design/source-lock commit is recorded yet.
-
-Build impact:
-
-```text
-not an architecture-content blocker
-formal approval record is still absent
-```
-
----
-
-## M1 — Architecture lock
-
-**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-Current locked spine:
-
-```text
-CTA
+replaceable channel
 → CTA Adapter
-→ Temporal
-→ Activities / ports
-→ PostgreSQL + MongoDB + optional AttachmentStore
+→ Temporal durable Workflow
+→ Activities
+→ separate persistence authorities
+→ durable result / recovery / audit
 ```
 
-Closure fixes now recorded:
+A single successful Workflow was not sufficient. The architecture also had to be reusable by a second specimen.
 
-- incomplete Customer data may start a legal durable session;
-- CTA does not become Customer-completeness authority;
-- current/future channel vocabulary was narrowed consistently;
-- Build remains framework-neutral.
+## Final gate matrix
 
-Open approval evidence:
+| Gate | Verdict | Evidence |
+|---|---|---|
+| B0 runtime skeleton | PASS | B0 certification receipt |
+| B1 contracts / policy | PASS | B1 certification receipt |
+| B2 Temporal continuity | PASS | B2 certification receipt |
+| B3 CTA boundary | PASS | B3 certification receipt |
+| B4 durable Customer interaction | PASS | B4 certification receipt |
+| B5 PostgreSQL authority | PASS | B5 certification receipt |
+| B6 mandatory Mongo audit/finalization | PASS | B6 certification receipt |
+| B7 AttachmentStore | PASS | B7 Compose runtime receipt |
+| Customer Golden effective accounting | 18/18 PASS | 14 core + 4 B7 cases |
+| Physical Customer Postman laboratory | 37/37 PASS | local certification receipt |
+| Lab Console / trace | PASS | active trace gate + physical use |
+| Explicit finalization/contact/phone semantics | PASS | trace/contact/phone certifications |
+| Second specimen design | CLOSED | `Design/07-register-new-appointment-specimen.md` |
+| RegisterNewAppointment clean Compose | PASS | Actions run `33014515270` |
+| Customer Child Workflow reuse | PASS | `APPOINTMENT_NEW_CUSTOMER_CHILD_PASS` |
+| Catalog Service/Product reads | PASS | `APPOINTMENT_CATALOG_PASS` |
+| Past date rejection | PASS | `APPOINTMENT_PAST_DATE_REJECTED` |
+| Human weekday normalization + slots | PASS | `APPOINTMENT_DATE_AND_SLOTS_PASS` |
+| Appointment persistence | PASS | `APPOINTMENT_BOOKING_PASS` |
+| Appointment idempotency replay | PASS | `APPOINTMENT_IDEMPOTENCY_REPLAY_PASS` |
+| Atomic same-slot conflict | PASS | `APPOINTMENT_SLOT_CONFLICT_PASS` |
+| MK0 architecture objective | **COMPLETE** | both specimens + evidence chain |
 
-- architecture approval commit/tag has not been recorded.
+## Customer evidence nuance
 
----
-
-## M2 — Interactive RegisterNewCustomer contract lock
-
-**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-Specified:
-
-- partial/intent-only start;
-- versioned RegistrationPolicy;
-- Query `GetRegistrationState`;
-- Update `ProvideCustomerData`;
-- multi-round collection;
-- business-scoped session idempotency;
-- initial-start fingerprint vs later Update semantics;
-- hard/soft/non-unique duplicate policy;
-- CREATED / ALREADY_EXISTS outcomes;
-- zero scheduling side effects.
-
-Known contradiction corrected:
+The Customer Golden result is truthfully expressed as:
 
 ```text
-old quarry:
-missing Customer fields → reject pre-start
-
-current contract:
-legal session → Temporal → WAITING_FOR_REQUIRED_DATA when incomplete
+14 attachment-free cases certified in integrated core run
++
+4 attachment cases certified in B7 runtime
+=
+18 / 18 effective Golden PASS
 ```
 
----
+Do not rewrite this as one historical 18-case Actions execution; that artifact does not exist.
 
-## M3 — Temporal orchestration lock
+## Appointment evidence
 
-**Status: SPECIFIED AT ARCHITECTURE LEVEL / READY_FOR_APPROVAL / BUILD_TIME DETAILS REMAIN / APPROVAL_NOT_RECORDED**
-
-Pre-Build invariants are explicit:
-
-- real Temporal Service required;
-- real Task Queue / Worker required;
-- Workflow/Activity separation required;
-- Query/Update semantics required;
-- retry/restart durability required;
-- CTA disconnect must not destroy accepted state;
-- Workflow code cannot perform direct side effects;
-- replay/version compatibility is mandatory.
-
-The following are correctly **BUILD_TIME**, not reasons to select a framework or SDK prematurely:
-
-- exact Temporal SDK language/version;
-- exact versioning API/mechanism;
-- exact retry/backoff numbers;
-- exact Activity timeouts/heartbeats;
-- exact namespace/topology;
-- exact visibility/search-attribute configuration;
-- exact payload codec/converter.
-
-### Replay/versioning interpretation
-
-Before Build, mk0 freezes the invariant:
-
-> A deployed Workflow change must preserve deterministic replay/version compatibility for executions whose history was created by an older implementation.
-
-Build must then select and document the SDK-specific mechanism that satisfies that invariant before introducing a non-replay-compatible Workflow change.
-
----
-
-## M4 — Persistence contract lock
-
-**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-Frozen authority:
+Exact automated second-specimen source:
 
 ```text
-PostgreSQL      → Customer + registration/idempotency business truth
-MongoDB         → application interaction/audit/context
-AttachmentStore → binary/document truth when attachments exist
-Temporal        → orchestration/Event History
+70ab427f34bf353a7239f2f87bbe3b4889ec1efd
 ```
 
-Closure decisions now explicit:
-
-- idempotency scope is `(operation, businessSlug, idempotencyKeyHash)`;
-- initial material start snapshot is fingerprinted;
-- later `ProvideCustomerData` Updates do not rewrite the start fingerprint;
-- mandatory audit milestones gate successful completion;
-- audit-store exhaustion cannot become false success.
-
-BUILD_TIME persistence choices:
-
-- exact drivers/ORM/ODM;
-- migrations/DDL names;
-- database/container topology;
-- AttachmentStore physical technology;
-- attachment TTL/limits;
-- production encryption/backup profile.
-
----
-
-## M5 — Test contract lock
-
-**Status: SPECIFIED / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-The Test contract covers:
-
-- legal partial start;
-- invalid session start;
-- exact replay;
-- same-session conflicting initial start;
-- cross-business opaque-key isolation;
-- Query/Update/multi-round collection;
-- duplicate classification;
-- PostgreSQL failures;
-- MongoDB mandatory-audit failures;
-- AttachmentStore failures when enabled;
-- Worker restart;
-- CTA disconnect/reconnect;
-- real Temporal execution;
-- zero scheduling side effects.
-
-Runtime proof is intentionally unavailable until Build exists.
-
-Classification: `RUNTIME_GATE` after Build authorization.
-
----
-
-## M6 — Golden Dataset v0
-
-**Status: SPECIFIED / MACHINE-READABLE / ALIGNED / READY_FOR_APPROVAL / APPROVAL_NOT_RECORDED**
-
-Current machine-readable manifest freezes:
-
-- architecture profile;
-- RegistrationPolicy fixture;
-- business-scoped idempotency profile;
-- initial-start fingerprint profile;
-- mandatory audit-success profile;
-- GD-001 through GD-018 behavior.
-
-Attachment fixture hashes remain explicitly marked `TO_BE_FROZEN*`.
-
-Recommended disposition from formal review:
+Run:
 
 ```text
-OPTION B
-
-B0–B6 may proceed after formal authorization.
-B7 remains gated until AttachmentStore technology,
-synthetic fixture binaries and SHA-256 expectations are frozen.
+33014515270
 ```
 
-This keeps attachment behavior inside mk0 without forcing unresolved binary-storage choices to block the core orchestration proof.
-
----
-
-# Current Build authorization verdict
+Artifact:
 
 ```text
-Architecture content            STRONG / materially specified
-Known contract contradictions   corrected in closure pass
-Formal pre-Build review         COMPLETE / READY_FOR_APPROVAL
-Formal Design approval record   MISSING
-Formal Golden approval record   MISSING
-Project authority decision      REQUIRED NEXT
-Build/README status             NOT AUTHORIZED YET
-Runtime evidence                impossible until Build exists
+mk0-register-new-appointment-33014515270
+artifact id 9623938890
+sha256 768865e38e86d04a761dfd2bb0141f9441c29902144ea5fc1cd1e8391a77e1a2
 ```
 
-Therefore:
+Primary receipt:
 
-> **Do not add production code yet.**
+[`../Build/evidence/mk0-register-new-appointment-certification-2026-08-26.md`](../Build/evidence/mk0-register-new-appointment-certification-2026-08-26.md)
 
-## Next transition
+## Frozen authority boundaries
 
-The next point is now exactly:
+### Temporal
+
+Owns:
+
+- durable sequencing;
+- Workflow state/history;
+- Query/Update/Child Workflow semantics;
+- retry/replay/recovery.
+
+### PostgreSQL
+
+Owns canonical business truth including the MK0 schemas for:
+
+- Customers;
+- registration/idempotency commands;
+- Customer attachment references;
+- Service catalog;
+- Product catalog;
+- laboratory availability rules;
+- appointment commands;
+- Appointments.
+
+### MongoDB
+
+Owns semantic application audit/context:
 
 ```text
-PROJECT AUTHORITY BUILD-GATE DECISION
+execution_audit
+appointment_audit
 ```
 
-If approved, the repository records:
+It is not shadow Customer/Appointment truth and does not replace Temporal Event History.
+
+### AttachmentStore
+
+Owns staged/committed binary object integrity and lifecycle.
+
+### CTA / channels
+
+Own transport parsing, syntax validation, normalization and Temporal client calls. They do not own direct business persistence.
+
+## Frozen lessons carried forward
+
+1. `UNKNOWN != PASS`.
+2. Documentation is not runtime evidence.
+3. A legal incomplete conversation may be durable.
+4. Invalid external syntax should be rejected at the earliest truthful boundary.
+5. Workflow replay compatibility must be preserved when changing durable semantics.
+6. Minimum data completeness and human finalization are separate concepts.
+7. Child Workflow composition is preferred over duplicating an existing capability's authority.
+8. Displayed availability is not reservation.
+9. Capacity must be revalidated atomically at persistence time.
+10. Workflow code remains free of direct external drivers.
+11. Persistence stores keep distinct authority boundaries.
+
+## Explicit non-claims
+
+MK0 closure does not certify:
+
+- production deployment;
+- internet/public security posture;
+- final authentication/authorization model;
+- every possible CTA/channel;
+- final Scheduler/TimeSlots implementation;
+- ResourceReservation hold/expiry/capacity model;
+- Agent/Hermes;
+- Services Engine as a standalone product subsystem;
+- Integration Engine;
+- final product UI/control room;
+- completion of the broader Engines platform.
+
+## Repository integration state
+
+The cumulative MK0 implementation is consolidated on:
 
 ```text
-approval date
-approved repository commit SHA
-approved Design package
-approved Golden Dataset version
-accepted BUILD_TIME deferrals
-attachment disposition
-first authorized Build ticket = B0
-explicit authorization to change Build/README status
+release/mk0-complete
 ```
 
-Only after that record exists does mk0 enter:
+Historical stage branches and PRs are retained only as provenance. They are not independent pending product releases.
+
+Historical B0–B6 CI workflow definitions are archived under:
 
 ```text
-B0 — Runtime / Repository Skeleton
+mk0/Build/ci-archive/
 ```
 
-No approval is asserted by this ledger itself.
+The integration target is `main` through one canonical MK0 closure PR.
+
+## Next gate
+
+There is intentionally **no automatic MK1 scope** defined by this file.
+
+Any next product stage should begin again with:
+
+```text
+Brainstorming
+→ Mining Site / Quarries
+→ Design
+→ Plan
+→ predeclared Golden expectations
+→ Build
+→ Test / Evidence
+```
+
+and should reuse MK0 as the architecture reference rather than extend MK0 indefinitely.
+
+> **Final verdict: MK0 COMPLETE. Engines platform development may proceed from this certified reference.**

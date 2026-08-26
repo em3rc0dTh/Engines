@@ -1,0 +1,284 @@
+name: mk0 B2 Temporal continuity certification
+
+on:
+  push:
+    branches:
+      - build/mk0-b2-temporal-topology
+    paths:
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - 'mk0/runtime/tsconfig.json'
+      - '.github/workflows/mk0-b2-ci.yml'
+  pull_request:
+    paths:
+      - 'mk0/runtime/src/orchestration/temporal/**'
+      - 'mk0/runtime/package.json'
+      - 'mk0/runtime/package-lock.json'
+      - 'mk0/runtime/tsconfig.json'
+      - '.github/workflows/mk0-b2-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b2-temporal-continuity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: mk0/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mk0/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Install pinned Temporal CLI 1.8.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo temporal.tar.gz https://github.com/temporalio/cli/releases/download/v1.8.1/temporal_cli_1.8.1_linux_amd64.tar.gz
+          echo 'b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358b8030f06  temporal.tar.gz' | sha256sum -c -
+          tar -xzf temporal.tar.gz
+          sudo install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+
+      - name: Start real Temporal dev service
+        run: |
+          temporal server start-dev --ui-port 8233 > /tmp/mk0-b2-temporal.log 2>&1 &
+          echo $! > /tmp/mk0-b2-temporal.pid
+          for i in $(seq 1 40); do
+            if temporal operator cluster health >/dev/null 2>&1; then
+              temporal operator cluster health
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b2-temporal.log
+          exit 1
+
+      - name: Verify Temporal Web UI
+        run: curl --fail --retry 10 --retry-delay 1 http://localhost:8233/ >/dev/null
+
+      - name: Start Worker instance one
+        run: |
+          B2_WORKER_INSTANCE=one node --import tsx src/orchestration/temporal/workers/b2.worker.ts > /tmp/mk0-b2-worker-1.log 2>&1 &
+          echo $! > /tmp/mk0-b2-worker-1.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B2_WORKER_STARTED' /tmp/mk0-b2-worker-1.log; then
+              cat /tmp/mk0-b2-worker-1.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b2-worker-1.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b2-worker-1.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b2-worker-1.log
+          exit 1
+
+      - name: Start continuity Workflow and prove waiting Query
+        id: start
+        env:
+          B2_CONTINUITY_DELAY_MS: '8000'
+        run: |
+          npm run b2:start | tee /tmp/mk0-b2-start.log
+          START_LINE="$(grep 'B2_CONTINUITY_STARTED' /tmp/mk0-b2-start.log | tail -1)"
+          test -n "$START_LINE"
+          START_JSON="${START_LINE#B2_CONTINUITY_STARTED }"
+          echo "$START_JSON" | jq -e '.ok == true and .phase == "WAITING_ON_TEMPORAL_TIMER"' >/dev/null
+          echo "workflow_id=$(echo "$START_JSON" | jq -r '.workflowId')" >> "$GITHUB_OUTPUT"
+          echo "run_id=$(echo "$START_JSON" | jq -r '.runId')" >> "$GITHUB_OUTPUT"
+          echo "probe_id=$(echo "$START_JSON" | jq -r '.probeId')" >> "$GITHUB_OUTPUT"
+
+      - name: Abruptly kill Worker instance one
+        run: |
+          WORKER_ONE_PID="$(cat /tmp/mk0-b2-worker-1.pid)"
+          kill -KILL "$WORKER_ONE_PID"
+          for i in $(seq 1 20); do
+            if ! kill -0 "$WORKER_ONE_PID" 2>/dev/null; then
+              echo "B2_WORKER_ONE_CONFIRMED_DEAD pid=$WORKER_ONE_PID"
+              exit 0
+            fi
+            sleep 0.1
+          done
+          echo "Worker one remained alive after SIGKILL"
+          exit 1
+
+      - name: Let Temporal timer fire with no Worker alive
+        run: sleep 10
+
+      - name: Inspect same execution while Worker is absent
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          test -n "$WORKFLOW_ID"
+          test -n "$RUN_ID"
+          temporal workflow describe --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json | tee /tmp/mk0-b2-describe-no-worker.json
+          grep -Eqi 'RUNNING|WorkflowExecutionStatusRunning|WORKFLOW_EXECUTION_STATUS_RUNNING' /tmp/mk0-b2-describe-no-worker.json
+          echo 'B2_EXECUTION_SURVIVED_WITHOUT_WORKER'
+
+      - name: Start Worker instance two
+        run: |
+          B2_WORKER_INSTANCE=two node --import tsx src/orchestration/temporal/workers/b2.worker.ts > /tmp/mk0-b2-worker-2.log 2>&1 &
+          echo $! > /tmp/mk0-b2-worker-2.pid
+          for i in $(seq 1 30); do
+            if grep -q 'B2_WORKER_STARTED' /tmp/mk0-b2-worker-2.log; then
+              cat /tmp/mk0-b2-worker-2.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/mk0-b2-worker-2.pid)" 2>/dev/null; then
+              cat /tmp/mk0-b2-worker-2.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/mk0-b2-worker-2.log
+          exit 1
+
+      - name: Recover result from exact Workflow ID and Run ID
+        env:
+          B2_WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          B2_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          timeout 60 npm run b2:result | tee /tmp/mk0-b2-result.log
+          RESULT_LINE="$(grep 'B2_CONTINUITY_RESULT' /tmp/mk0-b2-result.log | tail -1)"
+          test -n "$RESULT_LINE"
+          RESULT_JSON="${RESULT_LINE#B2_CONTINUITY_RESULT }"
+          echo "$RESULT_JSON" | jq -e --arg workflowId "$B2_WORKFLOW_ID" --arg runId "$B2_RUN_ID" \
+            '.ok == true and .phase == "COMPLETED" and .workflowId == $workflowId and .runId == $runId' >/dev/null
+
+      - name: Capture Temporal visibility and Event History
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          temporal workflow describe --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json | tee /tmp/mk0-b2-describe-complete.json
+          temporal workflow show --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --output json | tee /tmp/mk0-b2-history.json
+          grep -Eqi 'COMPLETED|WorkflowExecutionStatusCompleted|WORKFLOW_EXECUTION_STATUS_COMPLETED' /tmp/mk0-b2-describe-complete.json
+          grep -Eqi 'TimerStarted|EVENT_TYPE_TIMER_STARTED|TimerFired|EVENT_TYPE_TIMER_FIRED' /tmp/mk0-b2-history.json
+          grep -Eqi 'WorkflowExecutionCompleted|EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED' /tmp/mk0-b2-history.json
+
+      - name: Assert B2 has no business side effects
+        run: |
+          test ! -f src/orchestration/temporal/workflows/register-new-customer.workflow.ts
+          test ! -d src/persistence/postgres/customer
+          test ! -d src/persistence/postgres/registration-command
+          test ! -d src/persistence/mongo/execution-audit
+          test ! -d src/attachments
+
+      - name: Create structured B2 evidence
+        env:
+          WORKFLOW_ID: ${{ steps.start.outputs.workflow_id }}
+          RUN_ID: ${{ steps.start.outputs.run_id }}
+          PROBE_ID: ${{ steps.start.outputs.probe_id }}
+        run: |
+          mkdir -p evidence/ci/b2
+          WORKER_ONE_PID="$(cat /tmp/mk0-b2-worker-1.pid)"
+          WORKER_TWO_PID="$(cat /tmp/mk0-b2-worker-2.pid)"
+          test "$WORKER_ONE_PID" != "$WORKER_TWO_PID"
+
+          jq -n \
+            --arg schemaVersion 'mk0.b2.evidence.v1' \
+            --arg repository '${{ github.repository }}' \
+            --arg checkoutCommit "$GITHUB_SHA" \
+            --arg sourceHeadSha '${{ github.event.pull_request.head.sha || github.sha }}' \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --arg workflowId "$WORKFLOW_ID" \
+            --arg runId "$RUN_ID" \
+            --arg probeId "$PROBE_ID" \
+            --arg workerOnePid "$WORKER_ONE_PID" \
+            --arg workerTwoPid "$WORKER_TWO_PID" \
+            '{
+              schemaVersion: $schemaVersion,
+              repository: $repository,
+              checkoutCommit: $checkoutCommit,
+              sourceHeadSha: $sourceHeadSha,
+              githubActions: {runId: $githubRunId},
+              temporal: {
+                workflowId: $workflowId,
+                runId: $runId,
+                probeId: $probeId,
+                taskQueue: "engines-mk0-registration"
+              },
+              workerContinuity: {
+                firstPid: $workerOnePid,
+                firstTermination: "SIGKILL",
+                secondPid: $workerTwoPid,
+                distinctProcesses: true
+              },
+              assertions: {
+                lockedInstall: "PASS",
+                typecheck: "PASS",
+                realTemporalService: "PASS",
+                webUiReachable: "PASS",
+                queryObservedWaiting: "PASS",
+                firstWorkerKilled: "PASS",
+                timerElapsedWithoutWorker: "PASS",
+                sameExecutionVisibleWithoutWorker: "PASS",
+                secondWorkerRecoveredSameExecution: "PASS",
+                sameWorkflowId: "PASS",
+                sameRunId: "PASS",
+                eventHistoryCaptured: "PASS",
+                noBusinessSideEffects: "PASS"
+              }
+            }' > evidence/ci/b2/b2-continuity-evidence.json
+
+          cp /tmp/mk0-b2-start.log evidence/ci/b2/start.log
+          cp /tmp/mk0-b2-worker-1.log evidence/ci/b2/worker-1.log
+          cp /tmp/mk0-b2-worker-2.log evidence/ci/b2/worker-2.log
+          cp /tmp/mk0-b2-result.log evidence/ci/b2/result.log
+          cp /tmp/mk0-b2-describe-no-worker.json evidence/ci/b2/describe-no-worker.json
+          cp /tmp/mk0-b2-describe-complete.json evidence/ci/b2/describe-complete.json
+          cp /tmp/mk0-b2-history.json evidence/ci/b2/history.json
+          cat evidence/ci/b2/b2-continuity-evidence.json
+
+      - name: Upload B2 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk0-b2-temporal-continuity-${{ github.run_id }}
+          path: mk0/runtime/evidence/ci/b2/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo '--- Temporal ---'
+          cat /tmp/mk0-b2-temporal.log || true
+          echo '--- Worker one ---'
+          cat /tmp/mk0-b2-worker-1.log || true
+          echo '--- Start ---'
+          cat /tmp/mk0-b2-start.log || true
+          echo '--- Describe no worker ---'
+          cat /tmp/mk0-b2-describe-no-worker.json || true
+          echo '--- Worker two ---'
+          cat /tmp/mk0-b2-worker-2.log || true
+          echo '--- Result ---'
+          cat /tmp/mk0-b2-result.log || true
+          echo '--- Complete describe ---'
+          cat /tmp/mk0-b2-describe-complete.json || true
+          echo '--- History ---'
+          cat /tmp/mk0-b2-history.json || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/mk0-b2-worker-1.pid ]; then kill -KILL "$(cat /tmp/mk0-b2-worker-1.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b2-worker-2.pid ]; then kill -KILL "$(cat /tmp/mk0-b2-worker-2.pid)" 2>/dev/null || true; fi
+          if [ -f /tmp/mk0-b2-temporal.pid ]; then kill "$(cat /tmp/mk0-b2-temporal.pid)" 2>/dev/null || true; fi
