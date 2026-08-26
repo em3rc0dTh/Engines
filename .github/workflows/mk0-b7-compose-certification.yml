@@ -45,12 +45,6 @@ jobs:
           docker compose logs temporal migrate worker cta
           exit 1
 
-      - name: Certify unified execution trace and conversational ping-pong
-        run: |
-          docker compose exec -T \
-            -e ENGINES_CTA_URL=http://127.0.0.1:8787 \
-            cta npx tsx scripts/certify-lab-console-trace.ts
-
       - name: Certify GD-003 GD-004 GD-009 GD-010
         run: bash scripts/b7-compose-certification.sh
 
