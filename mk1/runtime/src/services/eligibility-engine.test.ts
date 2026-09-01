@@ -10,7 +10,7 @@ function offering(overrides: Partial<ServiceOffering> & Pick<ServiceOffering, 'o
     businessSlug: overrides.businessSlug ?? 'business-a',
     code: overrides.code ?? overrides.offeringId,
     name: overrides.name,
-    description: overrides.description,
+    ...(overrides.description !== undefined ? { description: overrides.description } : {}),
     status: overrides.status ?? 'ACTIVE',
     revision: overrides.revision ?? 1,
     durationMinutes: overrides.durationMinutes ?? 30,
@@ -19,7 +19,9 @@ function offering(overrides: Partial<ServiceOffering> & Pick<ServiceOffering, 'o
     tags: overrides.tags ?? [],
     requirements: overrides.requirements ?? [],
     dependencies: overrides.dependencies ?? [],
-    eligibilityRuleSet: overrides.eligibilityRuleSet,
+    ...(overrides.eligibilityRuleSet !== undefined
+      ? { eligibilityRuleSet: overrides.eligibilityRuleSet }
+      : {}),
   };
 }
 
@@ -63,7 +65,7 @@ test('ELG-004: malformed rule fails closed instead of being ignored', () => {
     eligibilityRuleSet: {
       mode: 'ALL',
       failureCode: 'BAD',
-      predicates: [{ path: 'x', operator: 'IN', value: 'not-an-array' as unknown as readonly unknown[] }],
+      predicates: [{ path: 'x', operator: 'IN', value: 'not-an-array' }],
     },
   });
   const decision = evaluateOfferingEligibility(target, { facts: { x: 'a' } });
