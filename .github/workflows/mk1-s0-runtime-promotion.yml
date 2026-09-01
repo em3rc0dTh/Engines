@@ -7,7 +7,7 @@ on:
       - build/mk1-s0-runtime-promotion
     paths:
       - 'mk1/runtime/**'
-      - 'mk1/golden-dataset/fixtures/**'
+      - 'mk1/golden-dataset/**'
       - '.github/workflows/mk1-s0-runtime-promotion.yml'
 
 permissions:
@@ -42,8 +42,11 @@ jobs:
         run: |
           test "$(git rev-parse HEAD:mk0/runtime)" = "$(git rev-parse HEAD:mk1/runtime)"
           test "$(git rev-parse HEAD:mk0/golden-dataset/fixtures)" = "$(git rev-parse HEAD:mk1/golden-dataset/fixtures)"
+          test "$(git rev-parse HEAD:mk0/golden-dataset/register-new-customer-v0.json)" = "$(git rev-parse HEAD:mk1/golden-dataset/register-new-customer-v0.json)"
+          test "$(git rev-parse HEAD:mk0/golden-dataset/register-new-appointment-closure-manifest-v0.json)" = "$(git rev-parse HEAD:mk1/golden-dataset/register-new-appointment-closure-manifest-v0.json)"
           echo "MK1_RUNTIME_TREE_IDENTITY_PASS $(git rev-parse HEAD:mk1/runtime)"
           echo "MK1_FIXTURE_TREE_IDENTITY_PASS $(git rev-parse HEAD:mk1/golden-dataset/fixtures)"
+          echo "MK1_GOLDEN_BASELINE_IDENTITY_PASS"
 
       - name: Install locked dependencies
         run: npm ci
