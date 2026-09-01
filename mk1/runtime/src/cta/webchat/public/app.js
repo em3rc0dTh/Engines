@@ -301,7 +301,10 @@ async function runAction(action, value) {
     await post(`/api/cta/mk0/register-new-appointment/${id}/finalize`, { inputId });
   }
 
-  state.lastPromptKey = '';
+  // Keep the last prompt key until the durable Workflow actually changes.
+  // Clearing it here can re-render the same prompt while Temporal is still
+  // completing an accepted Update, which produced duplicate Step 08/11 text
+  // during the first human C1A verification.
   await refresh();
 }
 
@@ -342,7 +345,8 @@ async function sendInput() {
     });
   }
 
-  state.lastPromptKey = '';
+  // Do not reset the prompt key before durable state advances. The next
+  // legitimate interaction has a different prompt key and will render once.
   await refresh();
 }
 
