@@ -2,11 +2,11 @@
 
 ## Status
 
-**S0 + S1 CERTIFIED — S2 DETERMINISTIC READ ENGINE NEXT**
+**S0–S3 CERTIFIED — S4 VERSIONED MANAGEMENT MUTATIONS NEXT**
 
 ## Objective
 
-Promote the MK0 Service/Product catalog seed into an independently certifiable Services Engine without modifying the frozen MK0 runtime or mixing Scheduler responsibilities into the catalog.
+Promote the MK0 Service/Product catalog seed into an independently certifiable Services Engine without modifying the frozen MK0 runtime, moving business authority into a channel, or mixing Scheduler responsibilities into the catalog.
 
 ## Branch discipline
 
@@ -16,9 +16,7 @@ Stage-2 integration branch:
 developer
 ```
 
-G0 audit is closed at the documentation/evidence level. Because the integration PR into `developer` could not be opened through the available GitHub path, downstream work preserves exact ancestry rather than moving `developer` or pretending integration occurred.
-
-Current lineage:
+G0 is closed at the foundation-audit level. Downstream work preserves exact ancestry while integration remains pending:
 
 ```text
 main / developer stable MK0 base
@@ -30,9 +28,13 @@ design/mk1-services-engine              G1 design + Golden expectations
 build/mk1-s0-runtime-promotion          S0 certified baseline
         ↓
 build/mk1-s1-services-contracts         S1 certified contracts/persistence
+        ↓
+build/mk1-s2-services-read-engine       S2 certified deterministic reads
+        ↓
+build/mk1-s3-services-eligibility       S3 certified eligibility/recommendation
 ```
 
-No direct ref movement is used to bypass the integration boundary.
+No direct ref movement is used to pretend an unreviewed integration occurred, and no MK1 branch rewrites `mk0/runtime`.
 
 ---
 
@@ -40,11 +42,7 @@ No direct ref movement is used to bypass the integration boundary.
 
 ## S0 — Promote certified MK0 runtime snapshot — ✅ PASS
 
-Purpose:
-
-Create `mk1/runtime` as an exact starting snapshot of the stable `mk0/runtime` tree **without modifying `mk0/runtime`**.
-
-Certified evidence:
+Purpose: create `mk1/runtime` as an exact executable starting snapshot of the stable `mk0/runtime` tree and independently rerun inherited certification from the MK1 path.
 
 ```text
 Source SHA       6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1
@@ -60,9 +58,7 @@ Artifact ID       9783188036
 Artifact SHA-256  69a895416918dfb163be680f55c9a6dae2bda35fa60a6dd5107c93e971045958
 ```
 
-Receipt:
-
-[`../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md)
+Receipt: [`../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md)
 
 Verdict: `S0 PASS`.
 
@@ -76,10 +72,8 @@ Certified implementation:
 - requirements;
 - dependencies;
 - eligibility-rule persistence;
-- relational constraints/business scoping;
-- TypeScript canonical Services domain types and validation.
-
-Certified evidence:
+- relational constraints and business scoping;
+- canonical TypeScript Services types and validation.
 
 ```text
 Source SHA       550cdca619856fe246ab569588f9036a7025e7a7
@@ -94,15 +88,13 @@ Artifact ID       9783331341
 Artifact SHA-256  7f69bf9d33b2e854d5cc4941b41059dc358437675cf0bbb6d102c29f129b2097
 ```
 
-Receipt:
-
-[`../Build/evidence/s1-services-contracts-certification-2026-08-31.md`](../Build/evidence/s1-services-contracts-certification-2026-08-31.md)
+Receipt: [`../Build/evidence/s1-services-contracts-certification-2026-08-31.md`](../Build/evidence/s1-services-contracts-certification-2026-08-31.md)
 
 Verdict: `S1 PASS`.
 
-## S2 — Deterministic read engine — 🔧 NEXT
+## S2 — Deterministic read engine — ✅ PASS
 
-Implement/test:
+Certified operations:
 
 ```text
 ListServices
@@ -111,42 +103,76 @@ ListOfferings
 GetOffering
 ```
 
-Required proofs:
+Certified proofs:
 
-- deterministic ordering;
-- business isolation;
+- deterministic Service ordering;
+- deterministic Offering ordering;
+- business isolation for ids and codes;
 - inactive definitions excluded from new-selection lists;
-- explicit identity lookups remain business-scoped;
-- revision returned;
-- full Offering projection includes pricing/requirements/dependencies/eligibility data;
-- no vertical branching;
-- Appointment compatibility adapter can map the generic Service/Offering projections into the inherited `AppointmentService` / `AppointmentProduct` contract without moving Scheduler logic into Services.
+- explicit historical identity lookup remains available and business-scoped;
+- Service/Offering revisions returned;
+- full Offering projection includes pricing, requirements, dependencies and eligibility data;
+- compatibility projections preserve inherited Appointment contracts;
+- Service/Offering snapshot captures both revisions;
+- Services repository contains no tested vertical branching.
 
-Verdict required: `S2 PASS`.
+```text
+Source SHA       cec97a2b90a7aee8ae1deb3660bad0d7a759ace6
+Run              33461895218
+Job              99713587556
+Result           success
+Probe            SERVICES_S2_READ_ENGINE_PASS
+Artifact ID       9783467265
+Artifact SHA-256  0b7c0addd1849da87fe03afc93053a5df7c3fddf674f9baf5a78e3400d9a3677
+Appointment       full inherited certification surface PASS
+```
 
-## S3 — Eligibility + recommendation
+Receipt: [`../Build/evidence/s2-services-read-engine-certification-2026-08-31.md`](../Build/evidence/s2-services-read-engine-certification-2026-08-31.md)
 
-Implement pure deterministic evaluation:
+Verdict: `S2 PASS`.
+
+## S3 — Eligibility + recommendation — ✅ PASS
+
+Certified operations:
 
 ```text
 EvaluateOfferingEligibility
 RecommendOfferings
 ```
 
-Required proofs:
+Certified proofs:
 
-- same input -> same output;
-- stable ranking;
-- explicit reason codes;
-- malformed rule fails typed/closed;
+- same Offering + same canonical context produces the same decision;
+- recommendation is independent of input ordering;
+- stable rank is `priority DESC`, `name ASC`, `offeringId ASC`;
+- explicit configured reason codes survive evaluation;
+- malformed eligibility rules fail closed;
+- inactive Offerings fail closed;
+- required Service requirements participate in eligibility;
+- `REQUIRES` and `EXCLUDES` dependencies participate in eligibility;
+- PostgreSQL-hydrated definitions flow into the pure evaluator;
 - no Agent/LLM dependency;
-- requirements/dependencies reflected in evaluation where applicable.
+- inherited Appointment certification remains passing.
 
-Verdict required: `S3 PASS`.
+```text
+Source SHA       a6974cdbb669b66a07b8780d5e20c960d6a0cd64
+Run              33531884206
+Job              99936776923
+Result           success
+Probe            SERVICES_S3_RECOMMENDATION_PASS
+Artifact ID       9810084527
+Artifact SHA-256  fa6a9efaa67309a4255dbce62fe362402ff453643e90f63c82c1457099e9de60
+```
 
-## S4 — Versioned management mutations
+Failure provenance is retained: run `33531803288` failed strict typecheck because the test fixture assigned `undefined` to exact optional fields. The helper was corrected without weakening a runtime/domain invariant; only run `33531884206` is certification authority.
 
-Implement management operations through the frozen orchestration authority:
+Receipt: [`../Build/evidence/s3-services-eligibility-certification-2026-09-01.md`](../Build/evidence/s3-services-eligibility-certification-2026-09-01.md)
+
+Verdict: `S3 PASS`.
+
+## S4 — Versioned management mutations — 🔧 NEXT
+
+Implement management operations through the orchestration authority:
 
 ```text
 CreateService
@@ -160,30 +186,36 @@ SetOfferingStatus
 Required proofs:
 
 - channel/HTTP code does not write PostgreSQL directly;
+- mutation intent is business-scoped before persistence;
 - business-scoped idempotency;
 - exact replay produces one business effect;
-- same idempotency identity + different material -> typed conflict;
+- same idempotency identity + different material produces a typed conflict;
 - optimistic revision check;
-- revision conflict does not overwrite;
-- audit evidence exists before terminal success where the mutation workflow contract requires it.
+- stale revision conflict does not overwrite newer business truth;
+- lifecycle transitions are explicit rather than row deletion masquerading as state;
+- persistence occurs through Activities/ports, not a DB driver inside Workflow code;
+- audit evidence exists before terminal success where the mutation Workflow contract requires it;
+- failures/retries cannot create duplicate Service or Offering business effects.
 
 Verdict required: `S4 PASS`.
 
 ## S5 — Running-Workflow snapshot semantics
 
-Prove that a Temporal consumer can select Offering revision `N`, wait durably, while catalog revision `N+1` is published, and still continue using the selected revision-`N` snapshot unless explicitly refreshed.
+Prove that a Temporal consumer can select Offering revision `N`, wait durably while catalog revision `N+1` is published, and continue using the selected revision-`N` snapshot unless explicitly refreshed.
 
 Required experiment:
 
 ```text
 1. start consumer Workflow
 2. read/select Offering revision N
-3. persist selection in Workflow state
-4. update catalog to N+1
+3. persist selection snapshot in Workflow state
+4. update catalog to N+1 through S4 authority
 5. query running Workflow -> still exposes N snapshot
 6. continue/finalize consumer using N semantics
 7. new Workflow read -> sees N+1
 ```
+
+Required negative proof: mutable catalog head must not silently replace an already-selected durable snapshot.
 
 Verdict required: `S5 PASS`.
 
@@ -196,8 +228,9 @@ Required proof:
 - same engine functions and database schema;
 - same Temporal/Activity boundary;
 - different pricing/duration/requirements;
-- one eligibility/recommendation scenario;
-- no business/vertical-specific conditional branch in Services Engine implementation.
+- at least one eligibility/recommendation scenario per material model difference;
+- same Service/Offering lifecycle and revision contract;
+- no business/vertical-name conditional branch in Services Engine implementation.
 
 Verdict required: `S6 PASS`.
 
@@ -219,9 +252,11 @@ G1 must not redesign Scheduler here.
 
 Required proofs:
 
-- existing appointment catalog happy path remains functional;
-- Service/Offering snapshot is revision-aware;
-- pricing/requirements may be displayed/evaluated without changing the Scheduler fixture;
+- existing Appointment happy path remains functional;
+- Service/Offering selection is revision-aware;
+- pricing/requirements can be displayed/evaluated without changing Scheduler authority;
+- selected Service/Offering snapshot is durable enough for S5 semantics;
+- idempotency replay remains exact;
 - slot-race regression remains passing.
 
 Verdict required: `S7 PASS`.
@@ -235,11 +270,14 @@ npm ci
 strict typecheck/tests
 Docker Compose clean boot
 migrations
-Services management Workflow
+Services management Workflows
 Services read/recommendation consumers
+running-Workflow snapshot proof
+multi-business proof
 PostgreSQL verification
 Mongo audit verification where required
 MK0 regression subset
+Appointment integration regression
 ```
 
 Produce:
@@ -249,7 +287,8 @@ Produce:
 - job ID;
 - artifact ID + SHA-256;
 - human-readable receipt;
-- Golden case accounting.
+- Golden case accounting;
+- explicit remaining non-claims.
 
 Verdict required: `G1 SERVICES ENGINE CERTIFIED`.
 
@@ -257,7 +296,7 @@ Verdict required: `G1 SERVICES ENGINE CERTIFIED`.
 
 # Golden case families
 
-The frozen Golden dataset includes:
+The frozen Golden dataset families are:
 
 ```text
 CAT-*   catalog identity/lifecycle/read behavior
@@ -273,8 +312,6 @@ CMP-*   compatibility/Appointment regression
 
 No case may be counted PASS without executable evidence or a clearly classified static contract check.
 
----
-
 # Build-stop conditions
 
 Stop and redesign before continuing if any gate requires:
@@ -285,12 +322,22 @@ Stop and redesign before continuing if any gate requires:
 - vertical-name branching;
 - mutable catalog semantics to leak silently into an already-running Workflow;
 - Scheduler capacity/slot logic to become Services authority;
-- MongoDB to become canonical catalog truth.
+- MongoDB to become canonical catalog truth;
+- bypassing optimistic revision control to make a test pass;
+- relabeling a failed or unexecuted gate as certified.
 
----
+# Manual-test boundary
+
+The owner is **not** required for a manual test during S0–S3. Automated contract, persistence, clean-Compose and inherited runtime evidence are sufficient for those gates.
+
+A manual test should be requested only when it can add evidence not already supplied by deterministic CI/laboratory execution. When that boundary is reached, the project status must explicitly say:
+
+```text
+🧪 READY FOR YOUR TEST
+```
 
 # Exit criteria
 
-G1 is not complete because a migration exists or a catalog endpoint returns data.
+G1 is not complete because a migration exists, a catalog endpoint returns data, or recommendation tests pass.
 
-All S0–S8 gates must be closed or explicitly removed by a documented design decision with corresponding revised closure claim.
+All S0–S8 gates must be closed, or explicitly removed by a documented design decision with corresponding revised closure claim, before the repository may state `G1 SERVICES ENGINE CERTIFIED`.
