@@ -36,7 +36,7 @@ Public/internet exposure                    ❌ NOT CERTIFIED
 
 Canonical MK0 index: [`mk0/README.md`](mk0/README.md). Evidence index: [`mk0/Build/evidence/README.md`](mk0/Build/evidence/README.md).
 
-### MK1 — current Services Engine program
+### MK1 — Services Engine progress
 
 ```text
 G0 — Foundation completeness audit          ✅ CLOSED
@@ -46,24 +46,49 @@ S0 — Runtime promotion                     ✅ CERTIFIED
 S1 — Contracts + persistence               ✅ CERTIFIED
 S2 — Deterministic read engine             ✅ CERTIFIED
 S3 — Eligibility + recommendation          ✅ CERTIFIED
-S4 — Versioned management mutations        🔧 NEXT
-S5 — Running-Workflow snapshots            ⏭ QUEUED
+S4 — Versioned management mutations        ✅ CERTIFIED
+S5 — Running-Workflow snapshots            🔧 NEXT
 S6 — Multi-business generality             ⏭ QUEUED
 S7 — Appointment integration               ⏭ QUEUED
 S8 — Final clean certification             ⏭ QUEUED
 
 G1 SERVICES ENGINE                         ❌ NOT YET FULLY CERTIFIED
 G2 SCHEDULER ENGINE                        ⏭ AFTER G1
-NEW CTA CHANNEL PROOF                      ⏭ AFTER G2
+G3 MULTI-CHANNEL CTA PROOF                 ⏭ AFTER ENGINE PREREQUISITES
 ```
 
-Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Services plan: [`mk1/Plan/01-services-engine-gates.md`](mk1/Plan/01-services-engine-gates.md). Consolidated test ledger: [`mk1/Test/g1-services-engine-s0-s3.md`](mk1/Test/g1-services-engine-s0-s3.md). Build/evidence provenance: [`mk1/Build/README.md`](mk1/Build/README.md).
+S4 now certifies Temporal-orchestrated Service/Offering management with business-scoped idempotency, exact replay, material-conflict protection, optimistic revision control, explicit lifecycle changes and semantic audit before terminal Workflow return.
+
+Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Services plan: [`mk1/Plan/01-services-engine-gates.md`](mk1/Plan/01-services-engine-gates.md). Test ledger: [`mk1/Test/g1-services-engine-s0-s4.md`](mk1/Test/g1-services-engine-s0-s4.md). Build/evidence index: [`mk1/Build/README.md`](mk1/Build/README.md).
+
+## Parallel CTA proof design
+
+The future CTA proof is being designed around three materially different presentation/transport surfaces that must call the same Engines orchestration boundary:
+
+```text
+WebChat
+Telegram
+WhatsApp
+    ↓
+canonical CTA envelope / correlation
+    ↓
+Temporal
+    ↓
+same Workflow Library
+```
+
+The preferred PoC path is WebChat locally first, Telegram next, then WhatsApp, ending with a frozen cross-channel Golden comparison. These adapters are **designed but not implemented/certified yet**.
+
+Design references:
+
+- [`mk1/Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md`](mk1/Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md)
+- [`mk1/Design/02-cta-channel-adapter-contract.md`](mk1/Design/02-cta-channel-adapter-contract.md)
 
 ## Architecture authority model
 
 ```text
 CHANNELS / CLIENTS
-CLI · HTTP/Postman · Lab Consoles · future adapters
+CLI · HTTP/Postman · Lab Consoles · future WebChat/Telegram/WhatsApp
                 ↓
           CTA ADAPTER
  transport parsing / canonicalization
@@ -77,135 +102,60 @@ CLI · HTTP/Postman · Lab Consoles · future adapters
        ┌────────┼──────────┐
        ↓        ↓          ↓
  PostgreSQL   MongoDB   AttachmentStore
- business    execution    binary/document
- truth       audit        truth
+ business    semantic    binary/document
+ truth       audit       truth
 ```
 
 Authority remains separated:
 
 - **Temporal** — durable orchestration and Event History.
 - **PostgreSQL** — canonical transactional/business truth.
-- **MongoDB** — execution/audit context; not shadow business truth.
+- **MongoDB** — semantic/execution audit, not shadow business truth.
 - **AttachmentStore** — binary/document integrity and lifecycle.
-- **CTA/channel** — replaceable transport boundary; not business authority.
+- **CTA/channel** — replaceable transport/presentation boundary, not business authority.
 
-## MK0 specimens
-
-`RegisterNewCustomer` proved durable multi-round input, explicit finalization, business-scoped idempotency, duplicate semantics, PostgreSQL persistence, mandatory MongoDB audit, Worker/CTA recovery, AttachmentStore integrity and unified trace/Lab Console.
-
-`RegisterNewAppointment` proved reuse of that orchestration spine:
+## MK1 Services capability through S4
 
 ```text
-Customer resolution
-→ optional RegisterNewCustomer Child Workflow
-→ Service
-→ Product
-→ date
-→ slot
-→ explicit finalize
-→ atomic PostgreSQL booking
-→ Mongo audit
-→ CREATED
-```
+S1
+ServiceDefinition / ServiceOffering
+pricing / requirements / dependencies / eligibility data
+revision + lifecycle persistence
 
-The 30-minute slot size and simplified `default` resource remain MK0 laboratory fixtures, not a finished Scheduler Engine.
+S2
+ListServices / GetService
+ListOfferings / GetOffering
 
-## MK1 Services Engine — certified boundary through S3
-
-The generic Services domain now represents:
-
-```text
-Business
-  └─ Service
-       └─ Offering
-            ├─ revision / lifecycle
-            ├─ duration
-            ├─ pricing
-            ├─ requirements
-            ├─ dependencies
-            ├─ eligibility rules
-            ├─ priority
-            └─ tags
-```
-
-PostgreSQL remains canonical catalog truth.
-
-### S2 deterministic reads
-
-Certified operations:
-
-```text
-ListServices
-GetService
-ListOfferings
-GetOffering
-```
-
-S2 proved deterministic ordering, business isolation, active-list filtering, explicit historical lookup, complete Offering hydration, revision visibility, Appointment compatibility and a vertical-neutral repository implementation.
-
-### S3 deterministic eligibility/recommendation
-
-Certified pure operations:
-
-```text
+S3
 evaluateOfferingEligibility
 recommendOfferings
+
+S4
+CreateService / UpdateService / SetServiceStatus
+CreateOffering / UpdateOffering / SetOfferingStatus
 ```
 
-S3 proves same-input deterministic decisions, stable ranking (`priority DESC → name ASC → offeringId ASC`), explicit reason codes, fail-closed malformed rules, requirement/dependency participation, persisted catalog hydration and no Agent/LLM dependency.
-
-Certification authority:
+S4 management path:
 
 ```text
-Source SHA       a6974cdbb669b66a07b8780d5e20c960d6a0cd64
-Run              33531884206
-Job              99936776923
-Artifact         9810084527
-Artifact SHA256  fa6a9efaa67309a4255dbce62fe362402ff453643e90f63c82c1457099e9de60
+management caller
+      ↓
+Temporal servicesManagementWorkflow
+      ↓
+validation + reference preflight
+      ↓
+PostgreSQL mutation Activity
+      ↓
+canonical catalog + idempotency command ledger
+      ↓
+Mongo mutation audit
+      ↓
+terminal result
 ```
 
-The earlier S3 run `33531803288` failed strict test typechecking and remains documented as failure provenance. Only the successful run above is certification authority.
+The final S4 certification source is `f3e54b853af5f01fb2e9ed7d032f784e3cffb81e`, run `33538554471`, job `99959020329`, artifact `9812703293`, SHA-256 `275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c`.
 
-## Next gate — S4
-
-S4 must add management through orchestration authority:
-
-```text
-CreateService
-UpdateService
-SetServiceStatus
-CreateOffering
-UpdateOffering
-SetOfferingStatus
-```
-
-It must prove business-scoped idempotency, exact replay, material conflict, optimistic revision protection, retry safety and audit semantics without allowing channel code or Workflow code to mutate PostgreSQL directly.
-
-S5 will then prove that a running Workflow which selected catalog revision `N` keeps revision `N` even if live catalog state advances to `N+1`, unless an explicit refresh is part of the contract.
-
-## Repository map
-
-```text
-.
-├── README.md
-├── .github/workflows/
-│   ├── mk0-*                       # frozen-foundation regressions
-│   └── mk1-s0 ... mk1-s3-*         # current Services certifications
-├── mk0/
-│   ├── README.md
-│   ├── Brainstorming/ Design/ Plan/ Build/ Test/
-│   ├── mining-site/quarries/
-│   ├── golden-dataset/
-│   └── runtime/                    # frozen certified lab
-└── mk1/
-    ├── README.md
-    ├── Brainstorming/ Design/ Plan/ Build/ Test/
-    ├── mining-site/quarries/
-    ├── golden-dataset/
-    └── runtime/                    # active Stage-2 lab
-```
-
-Canonical documentation progression:
+## Documentation progression
 
 ```text
 Brainstorming
@@ -218,43 +168,22 @@ Brainstorming
 → Certification
 ```
 
-## Laboratories
-
-Frozen MK0:
-
-```bash
-cd mk0/runtime
-npm ci
-npm run check
-docker compose up --build -d
-```
-
-Active MK1:
-
-```bash
-cd mk1/runtime
-npm ci
-npm run check
-docker compose up --build -d
-```
-
-Current local topology remains Temporal `localhost:7233`, Temporal UI `localhost:8233`, CTA `127.0.0.1:8787`, with PostgreSQL/MongoDB private to Compose and AttachmentStore on the shared filesystem volume.
-
 ## Evidence discipline
 
 ```text
 UNKNOWN != PASS
 documented != verified
-CI green != product-ready unless the gate proves the claim
+CI green != a broader claim unless that CI proved it
 observed != supported
-failed attempt != erased provenance
-runtime source SHA != later documentation-only head
+runtime source SHA != later documentation SHA
 ```
 
-## Explicit non-claims
+A runtime claim must point to an identified executed source revision and receipt.
 
-The repository does **not** currently certify G1 as fully complete, Scheduler Engine, Integration Engine, omnichannel support, production deployment/security hardening, production S3/MinIO, general natural-language intent classification, Agent/Intelligence layer, or the final Ground Control/control-room UI.
+## Current next question
 
-> MK0 answered: **Can Engines durably orchestrate multiple business workflows while keeping channels replaceable and persistence authorities explicit? — Yes, locally certified.**
->
-> MK1 G1 is answering: **Can that foundation expose a generic, version-aware, deterministic Services capability without an Agent? — S0–S3 are certified; S4–S8 remain.**
+S5 asks whether a running Temporal Workflow that selected Offering revision `N` remains bound to that snapshot after S4 publishes revision `N+1`, while a newly started Workflow sees `N+1`.
+
+## What is not yet claimed
+
+Engines does not yet certify production deployment/security hardening, the finished Scheduler Engine, the complete multi-channel CTA suite, a complete Integration Engine, Agent/Hermes, or the final product/control-room UI.
