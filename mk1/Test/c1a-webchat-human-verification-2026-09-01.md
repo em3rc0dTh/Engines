@@ -105,12 +105,45 @@ This is important because the browser did not merely display a success message; 
 
 ## UX observations found during the human test
 
-The business flow passed, but two presentation issues were visible and should be corrected before calling the WebChat polished:
+The business flow passed, but two presentation issues were visible in the first human run:
 
 1. The Step 08 date prompt was rendered twice around the transition from date submission to `WAITING_FOR_SLOT`.
 2. The Step 11 finalize prompt was rendered twice around the transition from `READY_TO_FINALIZE` to `CREATED`.
 
-These are **presentation/render timing defects**, not duplicate business effects. The durable state contains one selected date, one selected slot, and one terminal Appointment result.
+These were **presentation/render timing defects**, not duplicate business effects. The durable state contained one selected date, one selected slot, and one terminal Appointment result.
+
+Root cause:
+
+```text
+accepted user action
+→ browser cleared lastPromptKey immediately
+→ immediate refresh could still observe the previous durable phase
+→ same prompt rendered again
+→ Temporal then advanced normally
+```
+
+The WebChat renderer was corrected so the prompt key remains stable until the durable Workflow state actually advances.
+
+Remediation commit:
+
+```text
+ed207f8c82ae9138f92fd505209c30c4eeba243b
+fix(c1a): prevent duplicate prompts while Temporal advances
+```
+
+Post-fix automated regression:
+
+```text
+Run           33560864234
+Job           100032737031
+Result        SUCCESS
+Artifact      9821207955
+Artifact SHA  4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff
+```
+
+The post-fix run passed strict typecheck, C0 Workflow-view tests, inherited CTA/Appointment regressions, clean Compose startup, WebChat startup, and the complete Appointment-through-WebChat certification path.
+
+The duplicate-prompt correction is therefore automated-regression green. A later human run can visually confirm the presentation symptom is gone; this document does not misrepresent the automated rerun as a second human observation.
 
 Also observed:
 
@@ -122,13 +155,15 @@ Also observed:
 This test strengthens the C1A claim from automated browser-transport execution to an actual human interaction proof:
 
 ```text
-Automated C1A CI proof          ✅ PASS
-Human manual WebChat proof      ✅ PASS
-Human Workflow inspector proof  ✅ PASS
-12-step visible progression     ✅ PASS
-Spanish date normalization      ✅ PASS
-Terminal Appointment creation   ✅ PASS
-No Agent / No MCP               ✅ CONFIRMED
+Automated C1A CI proof             ✅ PASS
+Human manual WebChat proof         ✅ PASS
+Human Workflow inspector proof     ✅ PASS
+12-step visible progression        ✅ PASS
+Spanish date normalization         ✅ PASS
+Terminal Appointment creation      ✅ PASS
+No Agent / No MCP                  ✅ CONFIRMED
+Prompt duplication defect          ✅ FIXED + CI REGRESSION PASS
+Post-fix human visual confirmation ⏳ NOT YET REPEATED
 ```
 
 ## Remaining boundary
