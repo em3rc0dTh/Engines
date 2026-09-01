@@ -81,6 +81,9 @@ jobs:
       - name: Certify S4 Temporal management semantics
         run: docker compose exec -T worker npm run probe:services:s4
 
+      - name: Certify S4 rejection safety
+        run: docker compose exec -T worker npm run probe:services:s4:safety
+
       - name: Certify inherited Appointment behavior
         run: npx tsx scripts/certify-register-new-appointment.ts
         env:
