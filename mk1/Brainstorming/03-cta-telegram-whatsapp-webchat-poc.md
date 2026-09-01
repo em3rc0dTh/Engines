@@ -1,224 +1,241 @@
-# CTA Proof of Concept — Telegram + WhatsApp + WebChat
+# CTA Multi-Channel PoC — WebChat → Telegram → WhatsApp
 
 ## Status
 
-**BRAINSTORMING / PARALLEL DESIGN TRACK — NOT IMPLEMENTED**
+**BRAINSTORMING / ARCHITECTURE TRACK — NO AGENT, NO MCP**
 
-This document runs in parallel with G1 Services Engine work. It does not move the channel proof ahead of the current engine certification sequence and does not claim Telegram, WhatsApp or WebChat support exists yet.
+This track proves channel replaceability around the same CTA → Temporal flow already proven by the CLI. It does not introduce an Agent, LLM routing, MCP tools or an alternate orchestration layer.
 
-## Objective
+## Frozen phase rule
 
-Prove that three materially different channels can drive the **same Engines orchestration contracts** without duplicating business logic inside channel adapters.
-
-Target proof channels:
+The current platform path is intentionally mechanical and explicit:
 
 ```text
-WebChat
-Telegram
-WhatsApp
+Channel transport
+→ Channel Adapter
+→ canonical CTA operation
+→ Temporal
+→ existing Workflow contracts
+→ Services / Scheduler / Persistence
 ```
 
-The channel layer must remain transport and presentation only.
+The CLI remains the architectural reference. WebChat and Telegram are new transport/rendering surfaces over the same orchestration boundary.
 
-## Proposed shape
+Not part of this phase:
 
 ```text
-WEBCHAT          TELEGRAM          WHATSAPP
-   │                 │                 │
-   └────────────┬────┴────────────┬────┘
-                ↓                 ↓
-          CHANNEL ADAPTERS / CTA
-                 ↓
-        CanonicalChannelEnvelope
-                 ↓
-          CTA ORCHESTRATION PORT
-                 ↓
-              TEMPORAL
-                 ↓
-       SAME WORKFLOW LIBRARY
-                 ↓
- Services / Scheduler / Persistence
+Agent
+LLM intent inference
+MCP
+AI tool selection
+AI-owned workflow routing
+AI-owned business decisions
 ```
 
-A channel adapter may normalize transport identifiers, text, button/callback input, files, locale and delivery metadata. It must not decide pricing, eligibility, Customer business truth, booking capacity, reservation conflicts or workflow completion.
+Those belong to a later Intelligence Layer only after the Engines platform works correctly without them.
 
-## Canonical inbound envelope candidate
+## Proof order
 
 ```text
-channel
-businessSlug
-externalConversationId
-externalMessageId
-externalSenderId
-receivedAt
-text?
-command/callback?
-attachments[]
-locale?
-metadata
+1. WebChat — minimal static HTML/CSS/JS proof
+2. Telegram — real bot over the same canonical adapter contract
+3. WhatsApp — later, after WebChat and Telegram are certified
 ```
 
-The envelope is not itself business truth. Its purpose is to give the CTA core enough canonical transport context to correlate a message with an Engines Workflow and submit a legal start/update/query operation.
+WhatsApp provider choice is deliberately **not frozen here**. No paid/API-provider assumption is required for C1 or C2. Its transport mechanism will be selected later without changing the canonical CTA/Temporal contract.
 
-## Canonical outbound response candidate
+## WebChat philosophy
+
+WebChat is not a frontend product project. The first proof should be deliberately small:
 
 ```text
-workflowId
-phase
-prompt/message
-choices[]
-attachments[]
-terminal
-resultSummary?
+index.html
+styles.css
+app.js
 ```
 
-Each adapter renders this into its native channel primitives. A Telegram button, WhatsApp interactive response and WebChat button can therefore represent the same canonical choice without changing Workflow semantics.
+Its job is to render the Workflow interaction and submit canonical user actions. It must not own a second state machine.
 
-## Correlation and idempotency
-
-The PoC must never treat provider delivery as exactly-once.
-
-Candidate transport identity:
+Target path:
 
 ```text
-channelEventKey =
-  hash(businessSlug + channel + externalMessageId)
+Browser HTML
+→ WebChat transport adapter
+→ CanonicalChannelEnvelope
+→ CTA orchestration port
+→ Temporal
+→ existing Workflow
+→ CanonicalChannelResponse
+→ Browser renderer
 ```
 
-Candidate conversation key:
+HTTP with polling or SSE is sufficient. WebSockets are optional and must not become a prerequisite for proving the architecture.
+
+## Telegram philosophy
+
+Telegram comes second and must behave as another renderer/transport over the same canonical interaction model.
+
+Initial laboratory shape:
 
 ```text
-channelSessionKey =
-  hash(businessSlug + channel + externalConversationId)
+Telegram Bot API long polling
+→ Telegram transport adapter
+→ CanonicalChannelEnvelope
+→ same CTA orchestration port
+→ same Temporal Workflow
 ```
 
-The exact durable mapping mechanism remains a design decision. It must preserve restart recovery and must not turn the CTA process into business authority.
+A later webhook transport can replace polling without changing business Workflow code.
 
-Provider retries or duplicated inbound messages must not produce duplicated Temporal Updates or duplicated business effects.
+Telegram-specific responsibilities are transport concerns only:
+
+```text
+update/message identity
+chat/conversation identity
+sender identity
+text extraction
+callback/button extraction
+media/file retrieval
+outbound text/button rendering
+provider duplicate handling
+```
+
+## No channel branching in orchestration
+
+Channel selection must use composition/registration, not provider condition chains inside business code.
+
+Preferred shape:
+
+```text
+ChannelAdapterRegistry
+  WEBCHAT  -> WebChatAdapter
+  TELEGRAM -> TelegramAdapter
+  WHATSAPP -> future WhatsAppAdapter
+
+adapter.normalizeInbound(rawProviderEvent)
+        ↓
+CanonicalChannelEnvelope
+        ↓
+CTA core
+        ↓
+Temporal
+```
+
+The core consumes the interface contract. Services, Scheduler and Workflows do not inspect provider names to decide business behavior.
+
+This means no architecture such as:
+
+```text
+provider-specific Workflow
+provider-specific Services rules
+provider-specific Scheduler rules
+provider-specific Customer logic
+```
+
+Provider differences terminate at the adapter/renderer boundary.
+
+## Canonical inbound candidate
+
+```text
+CanonicalChannelEnvelope
+  version
+  channel
+  businessSlug
+  externalConversationId
+  externalMessageId
+  externalSenderId
+  receivedAt
+  message
+    kind
+    text?
+    choiceId?
+    attachments[]
+  locale?
+  metadata
+```
+
+`businessSlug` comes from trusted adapter configuration/routing, not arbitrary user input.
+
+## Canonical outbound candidate
+
+```text
+CanonicalChannelResponse
+  workflowId
+  phase
+  message
+    text
+    choices[]
+  attachments[]
+  terminal
+  result?
+  correlation
+```
+
+WebChat renders HTML controls. Telegram renders Bot API messages/buttons. A later WhatsApp adapter renders its provider-native representation. Legal business choices remain identical.
+
+## Correlation and duplicate safety
+
+Providers are treated as at-least-once delivery systems.
+
+```text
+ProviderEventIdentity
+  businessSlug
+  channel
+  externalMessageId
+```
+
+```text
+ChannelConversationBinding
+  businessSlug
+  channel
+  externalConversationId
+  workflowId
+  operation
+  status
+```
+
+Bindings and inbound-event identities must be durable so adapter restart does not lose a conversation and provider retries cannot duplicate a Temporal Update or business effect.
 
 ## Attachments
 
-Channel-specific binary uploads must converge on the existing AttachmentStore boundary:
+All channel media converges on the existing AttachmentStore boundary:
 
 ```text
-Telegram file / WhatsApp media / WebChat upload
-                 ↓
-             CTA Adapter
-                 ↓
-        stage AttachmentStore
-                 ↓
-          attachment reference
-                 ↓
-        Temporal Workflow Update
+channel media
+→ adapter fetch/validation
+→ AttachmentStore.stage
+→ canonical attachment reference
+→ Workflow update
 ```
 
-No channel adapter should place binary blobs in Customer, Appointment, Services or Scheduler business tables.
+No channel-specific binary storage is introduced into Customer, Appointment, Services or Scheduler tables.
 
-## Channel strategy
+## Same-flow proof
 
-### WebChat — controlled laboratory surface
-
-WebChat is the easiest place to make workflow state visible and debug canonical message rendering. A minimal local PoC should favor a small static chat client and a narrow transport API rather than building a complete frontend product.
-
-Useful first proof:
+The final architecture property is:
 
 ```text
-browser
-→ CTA WebChat adapter
-→ Temporal
-→ same workflow
-→ canonical response
-→ browser rendering
+CLI
+WebChat
+Telegram
+later WhatsApp
+      │
+      ▼
+canonical CTA boundary
+      │
+      ▼
+Temporal
+      │
+      ▼
+same Workflow Library
 ```
 
-A WebSocket is not mandatory for the first proof. HTTP start/update/query plus lightweight polling or SSE can be sufficient. Transport complexity must not obscure the architecture proof.
+The channel can change. Business authority cannot.
 
-### Telegram — first external conversational channel
+## Relationship to Services S4/S5
 
-Telegram is a strong first external proof because the adapter can begin with Bot API polling in a local laboratory and later move to webhook ingress without changing workflow semantics.
+S4 remains the certified versioned Services management gate.
 
-The adapter must normalize:
+S5 now has successful runtime evidence for durable Service/Offering snapshots across mutable catalog revision and real Worker restart. Its formal receipt is maintained separately under `Build/evidence`.
 
-```text
-chat/message identity
-text
-callback/button data
-media/file references
-reply correlation
-```
-
-Polling versus webhook is an ingress deployment decision, not a business workflow decision.
-
-### WhatsApp — strategic production-shaped proof
-
-WhatsApp is strategically important but introduces more provider/platform concerns than Telegram. The PoC should isolate:
-
-```text
-webhook verification/authenticity
-provider message identity
-inbound message normalization
-interactive response normalization
-media retrieval/staging
-outbound delivery
-provider retry/delivery events
-```
-
-Those concerns belong in the adapter/integration boundary. They must not leak into Services or Scheduler rules.
-
-## Same-conversation proof
-
-The strongest channel test is not three demos with three code paths. It is one frozen canonical scenario rendered three ways.
-
-Example future Golden scenario:
-
-```text
-RegisterNewAppointment
-→ Customer resolution
-→ Services list
-→ Offering selection
-→ Scheduler slots
-→ Slot selection
-→ explicit finalize
-→ Appointment created
-```
-
-Run that scenario through:
-
-```text
-WebChat  → PASS/FAIL
-Telegram → PASS/FAIL
-WhatsApp → PASS/FAIL
-```
-
-Then compare Temporal, PostgreSQL, Mongo and AttachmentStore evidence. Channel-specific transport metadata may differ; business outcome semantics must not.
-
-## PoC acceptance ideas
-
-A future G3 channel certification should require at minimum:
-
-- one adapter restart during an active conversation;
-- duplicate inbound provider event does not duplicate workflow effect;
-- button/callback input maps to the same canonical update as typed text where applicable;
-- attachment ingress uses AttachmentStore rather than business-table blobs;
-- no direct channel-to-business-PostgreSQL mutation;
-- same Services/Scheduler decisions across channels for the same canonical context;
-- terminal business result can be traced back to channel event + Workflow + persistence evidence;
-- provider outage or outbound failure does not corrupt business truth.
-
-## Recommended execution order
-
-```text
-1. WebChat local adapter proof
-2. Telegram polling adapter proof
-3. Telegram webhook ingress proof
-4. WhatsApp Cloud/API adapter proof
-5. cross-channel Golden comparison
-```
-
-This ordering minimizes provider friction while still ending with a production-shaped external channel.
-
-## Explicit non-goals for the current S4 branch
-
-This branch is building **Services S4 management mutations**. It must not mix Telegram/WhatsApp/WebChat runtime code into S4.
-
-The CTA channel work remains documented in parallel and should receive its own branch/gates after the engine prerequisites are stable.
+The channel architecture documentation may evolve in parallel, but WebChat/Telegram runtime code must live in dedicated channel branches rather than being mixed into Services certification source.
