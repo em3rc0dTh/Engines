@@ -1,6 +1,6 @@
 # MK1 Runtime
 
-Executable Stage-2 laboratory for Engines. This runtime was promoted from the exact certified MK0 runtime tree at S0 and is being evolved gate-by-gate for MK1 without modifying `mk0/runtime`.
+Executable Stage-2 laboratory for Engines. S0 promoted the exact certified MK0 runtime tree into this directory; subsequent gates evolve `mk1/runtime` without modifying the frozen `mk0/runtime` evidence base.
 
 ## Current status
 
@@ -32,16 +32,15 @@ Certified CI Node  24.19.0
 TypeScript         7.0.2
 Temporal TS SDK    1.22.0
 Temporal CLI       1.8.1 in Compose image
-Task Queue         engines-mk0-registration   # inherited topology name
+Task Queue         engines-mk0-registration
 PostgreSQL         17.8
 MongoDB            8.0.29
-Web framework      none
 CTA HTTP           127.0.0.1:8787
 Temporal gRPC      localhost:7233
 Temporal UI        localhost:8233
 ```
 
-The historical package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. They are not evidence that this directory is still the MK0 source tree; renaming inherited runtime identity is a separate compatibility decision and is not required for S0–S3 certification.
+The inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming those identifiers is a separate compatibility decision and is not required for S0–S3 certification.
 
 ## Runtime structure
 
@@ -55,20 +54,10 @@ src/
 │   ├── appointment-catalog.compat.ts
 │   └── eligibility-engine.ts
 ├── cta/
-│   ├── cli/
-│   └── http/
 ├── lab-console/
 ├── observability/
 ├── orchestration/temporal/
-│   ├── activities/
-│   ├── clients/
-│   ├── ports/
-│   ├── workers/
-│   └── workflows/
 └── persistence/
-    ├── attachments/
-    ├── mongo/
-    └── postgres/
 
 migrations/
 scripts/
@@ -77,17 +66,13 @@ postman/
 
 ## Install and typecheck
 
-From WSL/Linux:
-
 ```bash
 cd mk1/runtime
 npm ci
 npm run check
 ```
 
-## Fast regression surface
-
-Inherited foundation:
+Inherited regression surface:
 
 ```bash
 npm run test:b1
@@ -97,7 +82,7 @@ npm run test:lab-console
 npm run test:appointment
 ```
 
-Services gates:
+Services surface:
 
 ```bash
 npm run test:services:s1
@@ -105,17 +90,22 @@ npm run test:services:s2
 npm run test:services:s3
 ```
 
-S3's script intentionally includes both compatibility and eligibility/recommendation tests under the current `src/services/*.test.ts` surface.
-
-## Start the complete local laboratory
+## Start the local laboratory
 
 ```bash
-docker compose down -v --remove-orphans   # only when a clean/destructive run is intended
 docker compose up --build -d
 docker compose ps
+curl -fsS http://127.0.0.1:8787/health
 ```
 
-Compose dependency chain:
+For a deliberately clean/destructive certification run:
+
+```bash
+docker compose down -v --remove-orphans
+docker compose up --build -d
+```
+
+Compose dependency chain remains:
 
 ```text
 PostgreSQL + MongoDB
@@ -129,44 +119,27 @@ PostgreSQL + MongoDB
         CTA
 ```
 
-Health:
+The inherited CTA currently advertises the certified operational workflows `RegisterNewCustomer` and `RegisterNewAppointment`. Services S1–S3 are exercised by domain tests and certification probes. S4 is the gate that introduces versioned Services management workflows; do not infer them from S1–S3.
 
-```bash
-curl -fsS http://127.0.0.1:8787/health
-```
+## Services domain through S3
 
-The inherited CTA still advertises the certified operational workflows:
-
-```text
-RegisterNewCustomer
-RegisterNewAppointment
-```
-
-Services S1–S3 are currently exercised by domain tests and certification probes. S4 is the gate that introduces versioned management mutation workflows; do not infer those operations from S1–S3.
-
-## Services Engine domain boundary through S3
-
-Canonical domain:
+Canonical entities:
 
 ```text
 ServiceDefinition
-  serviceId
-  businessSlug
+  serviceId / businessSlug
   code / name / description
   status ACTIVE | INACTIVE
   revision
   tags
 
 ServiceOffering
-  offeringId
-  serviceId / businessSlug
+  offeringId / serviceId / businessSlug
   code / name / description
-  status
-  revision
+  status / revision
   durationMinutes
   pricing
-  priority
-  tags
+  priority / tags
   requirements
   dependencies
   eligibilityRuleSet
@@ -181,7 +154,7 @@ FROM
 QUOTE_REQUIRED
 ```
 
-Eligibility operators currently supported by the deterministic contract:
+Eligibility operators:
 
 ```text
 EXISTS
@@ -191,11 +164,11 @@ GTE
 LTE
 ```
 
-The current rule-set mode is deliberately constrained to deterministic `ALL`. Arbitrary JavaScript/SQL rules are not accepted.
+The current rule-set mode is deliberately constrained to deterministic `ALL`. Arbitrary executable JavaScript or SQL is not an eligibility rule format.
 
-## S2 — read engine
+## S2 — deterministic reads
 
-PostgreSQL-backed Services repository supports:
+PostgreSQL-backed operations:
 
 ```text
 ListServices
@@ -204,34 +177,32 @@ ListOfferings
 GetOffering
 ```
 
-Important behavior:
+Certified behavior:
 
 ```text
 new-selection lists -> ACTIVE definitions only
-explicit identity lookup -> may retrieve INACTIVE historical definitions
-all reads -> business scoped
-service order -> name ASC, id ASC
-offering order -> priority DESC, name ASC, id ASC
+explicit lookup     -> may retrieve INACTIVE historical identity
+all reads           -> business scoped
+Service order       -> name ASC, id ASC
+Offering order      -> priority DESC, name ASC, id ASC
 ```
 
-The compatibility layer projects generic `ServiceDefinition` / `ServiceOffering` values into the inherited Appointment catalog types without transferring Scheduler logic into Services.
+The compatibility layer projects generic `ServiceDefinition` / `ServiceOffering` values into inherited Appointment catalog types without moving Scheduler logic into Services.
 
-A `ServiceOfferingSnapshot` captures both Service and Offering revisions for later durable-snapshot work.
+`ServiceOfferingSnapshot` captures both Service and Offering revisions for later durable-snapshot certification.
 
-## S3 — deterministic eligibility and recommendation
+## S3 — deterministic eligibility/recommendation
 
-Pure evaluator operations:
+Pure operations:
 
 ```text
 evaluateOfferingEligibility
-ecommendOfferings
+recommendOfferings
 ```
 
-The executable function name is `recommendOfferings`.
+Evaluation consumes canonical facts plus explicit satisfied-requirement and selected-offering identities. It does not call an Agent or LLM.
 
-Evaluation inputs are canonical facts plus explicit satisfied-requirement and selected-offering identities. The evaluator does not call an Agent or LLM.
-
-Certified ranking:
+Certified rank:
 
 ```text
 priority DESC
@@ -239,19 +210,11 @@ name ASC
 offeringId ASC
 ```
 
-Certified fail-closed behavior includes:
-
-- inactive Offerings;
-- malformed eligibility rules;
-- unsatisfied required requirements;
-- missing `REQUIRES` dependencies;
-- present `EXCLUDES` dependencies.
+Certified fail-closed behavior covers inactive Offerings, malformed rules, unsatisfied required requirements, missing `REQUIRES` dependencies and present `EXCLUDES` dependencies.
 
 ## Persistence
 
-### PostgreSQL — canonical business truth
-
-Inherited + Services tables include:
+PostgreSQL remains canonical business truth. Current inherited + Services tables include:
 
 ```text
 customers
@@ -270,18 +233,9 @@ appointment_commands
 appointments
 ```
 
-### MongoDB — execution/audit context
+MongoDB remains execution/audit context (`execution_audit`, `appointment_audit`), not canonical Customer, Appointment or Services catalog truth.
 
-```text
-execution_audit
-appointment_audit
-```
-
-MongoDB is not canonical Customer, Appointment or Services catalog truth.
-
-### AttachmentStore
-
-The laboratory uses the shared filesystem volume under `/data/attachments` with staged ingress, content-addressed committed objects and SHA-256 integrity.
+AttachmentStore remains the shared filesystem laboratory implementation with staged ingress, content-addressed committed objects and SHA-256 integrity.
 
 ## Current migrations
 
@@ -293,8 +247,6 @@ The laboratory uses the shared filesystem volume under `/data/attachments` with 
 005_services_engine_contracts.sql
 ```
 
-Compose executes all current migrations before Worker startup.
-
 ## Services certification probes
 
 ```bash
@@ -303,7 +255,7 @@ npm run probe:services:s2
 npm run probe:services:s3
 ```
 
-Expected successful markers by gate:
+Expected success markers:
 
 ```text
 SERVICES_S1_PERSISTENCE_PASS
@@ -311,41 +263,18 @@ SERVICES_S2_READ_ENGINE_PASS
 SERVICES_S3_RECOMMENDATION_PASS
 ```
 
-These probes do not replace the full GitHub Actions gate, which also runs strict typecheck, regression tests, clean Compose and inherited Appointment certification.
+A probe alone is not the full gate. GitHub Actions also executes strict typecheck, regression tests, clean Compose and inherited Appointment certification.
 
 ## Interactive inherited laboratories
 
-Customer:
-
 ```bash
 npm run lab:console
-```
-
-Appointment:
-
-```bash
 npm run lab:appointment
 ```
 
-These remain useful regression surfaces but do not by themselves certify new Services gates.
+These remain useful regression/manual surfaces but do not independently certify a new Services gate.
 
-## Stop vs reset
-
-Preserve data/history:
-
-```bash
-docker compose down
-```
-
-Destructive laboratory reset:
-
-```bash
-docker compose down -v --remove-orphans
-```
-
-Do not use the destructive reset casually when a physical/manual run is still useful as evidence.
-
-## Current scope boundary
+## Scope boundary
 
 S0–S3 do **not** certify:
 
@@ -360,4 +289,4 @@ Agent/LLM authority
 production deployment / public exposure
 ```
 
-The next executable boundary is S4, not a manual end-user test.
+The next executable boundary is S4, not an end-user manual test.
