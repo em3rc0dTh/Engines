@@ -16,6 +16,7 @@
     "test:services:s1": "tsx --test src/contracts/services-engine/*.test.ts",
     "test:services:s2": "tsx --test src/services/appointment-catalog.compat.test.ts",
     "test:services:s3": "tsx --test src/services/eligibility-engine.test.ts",
+    "test:services:s4": "tsx --test src/contracts/services-engine/management.test.ts",
     "infra:up": "docker compose up -d postgres mongo",
     "infra:down": "docker compose down",
     "infra:status": "docker compose ps",
@@ -53,6 +54,7 @@
     "probe:services:s1": "tsx scripts/certify-services-s1-persistence.ts",
     "probe:services:s2": "tsx scripts/certify-services-s2-read-engine.ts",
     "probe:services:s3": "tsx scripts/certify-services-s3-recommendation.ts",
+    "probe:services:s4": "tsx scripts/certify-services-s4-management.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
