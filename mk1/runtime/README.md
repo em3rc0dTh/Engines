@@ -12,7 +12,8 @@ RegisterNewAppointment            ✅ regression protected
 Services S1 contracts/persistence ✅ certified
 Services S2 deterministic reads   ✅ certified
 Services S3 recommendation        ✅ certified
-Services S4 management mutations  🔧 next
+Services S4 management mutations  ✅ certified
+Services S5 durable snapshots     🔧 next
 G1 Services Engine                ❌ not yet fully certified
 Scheduler Engine                  ❌ not certified
 Production deployment             ❌ not certified
@@ -22,7 +23,7 @@ Canonical MK1 status: [`../README.md`](../README.md)
 
 Services gate plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
 
-Test/evidence ledger: [`../Test/g1-services-engine-s0-s3.md`](../Test/g1-services-engine-s0-s3.md)
+Test/evidence ledger: [`../Test/g1-services-engine-s0-s4.md`](../Test/g1-services-engine-s0-s4.md)
 
 ## Runtime profile
 
@@ -40,7 +41,7 @@ Temporal gRPC      localhost:7233
 Temporal UI        localhost:8233
 ```
 
-The inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming those identifiers is a separate compatibility decision and is not required for S0–S3 certification.
+The inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming those identifiers is a separate compatibility decision and is not required for G1 correctness.
 
 ## Runtime structure
 
@@ -50,6 +51,9 @@ src/
 │   ├── register-new-customer/
 │   ├── register-new-appointment/
 │   └── services-engine/
+│       ├── types.ts
+│       ├── validation.ts
+│       └── management.ts
 ├── services/
 │   ├── appointment-catalog.compat.ts
 │   └── eligibility-engine.ts
@@ -57,7 +61,18 @@ src/
 ├── lab-console/
 ├── observability/
 ├── orchestration/temporal/
+│   ├── activities/
+│   ├── clients/
+│   ├── workers/
+│   └── workflows/
 └── persistence/
+    ├── attachments/
+    ├── mongo/
+    │   └── services-audit.repository.ts
+    └── postgres/
+        ├── services.repository.ts
+        ├── services-management.repository.ts
+        └── services-management-preflight.repository.ts
 
 migrations/
 scripts/
@@ -88,6 +103,7 @@ Services surface:
 npm run test:services:s1
 npm run test:services:s2
 npm run test:services:s3
+npm run test:services:s4
 ```
 
 ## Start the local laboratory
@@ -119,9 +135,9 @@ PostgreSQL + MongoDB
         CTA
 ```
 
-The inherited CTA currently advertises the certified operational workflows `RegisterNewCustomer` and `RegisterNewAppointment`. Services S1–S3 are exercised by domain tests and certification probes. S4 is the gate that introduces versioned Services management workflows; do not infer them from S1–S3.
+The inherited CTA currently advertises the certified operational Customer and Appointment workflows. Services management is certified through direct Temporal execution in the S4 laboratory; a public/admin HTTP management surface has deliberately not been added merely to prove S4.
 
-## Services domain through S3
+## Services domain through S4
 
 Canonical entities:
 
@@ -164,7 +180,7 @@ GTE
 LTE
 ```
 
-The current rule-set mode is deliberately constrained to deterministic `ALL`. Arbitrary executable JavaScript or SQL is not an eligibility rule format.
+The current rule-set mode remains deterministic `ALL`; arbitrary JavaScript/SQL is not an eligibility rule format.
 
 ## S2 — deterministic reads
 
@@ -177,32 +193,18 @@ ListOfferings
 GetOffering
 ```
 
-Certified behavior:
-
-```text
-new-selection lists -> ACTIVE definitions only
-explicit lookup     -> may retrieve INACTIVE historical identity
-all reads           -> business scoped
-Service order       -> name ASC, id ASC
-Offering order      -> priority DESC, name ASC, id ASC
-```
-
-The compatibility layer projects generic `ServiceDefinition` / `ServiceOffering` values into inherited Appointment catalog types without moving Scheduler logic into Services.
-
-`ServiceOfferingSnapshot` captures both Service and Offering revisions for later durable-snapshot certification.
+List operations are deterministic and lifecycle-aware; explicit identity lookups remain business-scoped and can hydrate historical inactive definitions. Offering projections include pricing, requirements, dependencies and eligibility data.
 
 ## S3 — deterministic eligibility/recommendation
 
-Pure operations:
+Pure Services functions:
 
 ```text
 evaluateOfferingEligibility
 recommendOfferings
 ```
 
-Evaluation consumes canonical facts plus explicit satisfied-requirement and selected-offering identities. It does not call an Agent or LLM.
-
-Certified rank:
+Recommendation is independent of input ordering and ranks by:
 
 ```text
 priority DESC
@@ -210,42 +212,96 @@ name ASC
 offeringId ASC
 ```
 
-Certified fail-closed behavior covers inactive Offerings, malformed rules, unsatisfied required requirements, missing `REQUIRES` dependencies and present `EXCLUDES` dependencies.
+Malformed rules fail closed and no Agent/LLM is part of the decision authority.
 
-## Persistence
+## S4 — versioned management
 
-PostgreSQL remains canonical business truth. Current inherited + Services tables include:
+Temporal Workflow:
 
 ```text
-customers
-customer_contacts
-customer_phones
-customer_documents
-registration_commands
-customer_attachment_refs
-service_catalog
-service_products
-service_availability_rules
-service_requirements
-service_dependencies
-service_eligibility_rules
-appointment_commands
-appointments
+servicesManagementWorkflow
 ```
 
-MongoDB remains execution/audit context (`execution_audit`, `appointment_audit`), not canonical Customer, Appointment or Services catalog truth.
-
-AttachmentStore remains the shared filesystem laboratory implementation with staged ingress, content-addressed committed objects and SHA-256 integrity.
-
-## Current migrations
+Certified commands:
 
 ```text
-001_b5_registration_customer.sql
-002_b6_registration_finalization.sql
-003_b7_customer_attachment_refs.sql
-004_appointment_catalog_and_booking.sql
+CreateService
+UpdateService
+SetServiceStatus
+CreateOffering
+UpdateOffering
+SetOfferingStatus
+```
+
+Execution boundary:
+
+```text
+command
+  ↓
+Workflow deterministic validation
+  ↓
+reference-preflight Activity
+  ↓
+PostgreSQL mutation Activity
+  ↓
+service_mutation_commands
++ canonical Service/Offering rows
+  ↓
+Mongo services_mutation_audit Activity
+  ↓
+terminal outcome
+```
+
+### Idempotency
+
+`service_mutation_commands` stores a business-scoped command identity and material fingerprint. Semantics:
+
+```text
+same operation + business + idempotency key + same material
+→ REPLAYED
+→ no second business effect
+
+same logical identity + different material
+→ IDEMPOTENCY_CONFLICT
+→ no overwrite
+```
+
+### Revision control
+
+Versioned updates require `expectedRevision`. Successful update/status commands increment the revision. A stale expected revision returns `REVISION_CONFLICT` instead of last-write-wins.
+
+### Lifecycle
+
+Services and Offerings move through explicit `ACTIVE` / `INACTIVE` state. S4 does not implement destructive delete as lifecycle behavior.
+
+### Reference safety
+
+Create/Update Offering dependency targets are preflighted inside the same business scope before mutation. The S4 safety probe proves a missing dependency returns `NOT_FOUND` with:
+
+```text
+partial Offering row     none
+mutation command row     none
+Mongo terminal audit     present
+```
+
+### Audit
+
+Mongo collection:
+
+```text
+services_mutation_audit
+```
+
+records terminal APPLIED/REPLAYED/REJECTED semantic evidence. PostgreSQL remains canonical catalog truth.
+
+## Services migrations
+
+```text
 005_services_engine_contracts.sql
+006_services_management.sql
 ```
+
+`npm run migrate:services` applies both in order.
 
 ## Services certification probes
 
@@ -253,40 +309,69 @@ AttachmentStore remains the shared filesystem laboratory implementation with sta
 npm run probe:services:s1
 npm run probe:services:s2
 npm run probe:services:s3
+npm run probe:services:s4
+npm run probe:services:s4:safety
 ```
 
-Expected success markers:
+Final S4 certification:
 
 ```text
-SERVICES_S1_PERSISTENCE_PASS
-SERVICES_S2_READ_ENGINE_PASS
-SERVICES_S3_RECOMMENDATION_PASS
+Source SHA       f3e54b853af5f01fb2e9ed7d032f784e3cffb81e
+Run              33538554471
+Job              99959020329
+Artifact         9812703293
+Artifact SHA256  275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c
 ```
 
-A probe alone is not the full gate. GitHub Actions also executes strict typecheck, regression tests, clean Compose and inherited Appointment certification.
+## Persistence authority through S4
 
-## Interactive inherited laboratories
+### PostgreSQL
+
+Canonical business truth includes inherited Customer/Appointment tables plus:
+
+```text
+service_catalog
+service_products
+service_requirements
+service_dependencies
+service_eligibility_rules
+service_mutation_commands
+```
+
+### MongoDB
+
+Semantic audit includes:
+
+```text
+execution_audit
+appointment_audit
+services_mutation_audit
+```
+
+MongoDB is not canonical Customer/Appointment/Services truth.
+
+### AttachmentStore
+
+The local laboratory continues using the certified filesystem provider. Binary truth does not move into Services tables.
+
+## Current next gate — S5
+
+S5 must start a consumer Workflow, select revision `N`, wait durably, publish `N+1` through the certified S4 management Workflow, prove the waiting Workflow still exposes and uses `N`, and prove a new Workflow sees `N+1`.
+
+## Stop vs reset
+
+Preserve data/history:
 
 ```bash
-npm run lab:console
-npm run lab:appointment
+docker compose down
 ```
 
-These remain useful regression/manual surfaces but do not independently certify a new Services gate.
+Destructive laboratory reset:
+
+```bash
+docker compose down -v --remove-orphans
+```
 
 ## Scope boundary
 
-S0–S3 do **not** certify:
-
-```text
-Create/Update/Status Services management workflows
-mutation idempotency and optimistic revision conflicts
-running-Workflow snapshot isolation across catalog revisions
-full multi-business material generality gate
-final Appointment-to-G1 Services integration
-Scheduler Engine
-Agent/LLM authority
-production deployment / public exposure
-```
-
-The next executable boundary is S4, not an end-user manual test.
+This runtime is still a Stage-2 local architecture laboratory. S4 does not certify S5 snapshots, S6 generality, S7 final Appointment integration, S8 G1 closure, Scheduler, multi-channel CTA adapters, Agent/Hermes or production deployment.
