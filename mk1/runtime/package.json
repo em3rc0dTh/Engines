@@ -13,6 +13,7 @@
     "test:b7": "tsx --test src/persistence/attachments/*.test.ts",
     "test:lab-console": "tsx --test src/lab-console/*.test.ts",
     "test:appointment": "tsx --test src/contracts/register-new-appointment/*.test.ts",
+    "test:services:s1": "tsx --test src/contracts/services-engine/*.test.ts",
     "infra:up": "docker compose up -d postgres mongo",
     "infra:down": "docker compose down",
     "infra:status": "docker compose ps",
@@ -46,6 +47,8 @@
     "worker:b7:cert": "tsx src/orchestration/temporal/workers/b7-cert.worker.ts",
     "worker:core-release": "tsx src/orchestration/temporal/workers/core-release.worker.ts",
     "migrate:appointment": "tsx scripts/migrate-postgres-appointment.ts",
+    "migrate:services": "tsx scripts/migrate-postgres-services.ts",
+    "probe:services:s1": "tsx scripts/certify-services-s1-persistence.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
