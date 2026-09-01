@@ -48,7 +48,12 @@ export async function servicesManagementWorkflow(
 ): Promise<ServicesMutationOutcome> {
   const workflowId = workflowInfo().workflowId;
   const validation = validationRejection(command);
-  const outcome = validation ?? await management.applyServicesMutation({ workflowId, command });
+  const referenceValidation = validation
+    ? undefined
+    : await management.validateServicesMutationReferences({ command });
+  const outcome = validation
+    ?? referenceValidation
+    ?? await management.applyServicesMutation({ workflowId, command });
 
   await audit.persistServicesMutationAudit({
     workflowId,
