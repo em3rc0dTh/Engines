@@ -1,0 +1,18 @@
+BEGIN;
+
+ALTER TABLE registration_commands
+  DROP CONSTRAINT IF EXISTS registration_commands_status_check;
+
+ALTER TABLE registration_commands
+  ADD CONSTRAINT registration_commands_status_check CHECK (status IN (
+    'RESERVED',
+    'SOFT_DUPLICATE_PENDING_DECISION',
+    'EXISTING_CUSTOMER_PENDING_AUDIT',
+    'CUSTOMER_CREATED_PENDING_AUDIT',
+    'EXISTING_CUSTOMER_AUDITED',
+    'CUSTOMER_CREATED_AUDITED',
+    'COMPLETED_ALREADY_EXISTS',
+    'COMPLETED_CREATED'
+  ));
+
+COMMIT;
