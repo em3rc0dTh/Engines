@@ -22,6 +22,14 @@ import {
   appointmentAuditActivities,
   closeAppointmentAuditActivities,
 } from '../activities/appointment-audit.activities.js';
+import {
+  closeServicesManagementActivities,
+  servicesManagementActivities,
+} from '../activities/services-management.activities.js';
+import {
+  closeServicesAuditActivities,
+  servicesAuditActivities,
+} from '../activities/services-audit.activities.js';
 import { assertMk0TemporalTopology, temporalTopologyFrom } from '../topology.js';
 
 const READY_FILE = process.env.ENGINES_WORKER_READY_FILE ?? '/tmp/engines-mk0-worker-ready';
@@ -44,6 +52,8 @@ async function run(): Promise<void> {
         ...attachmentStoreActivities,
         ...appointmentActivities,
         ...appointmentAuditActivities,
+        ...servicesManagementActivities,
+        ...servicesAuditActivities,
       },
     });
 
@@ -53,6 +63,7 @@ async function run(): Promise<void> {
       namespace: topology.namespace,
       taskQueue: topology.taskQueue,
       attachmentStoreRoot: loadRuntimeConfig().attachmentStoreRoot,
+      servicesManagement: true,
       readyFile: READY_FILE,
       pid: process.pid,
     })}`);
@@ -66,6 +77,8 @@ async function run(): Promise<void> {
       closeAttachmentStoreActivities(),
       closeAppointmentActivities(),
       closeAppointmentAuditActivities(),
+      closeServicesManagementActivities(),
+      closeServicesAuditActivities(),
     ]);
     await connection.close();
   }
