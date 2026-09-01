@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — G1 SERVICES ENGINE / S0–S3 CERTIFIED — S4 NEXT**
+**G0 CLOSED — G1 SERVICES ENGINE / S0–S4 CERTIFIED — S5 NEXT**
 
 MK1 starts from the frozen MK0 architecture laboratory and must not weaken or silently reinterpret any MK0 invariant.
 
@@ -13,7 +13,7 @@ main
 9c0fab032461e889f3d9d297b2d2b375288afda3
 ```
 
-`main` carries the stable MK0 closure. The MK1 line preserves exact ancestry while work remains outside the integration branch until its gates are ready to integrate.
+`main` carries the stable MK0 closure. MK1 work preserves exact ancestry and does not rewrite `mk0/runtime`.
 
 Current Stage-2 lineage:
 
@@ -31,9 +31,9 @@ build/mk1-s1-services-contracts         S1 contracts / persistence
 build/mk1-s2-services-read-engine       S2 deterministic reads
         ↓
 build/mk1-s3-services-eligibility       S3 eligibility / recommendation
+        ↓
+build/mk1-s4-services-management        S4 versioned management
 ```
-
-No MK1 gate is allowed to rewrite the frozen `mk0/runtime` certification specimen.
 
 ## G0 result — foundation boundary
 
@@ -60,28 +60,24 @@ Foundation artifacts:
 
 ## G1 — Services Engine
 
-Canonical documentation baseline:
+Canonical design/execution baseline:
 
 - [`Brainstorming/02-services-engine.md`](Brainstorming/02-services-engine.md)
 - [`mining-site/quarries/quarry-01-mk0-services-seed.md`](mining-site/quarries/quarry-01-mk0-services-seed.md)
 - [`Design/01-services-engine-contract.md`](Design/01-services-engine-contract.md)
 - [`Plan/01-services-engine-gates.md`](Plan/01-services-engine-gates.md)
 - [`golden-dataset/services-engine-v0.json`](golden-dataset/services-engine-v0.json)
-- [`Test/g1-services-engine-s0-s3.md`](Test/g1-services-engine-s0-s3.md)
+- [`Test/g1-services-engine-s0-s4.md`](Test/g1-services-engine-s0-s4.md)
 - [`Build/README.md`](Build/README.md)
 
 ### S0 — executable baseline promotion ✅ CERTIFIED
 
-S0 promoted the exact certified MK0 runtime tree into `mk1/runtime`, along with the frozen fixture/Golden dependencies required by that runtime, then independently reran the inherited certification surface from the MK1 path.
+S0 promoted the exact certified MK0 runtime tree into `mk1/runtime` and reran the inherited certification surface from the MK1 path.
 
 ```text
-S0 source        6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1
-GitHub run       33461008031
+Source SHA       6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1
+Run              33461008031
 Job              99710964036
-Result           SUCCESS
-Runtime tree     82dcec4a61ea28283537a2993d047b3bd444edef
-Fast tests       42 / 42 PASS
-B7 runtime       4 / 4 PASS
 Artifact         9783188036
 Artifact SHA256  69a895416918dfb163be680f55c9a6dae2bda35fa60a6dd5107c93e971045958
 ```
@@ -90,17 +86,12 @@ Receipt: [`Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](Bui
 
 ### S1 — Services contracts + persistence ✅ CERTIFIED
 
-S1 evolved the inherited Service/Product catalog in place rather than creating a parallel truth model. It added lifecycle/revision semantics, a neutral Offering projection, typed pricing, requirements, dependencies and deterministic eligibility-rule persistence while preserving the inherited Appointment path.
+S1 evolved the inherited Service/Product seed into a generic Services contract with lifecycle/revision semantics, neutral Offerings, typed pricing, requirements, dependencies and deterministic eligibility-rule persistence.
 
 ```text
-S1 source        550cdca619856fe246ab569588f9036a7025e7a7
-GitHub run       33461510248
+Source SHA       550cdca619856fe246ab569588f9036a7025e7a7
+Run              33461510248
 Job              99712416091
-Result           SUCCESS
-Services tests   10 / 10 PASS
-Inherited tests  40 / 40 PASS
-Combined         50 / 50 PASS
-Persistence      SERVICES_S1_PERSISTENCE_PASS
 Artifact         9783331341
 Artifact SHA256  7f69bf9d33b2e854d5cc4941b41059dc358437675cf0bbb6d102c29f129b2097
 ```
@@ -109,7 +100,7 @@ Receipt: [`Build/evidence/s1-services-contracts-certification-2026-08-31.md`](Bu
 
 ### S2 — deterministic read engine ✅ CERTIFIED
 
-S2 established business-scoped deterministic reads over the generic Services model:
+Certified operations:
 
 ```text
 ListServices
@@ -118,14 +109,12 @@ ListOfferings
 GetOffering
 ```
 
-Certified behavior includes deterministic ordering, business isolation, active-list filtering, explicit historical lookup, full Offering hydration, revision visibility, Appointment compatibility and a vertical-neutral repository implementation.
+S2 proves deterministic ordering, business isolation, lifecycle-aware listing, historical explicit lookup, complete Offering hydration, revision visibility and Appointment compatibility.
 
 ```text
-S2 source        cec97a2b90a7aee8ae1deb3660bad0d7a759ace6
-GitHub run       33461895218
+Source SHA       cec97a2b90a7aee8ae1deb3660bad0d7a759ace6
+Run              33461895218
 Job              99713587556
-Result           SUCCESS
-Probe            SERVICES_S2_READ_ENGINE_PASS
 Artifact         9783467265
 Artifact SHA256  0b7c0addd1849da87fe03afc93053a5df7c3fddf674f9baf5a78e3400d9a3677
 ```
@@ -134,42 +123,94 @@ Receipt: [`Build/evidence/s2-services-read-engine-certification-2026-08-31.md`](
 
 ### S3 — eligibility + recommendation ✅ CERTIFIED
 
-S3 added a pure deterministic eligibility/recommendation layer over persisted Service Offerings without giving policy authority to an Agent or LLM.
+Certified operations:
 
 ```text
-evaluateOfferingEligibility
-recommendOfferings
+EvaluateOfferingEligibility
+RecommendOfferings
 ```
 
-Certified behavior includes stable ranking, explicit reason codes, fail-closed malformed rules, required-requirement evaluation, `REQUIRES` / `EXCLUDES` dependency evaluation, input-order independence and PostgreSQL-hydrated definitions flowing into the pure evaluator.
+S3 proves deterministic ranking, explicit reason codes, fail-closed malformed rules, requirements/dependencies evaluation and no Agent/LLM policy authority.
 
 ```text
-S3 source        a6974cdbb669b66a07b8780d5e20c960d6a0cd64
-GitHub run       33531884206
+Source SHA       a6974cdbb669b66a07b8780d5e20c960d6a0cd64
+Run              33531884206
 Job              99936776923
-Result           SUCCESS
-Probe            SERVICES_S3_RECOMMENDATION_PASS
 Artifact         9810084527
 Artifact SHA256  fa6a9efaa67309a4255dbce62fe362402ff453643e90f63c82c1457099e9de60
 ```
 
-The earlier run `33531803288` failed strict TypeScript validation because the S3 test helper violated `exactOptionalPropertyTypes`. The helper was corrected without weakening any runtime or domain invariant. The successful run above is the certification authority.
-
 Receipt: [`Build/evidence/s3-services-eligibility-certification-2026-09-01.md`](Build/evidence/s3-services-eligibility-certification-2026-09-01.md)
+
+### S4 — versioned management mutations ✅ CERTIFIED
+
+Certified operations:
+
+```text
+CreateService
+UpdateService
+SetServiceStatus
+CreateOffering
+UpdateOffering
+SetOfferingStatus
+```
+
+S4 introduces a Temporal-managed mutation boundary, PostgreSQL command ledger, business-scoped idempotency, exact replay, material-conflict rejection, optimistic revision control, explicit ACTIVE/INACTIVE lifecycle changes and Mongo semantic audit before terminal Workflow return.
+
+The final hardening run also proves a missing Offering dependency is rejected before mutation with no partial Offering and no mutation-command row, while the rejection remains auditable.
+
+```text
+Source SHA       f3e54b853af5f01fb2e9ed7d032f784e3cffb81e
+Run              33538554471
+Job              99959020329
+Result           SUCCESS
+Artifact         9812703293
+Artifact SHA256  275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c
+```
+
+Receipt: [`Build/evidence/s4-services-management-certification-2026-09-01.md`](Build/evidence/s4-services-management-certification-2026-09-01.md)
 
 ## Current Services boundary
 
-S0–S3 prove the executable baseline, domain/persistence contracts, deterministic reads, and deterministic eligibility/recommendation.
-
-They do **not** yet certify G1 as a finished Services Engine. Still open:
+S0–S4 now prove:
 
 ```text
-S4 — versioned management mutations
-S5 — running-Workflow snapshot semantics
-S6 — multi-business generality
-S7 — Appointment regression integration
-S8 — final clean Compose certification
+certified executable baseline
+Service/Offering contracts + persistence
+deterministic reads
+deterministic eligibility/recommendation
+versioned/idempotent management mutations
+optimistic concurrency protection
+terminal semantic audit
 ```
+
+G1 is **not** complete yet. Still open:
+
+```text
+S5 — running-Workflow durable snapshot semantics
+S6 — multi-business generality
+S7 — Appointment Services integration
+S8 — final clean G1 certification
+```
+
+## Parallel CTA channel design track
+
+A separate design track now frames a future proof across WebChat, Telegram and WhatsApp without mixing channel code into Services S4:
+
+- [`Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md`](Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md)
+- [`Design/02-cta-channel-adapter-contract.md`](Design/02-cta-channel-adapter-contract.md)
+
+Current preferred proof order:
+
+```text
+WebChat local controlled adapter
+→ Telegram polling
+→ Telegram webhook parity
+→ WhatsApp external adapter
+→ frozen cross-channel Golden comparison
+```
+
+These adapters are **not implemented or certified yet**. They must converge on the same canonical CTA/orchestration boundary and must not own business rules.
 
 ## Carry-forward invariants
 
@@ -181,6 +222,8 @@ channel behavior != business authority
 availability shown != reservation persisted
 Agent inference != orchestration authority
 running Workflow snapshot != mutable catalog head
+same idempotency identity + different material != overwrite
+stale revision != silent last-write-wins
 ```
 
 Every new capability must receive a contract, Golden expectation, build gate, executable test evidence and closure receipt before it is called certified.
@@ -194,13 +237,13 @@ G1 — Services Engine
      S1 — contracts + persistence                   ✅ CERTIFIED
      S2 — deterministic read engine                 ✅ CERTIFIED
      S3 — eligibility + recommendation              ✅ CERTIFIED
-     S4 — versioned management mutations            🔧 NEXT
-     S5 — running-Workflow snapshots                ⏭ QUEUED
+     S4 — versioned management mutations            ✅ CERTIFIED
+     S5 — running-Workflow snapshots                🔧 NEXT
      S6 — multi-business generality                 ⏭ QUEUED
      S7 — Appointment integration                    ⏭ QUEUED
      S8 — final clean certification                 ⏭ QUEUED
 G2 — Scheduler Engine                               ⏭ AFTER G1
-G3 — New CTA channel proof (Telegram candidate)     ⏭ AFTER G2
+G3 — WebChat / Telegram / WhatsApp channel proof    ⏭ AFTER ENGINE PREREQUISITES
 ```
 
 The Agent/Intelligence layer remains deliberately outside this phase until the platform works correctly without it.
