@@ -7,6 +7,7 @@ on:
       - build/mk1-s0-runtime-promotion
     paths:
       - 'mk1/runtime/**'
+      - 'mk1/golden-dataset/fixtures/**'
       - '.github/workflows/mk1-s0-runtime-promotion.yml'
 
 permissions:
@@ -40,7 +41,9 @@ jobs:
         working-directory: .
         run: |
           test "$(git rev-parse HEAD:mk0/runtime)" = "$(git rev-parse HEAD:mk1/runtime)"
+          test "$(git rev-parse HEAD:mk0/golden-dataset/fixtures)" = "$(git rev-parse HEAD:mk1/golden-dataset/fixtures)"
           echo "MK1_RUNTIME_TREE_IDENTITY_PASS $(git rev-parse HEAD:mk1/runtime)"
+          echo "MK1_FIXTURE_TREE_IDENTITY_PASS $(git rev-parse HEAD:mk1/golden-dataset/fixtures)"
 
       - name: Install locked dependencies
         run: npm ci
@@ -106,6 +109,8 @@ jobs:
           git rev-parse HEAD > /tmp/mk1-s0/git-sha.txt
           git rev-parse HEAD:mk0/runtime > /tmp/mk1-s0/mk0-runtime-tree.txt
           git rev-parse HEAD:mk1/runtime > /tmp/mk1-s0/mk1-runtime-tree.txt
+          git rev-parse HEAD:mk0/golden-dataset/fixtures > /tmp/mk1-s0/mk0-fixture-tree.txt
+          git rev-parse HEAD:mk1/golden-dataset/fixtures > /tmp/mk1-s0/mk1-fixture-tree.txt
           cd mk1/runtime
           docker compose ps -a > /tmp/mk1-s0/compose-ps.txt || true
           docker compose logs worker > /tmp/mk1-s0/worker.log 2>&1 || true
