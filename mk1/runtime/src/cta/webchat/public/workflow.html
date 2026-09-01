@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Engines Workflow Inspector</title>
+  <link rel="stylesheet" href="/webchat/styles.css" />
+</head>
+<body>
+  <main class="inspector">
+    <header class="topbar card">
+      <div>
+        <p class="eyebrow">ENGINES · TEMPORAL WORKFLOW INSPECTOR</p>
+        <h1>Register New Appointment</h1>
+      </div>
+      <div class="status-pill" id="connectionStatus">waiting…</div>
+    </header>
+
+    <div class="inspector-grid" style="margin-top:18px">
+      <section class="card">
+        <div class="panel-heading" style="padding:0 0 16px;border-bottom:0">
+          <p class="eyebrow">DURABLE EXECUTION</p>
+          <h2>Current state</h2>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item"><span>Workflow ID</span><strong id="workflowId">—</strong></div>
+          <div class="meta-item"><span>Run ID</span><strong id="runId">—</strong></div>
+          <div class="meta-item"><span>Status</span><strong id="workflowStatus">—</strong></div>
+          <div class="meta-item"><span>Temporal phase</span><strong id="phase">—</strong></div>
+          <div class="meta-item"><span>Next action</span><strong id="nextAction">—</strong></div>
+          <div class="meta-item"><span>Last refresh</span><strong id="lastRefresh">—</strong></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <a class="secondary" id="chatLink" href="/webchat/">Back to WebChat</a>
+          <button id="refreshButton">Refresh now</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="panel-heading" style="padding:0 0 16px;border-bottom:0">
+          <p class="eyebrow">LIVE WORKFLOW MAP</p>
+          <h2>Every step</h2>
+        </div>
+        <ol id="steps" class="steps" style="padding:0"></ol>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">BUSINESS PROJECTION</p>
+        <pre id="businessState">No state.</pre>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">RAW WORKFLOW RESPONSE</p>
+        <pre id="rawState">No state.</pre>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/webchat/workflow.js"></script>
+</body>
+</html>
