@@ -1,0 +1,89 @@
+{
+  "artifact": "g0_foundation_closure_manifest",
+  "version": "0.1.0",
+  "date": "2026-08-31",
+  "timezone": "America/Lima",
+  "scope": "Evidence classification only; no new runtime execution",
+  "canonicalBase": {
+    "branch": "main",
+    "sha": "9c0fab032461e889f3d9d297b2d2b375288afda3",
+    "mk0ReleaseSha": "ae6588b63ede87d36a32b51363dfe96585c9b0df"
+  },
+  "expectations": [
+    {
+      "id": "G0-001",
+      "claim": "CTA architecture core is certified",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-002",
+      "claim": "Full omnichannel implementation is complete",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-003",
+      "claim": "Temporal durable orchestration core is certified",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-004",
+      "claim": "RegisterNewCustomer and RegisterNewAppointment are certified Workflow Library entries",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-005",
+      "claim": "Natural-language intent classification is certified",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-006",
+      "claim": "RescheduleAppointment is certified",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-007",
+      "claim": "CancelAppointment is certified",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-008",
+      "claim": "Service Recommendation is independently certified",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-009",
+      "claim": "PostgreSQL canonical business authority is certified for MK0 entities/invariants",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-010",
+      "claim": "MongoDB semantic audit authority is certified for MK0 workflows",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-011",
+      "claim": "Local AttachmentStore integrity/lifecycle boundary is certified",
+      "expected": "CERTIFIED"
+    },
+    {
+      "id": "G0-012",
+      "claim": "S3/MinIO production object storage is certified",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-013",
+      "claim": "Service/Product catalog reads are proven at specimen scale",
+      "expected": "PROVEN_PARTIAL"
+    },
+    {
+      "id": "G0-014",
+      "claim": "Scheduler semantics are final",
+      "expected": "FALSE"
+    },
+    {
+      "id": "G0-015",
+      "claim": "Blocks 1/2/6 are safe to freeze as architectural foundations while future breadth remains incremental",
+      "expected": "TRUE"
+    }
+  ]
+}
