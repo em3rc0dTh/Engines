@@ -2,13 +2,26 @@
 
 ## Status
 
-**DESIGN / PLAN ONLY — WEBCHAT FIRST, TELEGRAM SECOND — NO AGENT, NO MCP**
+**WEBCHAT FIRST / TELEGRAM SECOND — NO AGENT / NO MCP**
 
-This track extends the certified CLI-style CTA → Temporal interaction into additional channels without introducing an Intelligence Layer.
+The channel track extends the already-proven CLI-style CTA → Temporal interaction into additional transports. It does not introduce an Intelligence Layer.
+
+Current bounded result:
+
+```text
+C0A Workflow-view projection             ✅ CERTIFIED
+C1A Workflow-visible HTML WebChat         ✅ CERTIFIED
+C1B Durable channel semantics             🔧 NEXT CHANNEL HARDENING
+C2  Telegram bot                          ⏭ AFTER C1B
+C3  Telegram webhook parity               ⏭ OPTIONAL FOLLOW-UP
+C4  WhatsApp                              ⏭ LATER
+```
+
+C1A receipt: [`../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`](../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md)
 
 ## Phase boundary
 
-The following are forbidden in G3 C0–C2:
+Forbidden in the current WebChat/Telegram track:
 
 ```text
 Agent
@@ -23,8 +36,6 @@ The same explicit operation and Temporal Workflow model used by the CLI remains 
 
 ## Goal
 
-Prove that materially different transports can drive one canonical Engines orchestration surface with equivalent business semantics.
-
 ```text
 CLI
 WebChat
@@ -32,7 +43,10 @@ Telegram
 later WhatsApp
    │
    ▼
-canonical CTA boundary
+Channel Adapter / CTA transport boundary
+   │
+   ▼
+canonical explicit operation
    │
    ▼
 Temporal
@@ -41,146 +55,214 @@ Temporal
 same Workflow Library
 ```
 
-The channel adapter owns normalization and rendering only.
+Channel adapters own transport normalization and rendering. Provider distinctions do not become business Workflow branches.
 
-## C0 — Canonical adapter contract freeze
+## C0 — canonical channel foundation
 
-Freeze before WebChat runtime:
+C0 is intentionally separated into the parts already proven and the transport-durability work still open.
 
-- `ChannelAdapter` interface;
-- adapter registry/binding model;
-- `CanonicalChannelEnvelope`;
-- `CanonicalChannelResponse`;
-- durable conversation binding;
-- durable inbound event identity/dedupe;
-- attachment staging contract;
-- trusted business routing;
-- transport conflict semantics;
-- secret/redaction rules.
+### C0A — provider-independent Workflow view ✅ CERTIFIED
 
-Required contract evidence:
+Implemented in:
 
 ```text
-same inbound event identity + same material
-→ one canonical effect
-
-same inbound event identity + different material
-→ conflict / zero Workflow mutation
-
-adapter choice
-→ composition through registry/binding
-→ no provider-specific business Workflow
+src/cta/channel-core/appointment-workflow-view.ts
 ```
 
-## C1 — WebChat controlled PoC
+It converts the durable `AppointmentStateProjection` into a human-readable execution view while preserving the real Temporal `phase` and `nextAction`.
 
-WebChat is the first runtime channel proof.
-
-Keep it intentionally simple:
+Visible checkpoints:
 
 ```text
-index.html
-styles.css
-app.js
+01 Start Workflow
+02 Customer name
+03 Customer email
+04 Customer phone
+05 Resolve Customer
+06 Select Service
+07 Select Offering / Product
+08 Set Date
+09 Load Available Slots
+10 Select Slot
+11 Finalize Appointment
+12 Appointment Created
 ```
 
-No framework is required for the first proof.
+The Customer data rows are presentation checkpoints derived from the durable draft; they are not synthetic Temporal phases.
 
-Target path:
+C0A is provider-independent and is intended to be reused by WebChat, Telegram, and later renderers.
+
+### C0B — canonical transport durability 🔧 OPEN
+
+Before a channel is considered fully hardened, freeze and implement:
+
+```text
+CanonicalChannelEnvelope
+CanonicalChannelResponse
+ChannelAdapter interface / registry
+server-side ChannelConversationBinding
+server-side ChannelInboundEvent identity/fingerprint
+same-event replay semantics
+same-identity/different-material conflict semantics
+trusted business routing
+attachment staging contract
+secret/redaction policy
+```
+
+Likely PostgreSQL operational authority:
+
+```text
+channel_conversation_bindings
+channel_inbound_events
+```
+
+Mongo may retain semantic/transport evidence but must not be the sole active-binding authority.
+
+## C1 — WebChat
+
+### C1A — workflow-visible WebChat ✅ CERTIFIED
+
+Branch:
+
+```text
+build/mk1-c0-c1-webchat
+```
+
+Implemented surface:
+
+```text
+/webchat/
+  minimal HTML/CSS/JS conversational UI
+
+/webchat/workflow.html?workflowId=<id>
+  separate live Workflow inspector
+```
+
+Runtime path:
 
 ```text
 Browser
-→ WebChatAdapter
-→ CanonicalChannelEnvelope
-→ CTA orchestration port
+→ minimal WebChat transport server
+→ existing canonical CTA HTTP surface
 → Temporal
-→ existing durable Workflow
-→ CanonicalChannelResponse
-→ browser renderer
+→ RegisterNewAppointment
 ```
+
+C1A proves:
+
+```text
+real Workflow start from WebChat transport
+multi-turn Customer capture
+Customer resolution
+Service selection
+Offering selection
+human date input
+slot selection
+explicit finalization
+CREATED terminal result
+real phase + nextAction always projected
+all 12 visible execution steps reach COMPLETE
+no Agent
+no MCP
+```
+
+Certification:
+
+```text
+Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
+Run              33542468975
+Job              99971830150
+Artifact         9814172765
+Artifact SHA256  a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3
+Marker           WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
+```
+
+C1A is now suitable for manual visual testing.
+
+### C1B — durable WebChat channel semantics 🔧 OPEN
+
+C1 is not fully closed until the transport itself proves restart-safe correlation and delivery idempotency.
 
 Required proof:
 
-- start one real Workflow from the HTML chat;
-- continue that same Workflow through multiple turns;
-- browser refresh does not erase durable Workflow state;
-- adapter process restart does not lose conversation correlation;
-- duplicate browser submission does not duplicate a Workflow/business effect;
-- buttons/choices map to canonical Updates;
-- browser contains no duplicate business phase engine;
-- at least one terminal result is traceable through Temporal and persistence evidence.
+```text
+server-side durable conversation binding
+browser refresh/reconnect using server-side binding
+adapter process restart without losing Workflow correlation
+duplicate browser event same material -> one canonical effect
+duplicate identity different material -> transport conflict
+no second Temporal Update/business effect
+transport evidence ledger
+```
 
-Polling or SSE is sufficient. WebSockets are optional.
+The current C1A browser can resume a known `workflowId` via URL/local browser storage. That is useful for the visual PoC but is not sufficient evidence for C1B.
 
 ## C2 — Telegram Bot PoC
 
-Telegram is the second runtime channel proof and must reuse C0 unchanged.
+Telegram is the second runtime channel proof and must reuse the provider-independent C0 contracts.
 
-Initial transport:
+Initial ingress:
 
 ```text
-Telegram Bot API
-→ long polling
+Telegram Bot API long polling
 → TelegramAdapter
-→ CanonicalChannelEnvelope
-→ same CTA orchestration port
-→ same Temporal Workflow family
+→ canonical CTA operation
+→ Temporal
+→ same Workflow family
 ```
 
 Required proof:
 
-- durable `update_id`/message dedupe;
-- chat/conversation → Workflow binding;
-- text normalization;
-- callback/button normalization;
-- bot process restart/recovery;
-- same canonical interaction already proven with WebChat;
-- no Services/Scheduler/Workflow provider-specific branch;
-- one media path only when the chosen scenario needs AttachmentStore evidence.
+```text
+durable update/message identity dedupe
+chat/conversation -> Workflow binding
+text normalization
+callback/button normalization
+bot process restart/recovery
+same Appointment interaction semantics already proven in WebChat
+same provider-independent Workflow view for engineering observation
+no provider-specific business Workflow branch
+```
+
+A Telegram conversation should be observable from the same HTML Workflow inspector by `workflowId`; the inspector follows the Temporal Workflow, not the provider.
 
 ## C3 — Telegram webhook parity
 
-This is optional after C2, not a prerequisite for proving Telegram conversation semantics.
-
-Change only ingress delivery:
+Optional after C2. Replace ingress delivery only:
 
 ```text
-long polling
-→ webhook
+long polling -> webhook
 ```
 
-Required result:
+Required invariant:
 
 ```text
-same TelegramAdapter canonical output
+same Telegram adapter canonical output
 same CTA core
 same Temporal Workflow
 same business result
 ```
 
-No Workflow or business-engine rewrite is permitted for the transport switch.
+No Services, Scheduler, Customer, or Workflow rewrite is permitted for the ingress switch.
 
 ## C4 — WhatsApp later
 
-WhatsApp is explicitly deferred until WebChat and Telegram prove the canonical contract.
-
-The provider/transport mechanism is **not selected in this plan yet**. We do not assume a paid provider or a specific official API during C0–C2.
+WhatsApp remains deferred. No paid-provider or specific API assumption is frozen during C0–C2.
 
 Future requirement:
 
 ```text
 chosen WhatsApp transport
-→ WhatsAppAdapter
-→ same CanonicalChannelEnvelope
+→ adapter conforming to the same canonical contract
 → same CTA core
 → same Temporal Workflow Library
 ```
 
-Provider mechanics belong to the adapter. They cannot redefine Customer, Services, Scheduler or Workflow semantics.
+Provider mechanics remain adapter concerns.
 
-## C5 — Cross-channel Golden proof
+## C5 — cross-channel Golden proof
 
-Once the required engines exist, freeze one scenario and replay equivalent canonical interaction through:
+Once the relevant engine semantics exist, freeze one scenario and execute equivalent canonical interaction through:
 
 ```text
 CLI
@@ -189,7 +271,7 @@ Telegram
 future WhatsApp
 ```
 
-Candidate end-state scenario:
+Candidate end-state:
 
 ```text
 RegisterNewAppointment
@@ -202,78 +284,55 @@ RegisterNewAppointment
 → Appointment persisted
 ```
 
-Compare evidence:
+Compare:
 
 ```text
 Temporal Workflow state/history
 PostgreSQL business truth
 Mongo semantic audit
-AttachmentStore references when applicable
+AttachmentStore refs when applicable
 channel correlation/dedupe ledger
 ```
 
-The verdict is based on business-semantic equivalence, not visual similarity.
+The verdict is based on equivalent business semantics, not equivalent screenshots.
 
-## Implementation rule — no provider condition chains
+## Composition rule
 
-The channel architecture must be composition-based:
-
-```text
-ChannelAdapterRegistry
-  WEBCHAT  -> WebChatAdapter
-  TELEGRAM -> TelegramAdapter
-  WHATSAPP -> future adapter
-```
-
-The CTA core consumes the adapter interface and canonical contracts. Provider-specific switching does not enter Services, Scheduler, Customer logic or Workflow phase definitions.
-
-## Persistence model to design in C0
-
-Likely canonical operational tables:
+Provider adapters are implementations behind one stable boundary. Provider-specific normalization/rendering stops before business orchestration.
 
 ```text
-channel_conversation_bindings
-channel_inbound_events
+WebChatAdapter  ─┐
+TelegramAdapter ─┼─> ChannelAdapter contract -> CTA core -> Temporal
+Future adapter  ─┘
 ```
 
-They must provide:
-
-```text
-business scope
-channel identity
-external conversation identity
-Workflow binding
-normalized event fingerprint
-idempotency/replay state
-created/updated timestamps
-```
-
-PostgreSQL is the preferred authority candidate because active correlation requires uniqueness and restart safety. Mongo may retain semantic/transport evidence.
+Services, Scheduler, Customer logic, and Workflow phase definitions remain unaware of provider mechanics.
 
 ## Stop conditions
 
-Stop and redesign when any of these appear:
+Stop and redesign when:
 
-- WebChat or Telegram requires a separate business Workflow implementation;
-- adapter code writes Customer/Services/Scheduler/Appointment rows directly;
-- browser or bot process memory is the only conversation authority;
-- duplicate inbound transport event can cause a second business effect;
-- provider-specific values become Services/Scheduler policy inputs merely because of the transport;
-- WebChat frontend reconstructs a second durable state machine;
-- Agent, MCP or LLM routing is introduced into C0–C2.
+- a new channel requires a separate business Workflow implementation;
+- an adapter writes Customer/Services/Scheduler/Appointment rows directly;
+- browser or bot process memory is the only conversation authority after C1B;
+- a duplicate inbound event can create a second business effect;
+- provider metadata leaks into business policy merely because of the transport;
+- the frontend becomes a second durable Workflow state machine;
+- Agent, MCP, or LLM routing appears in the WebChat/Telegram phase.
 
 ## Execution sequence
 
 ```text
-G1 Services certification work continues independently
+G1 Services work continues on its own certification line.
 
-G3 channel proof:
-  C0 canonical adapter contract
-  C1 minimal HTML WebChat
-  C2 Telegram bot / long polling
-  C3 Telegram webhook parity (optional follow-up)
-  C4 WhatsApp later
-  C5 cross-channel Golden certification later
+G3 channel line:
+  C0A provider-independent Workflow view       ✅
+  C1A minimal workflow-visible WebChat          ✅
+  C0B/C1B durable correlation + event dedupe    🔧
+  C2 Telegram bot / long polling                ⏭
+  C3 Telegram webhook parity                    ⏭ optional
+  C4 WhatsApp                                   ⏭ later
+  C5 cross-channel Golden                       ⏭ later
 ```
 
-S4 and S5 certification evidence remain documented under the Services build ledger; channel work receives dedicated branches and evidence rather than being mixed into those source gates.
+S4/S5 Services evidence remains separate and frozen; channel work has its own branch, tests, artifacts, and receipts.
