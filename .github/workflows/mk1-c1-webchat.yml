@@ -1,0 +1,124 @@
+name: mk1 C1 WebChat workflow visibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/mk1-c0-c1-webchat
+    paths:
+      - 'mk1/runtime/**'
+      - 'mk1/Design/03-workflow-visibility-contract.md'
+      - '.github/workflows/mk1-c1-webchat.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-c1-webchat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-webchat-c1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Certify C0 workflow visibility projection
+        run: npm run test:channel:c0
+
+      - name: Frozen CTA and Appointment regressions
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:appointment
+
+      - name: Start clean Temporal laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for canonical CTA
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Start minimal WebChat adapter server
+        run: |
+          nohup npm run webchat:server > /tmp/webchat.log 2>&1 &
+          echo $! > /tmp/webchat.pid
+
+      - name: Wait for WebChat
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8790/health >/dev/null \
+              && curl -fsS http://127.0.0.1:8790/webchat/ | grep -q 'CTA WEBCHAT POC' \
+              && curl -fsS http://127.0.0.1:8790/webchat/workflow.html | grep -q 'TEMPORAL WORKFLOW INSPECTOR'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/webchat.log || true
+          exit 1
+
+      - name: Execute full Appointment through WebChat transport
+        run: npm run probe:webchat:c1 | tee /tmp/webchat-c1-proof.txt
+        env:
+          ENGINES_WEBCHAT_URL: http://127.0.0.1:8790
+
+      - name: Capture C1 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/mk1-c1
+          git rev-parse HEAD > /tmp/mk1-c1/git-sha.txt
+          cp /tmp/webchat.log /tmp/mk1-c1/webchat.log 2>/dev/null || true
+          cp /tmp/webchat-c1-proof.txt /tmp/mk1-c1/webchat-c1-proof.txt 2>/dev/null || true
+          curl -fsS http://127.0.0.1:8790/health > /tmp/mk1-c1/webchat-health.json 2>/dev/null || true
+          curl -fsS http://127.0.0.1:8787/health > /tmp/mk1-c1/cta-health.json 2>/dev/null || true
+          cd mk1/runtime
+          docker compose ps -a > /tmp/mk1-c1/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk1-c1/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk1-c1/cta.log 2>&1 || true
+
+      - name: Upload C1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-c1-webchat-${{ github.run_id }}
+          path: /tmp/mk1-c1
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/webchat.pid ]; then kill $(cat /tmp/webchat.pid) 2>/dev/null || true; fi
+          docker compose down -v --remove-orphans || true
