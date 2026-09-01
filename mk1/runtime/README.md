@@ -1,6 +1,6 @@
 # MK1 Runtime
 
-Executable Stage-2 laboratory for Engines. S0 promoted the exact certified MK0 runtime tree into this directory; subsequent gates evolve `mk1/runtime` without modifying the frozen `mk0/runtime` evidence base.
+Executable Stage-2 laboratory for Engines. S0 promoted the exact certified MK0 runtime tree into this directory; later gates evolve `mk1/runtime` without rewriting the frozen `mk0/runtime` evidence base.
 
 ## Current status
 
@@ -9,21 +9,28 @@ Inherited MK0 runtime             ✅ certified baseline
 RegisterNewCustomer               ✅ regression protected
 AttachmentStore/B7                ✅ regression protected
 RegisterNewAppointment            ✅ regression protected
-Services S1 contracts/persistence ✅ certified
+Services S1 contracts             ✅ certified
 Services S2 deterministic reads   ✅ certified
 Services S3 recommendation        ✅ certified
 Services S4 management mutations  ✅ certified
-Services S5 durable snapshots     🔧 next
-G1 Services Engine                ❌ not yet fully certified
+Services S5 durable snapshots     ✅ certified
+WebChat C0A workflow view         ✅ certified
+WebChat C1A visible E2E flow      ✅ certified
+Services S6                       🔧 next Services gate
+WebChat C1B durable binding       🔧 next channel hardening
 Scheduler Engine                  ❌ not certified
+Telegram                          ❌ not implemented yet
+Agent / MCP                       ❌ intentionally absent
 Production deployment             ❌ not certified
 ```
 
-Canonical MK1 status: [`../README.md`](../README.md)
+Canonical status: [`../README.md`](../README.md)
 
-Services gate plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
+Services plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
 
-Test/evidence ledger: [`../Test/g1-services-engine-s0-s4.md`](../Test/g1-services-engine-s0-s4.md)
+Channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
+
+Workflow visibility contract: [`../Design/03-workflow-visibility-contract.md`](../Design/03-workflow-visibility-contract.md)
 
 ## Runtime profile
 
@@ -37,47 +44,12 @@ Task Queue         engines-mk0-registration
 PostgreSQL         17.8
 MongoDB            8.0.29
 CTA HTTP           127.0.0.1:8787
+WebChat PoC        127.0.0.1:8790
 Temporal gRPC      localhost:7233
 Temporal UI        localhost:8233
 ```
 
-The inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming those identifiers is a separate compatibility decision and is not required for G1 correctness.
-
-## Runtime structure
-
-```text
-src/
-├── contracts/
-│   ├── register-new-customer/
-│   ├── register-new-appointment/
-│   └── services-engine/
-│       ├── types.ts
-│       ├── validation.ts
-│       └── management.ts
-├── services/
-│   ├── appointment-catalog.compat.ts
-│   └── eligibility-engine.ts
-├── cta/
-├── lab-console/
-├── observability/
-├── orchestration/temporal/
-│   ├── activities/
-│   ├── clients/
-│   ├── workers/
-│   └── workflows/
-└── persistence/
-    ├── attachments/
-    ├── mongo/
-    │   └── services-audit.repository.ts
-    └── postgres/
-        ├── services.repository.ts
-        ├── services-management.repository.ts
-        └── services-management-preflight.repository.ts
-
-migrations/
-scripts/
-postman/
-```
+Inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming is a separate compatibility decision.
 
 ## Install and typecheck
 
@@ -87,7 +59,7 @@ npm ci
 npm run check
 ```
 
-Inherited regression surface:
+Inherited regression:
 
 ```bash
 npm run test:b1
@@ -97,7 +69,7 @@ npm run test:lab-console
 npm run test:appointment
 ```
 
-Services surface:
+Services regression:
 
 ```bash
 npm run test:services:s1
@@ -106,7 +78,13 @@ npm run test:services:s3
 npm run test:services:s4
 ```
 
-## Start the local laboratory
+Channel/view regression:
+
+```bash
+npm run test:channel:c0
+```
+
+## Start the local Temporal laboratory
 
 ```bash
 docker compose up --build -d
@@ -114,14 +92,14 @@ docker compose ps
 curl -fsS http://127.0.0.1:8787/health
 ```
 
-For a deliberately clean/destructive certification run:
+For a destructive clean certification run:
 
 ```bash
 docker compose down -v --remove-orphans
 docker compose up --build -d
 ```
 
-Compose dependency chain remains:
+Compose dependency chain:
 
 ```text
 PostgreSQL + MongoDB
@@ -135,228 +113,203 @@ PostgreSQL + MongoDB
         CTA
 ```
 
-The inherited CTA currently advertises the certified operational Customer and Appointment workflows. Services management is certified through direct Temporal execution in the S4 laboratory; a public/admin HTTP management surface has deliberately not been added merely to prove S4.
+## WebChat C1A — minimal visual proof
 
-## Services domain through S4
+No framework is required. The C1A server serves static HTML/CSS/JS and forwards explicit Appointment operations to the already-existing CTA HTTP boundary.
 
-Canonical entities:
-
-```text
-ServiceDefinition
-  serviceId / businessSlug
-  code / name / description
-  status ACTIVE | INACTIVE
-  revision
-  tags
-
-ServiceOffering
-  offeringId / serviceId / businessSlug
-  code / name / description
-  status / revision
-  durationMinutes
-  pricing
-  priority / tags
-  requirements
-  dependencies
-  eligibilityRuleSet
-```
-
-Pricing kinds:
-
-```text
-FREE
-FIXED
-FROM
-QUOTE_REQUIRED
-```
-
-Eligibility operators:
-
-```text
-EXISTS
-EQ
-IN
-GTE
-LTE
-```
-
-The current rule-set mode remains deterministic `ALL`; arbitrary JavaScript/SQL is not an eligibility rule format.
-
-## S2 — deterministic reads
-
-PostgreSQL-backed operations:
-
-```text
-ListServices
-GetService
-ListOfferings
-GetOffering
-```
-
-List operations are deterministic and lifecycle-aware; explicit identity lookups remain business-scoped and can hydrate historical inactive definitions. Offering projections include pricing, requirements, dependencies and eligibility data.
-
-## S3 — deterministic eligibility/recommendation
-
-Pure Services functions:
-
-```text
-evaluateOfferingEligibility
-recommendOfferings
-```
-
-Recommendation is independent of input ordering and ranks by:
-
-```text
-priority DESC
-name ASC
-offeringId ASC
-```
-
-Malformed rules fail closed and no Agent/LLM is part of the decision authority.
-
-## S4 — versioned management
-
-Temporal Workflow:
-
-```text
-servicesManagementWorkflow
-```
-
-Certified commands:
-
-```text
-CreateService
-UpdateService
-SetServiceStatus
-CreateOffering
-UpdateOffering
-SetOfferingStatus
-```
-
-Execution boundary:
-
-```text
-command
-  ↓
-Workflow deterministic validation
-  ↓
-reference-preflight Activity
-  ↓
-PostgreSQL mutation Activity
-  ↓
-service_mutation_commands
-+ canonical Service/Offering rows
-  ↓
-Mongo services_mutation_audit Activity
-  ↓
-terminal outcome
-```
-
-### Idempotency
-
-`service_mutation_commands` stores a business-scoped command identity and material fingerprint. Semantics:
-
-```text
-same operation + business + idempotency key + same material
-→ REPLAYED
-→ no second business effect
-
-same logical identity + different material
-→ IDEMPOTENCY_CONFLICT
-→ no overwrite
-```
-
-### Revision control
-
-Versioned updates require `expectedRevision`. Successful update/status commands increment the revision. A stale expected revision returns `REVISION_CONFLICT` instead of last-write-wins.
-
-### Lifecycle
-
-Services and Offerings move through explicit `ACTIVE` / `INACTIVE` state. S4 does not implement destructive delete as lifecycle behavior.
-
-### Reference safety
-
-Create/Update Offering dependency targets are preflighted inside the same business scope before mutation. The S4 safety probe proves a missing dependency returns `NOT_FOUND` with:
-
-```text
-partial Offering row     none
-mutation command row     none
-Mongo terminal audit     present
-```
-
-### Audit
-
-Mongo collection:
-
-```text
-services_mutation_audit
-```
-
-records terminal APPLIED/REPLAYED/REJECTED semantic evidence. PostgreSQL remains canonical catalog truth.
-
-## Services migrations
-
-```text
-005_services_engine_contracts.sql
-006_services_management.sql
-```
-
-`npm run migrate:services` applies both in order.
-
-## Services certification probes
+Start it after the Compose laboratory is healthy:
 
 ```bash
-npm run probe:services:s1
-npm run probe:services:s2
-npm run probe:services:s3
-npm run probe:services:s4
-npm run probe:services:s4:safety
+npm run webchat:server
 ```
 
-Final S4 certification:
+Open:
+
+```text
+http://127.0.0.1:8790/webchat/
+```
+
+The chat page shows continuously:
+
+```text
+workflowId
+workflowStatus
+Temporal phase
+nextAction
+human-readable workflow steps
+raw durable state
+```
+
+From the active chat, open the separate inspector or use:
+
+```text
+http://127.0.0.1:8790/webchat/workflow.html?workflowId=<workflowId>
+```
+
+The inspector shows:
+
+```text
+Workflow ID
+Run ID
+Workflow status
+Temporal phase
+next action
+last refresh
+all visible steps
+Customer projection
+selected Service
+selected Offering/Product
+Appointment date
+available slots
+selected slot
+issues
+terminal result
+raw Workflow response
+```
+
+Both pages poll the same real durable Workflow state. The browser does not own a parallel phase machine.
+
+## Visible Appointment execution map
+
+The provider-independent CTA view projects the current durable Appointment state into:
+
+```text
+01 Start Workflow
+02 Customer name
+03 Customer email
+04 Customer phone
+05 Resolve Customer
+06 Select Service
+07 Select Offering / Product
+08 Set Date
+09 Load Available Slots
+10 Select Slot
+11 Finalize Appointment
+12 Appointment Created
+```
+
+The current `RegisterNewAppointment` domain contract has one Customer `name` field plus contact email/phones. The UI does not fabricate a separate surname domain field.
+
+Customer name/email/phone rows are human data-capture checkpoints, not new Temporal phases. The actual phase remains one of the canonical Appointment phases and is always displayed separately.
+
+## WebChat execution boundary
+
+```text
+HTML WebChat
+   ↓
+WebChat transport server
+   ↓
+existing CTA HTTP routes
+   ↓
+Temporal
+   ↓
+RegisterNewAppointment
+```
+
+Explicitly absent:
+
+```text
+Agent
+MCP
+LLM orchestration
+semantic intent router
+AI tool selection
+```
+
+The interaction is deterministic like the CLI: the UI renders legal choices and submits explicit Workflow updates.
+
+## WebChat certification probe
+
+```bash
+npm run probe:webchat:c1
+```
+
+The successful certification executed the full path through the WebChat transport:
+
+```text
+Start
+→ Customer name
+→ Customer email
+→ Customer phone
+→ Resolve Customer
+→ Service
+→ Offering
+→ Date
+→ Slots
+→ Slot
+→ Finalize
+→ CREATED
+```
+
+Final C1A authority:
+
+```text
+Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
+Run              33542468975
+Job              99971830150
+Artifact         9814172765
+Artifact SHA256  a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3
+Marker           WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
+```
+
+All twelve visible steps reached `COMPLETE`, final phase was `CREATED`, and the health/proof surface reported `agent=false` and `mcp=false`.
+
+Receipt: [`../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`](../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md)
+
+## C1A versus C1B
+
+C1A is ready for visual/manual testing, but it is not the complete durable channel gate.
+
+Current C1A resume behavior can use a known `workflowId` from URL/local browser storage. This is not canonical server-side transport correlation.
+
+C1B still must add and certify:
+
+```text
+server-side durable ChannelConversationBinding
+server-side ChannelInboundEvent identity/fingerprint
+same-event replay protection
+same-identity/different-material conflict
+adapter-process restart/recovery
+duplicate browser-submit transport semantics
+```
+
+These belong to the CTA/channel boundary, not to Customer/Services/Scheduler business logic.
+
+## Services through S5
+
+Services currently include generic Service/Offering contracts, deterministic read/recommendation, Temporal-managed versioned mutation commands, PostgreSQL canonical truth, Mongo semantic audit, optimistic revision control, and durable revision-specific Workflow snapshots.
+
+S4 final certification:
 
 ```text
 Source SHA       f3e54b853af5f01fb2e9ed7d032f784e3cffb81e
 Run              33538554471
-Job              99959020329
 Artifact         9812703293
-Artifact SHA256  275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c
 ```
 
-## Persistence authority through S4
+S5 final certification:
+
+```text
+Source SHA       7568618062f4192b34caf6e916b58534f304ad3f
+Run              33539683548
+Artifact         9813129778
+```
+
+S5 proved a Workflow kept revision `N` while S4 published `N+1`, survived Worker restart, completed using `N`, and a new Workflow observed `N+1`.
+
+## Persistence authority
 
 ### PostgreSQL
 
-Canonical business truth includes inherited Customer/Appointment tables plus:
-
-```text
-service_catalog
-service_products
-service_requirements
-service_dependencies
-service_eligibility_rules
-service_mutation_commands
-```
+Canonical business truth includes inherited Customer/Appointment data plus Services catalog and management command truth.
 
 ### MongoDB
 
-Semantic audit includes:
-
-```text
-execution_audit
-appointment_audit
-services_mutation_audit
-```
-
-MongoDB is not canonical Customer/Appointment/Services truth.
+Semantic audit contains inherited execution/appointment evidence plus Services mutation audit. Mongo is not canonical Customer/Appointment/Services truth.
 
 ### AttachmentStore
 
-The local laboratory continues using the certified filesystem provider. Binary truth does not move into Services tables.
-
-## Current next gate — S5
-
-S5 must start a consumer Workflow, select revision `N`, wait durably, publish `N+1` through the certified S4 management Workflow, prove the waiting Workflow still exposes and uses `N`, and prove a new Workflow sees `N+1`.
+Local laboratory filesystem provider remains the certified binary boundary. Channel binary/media work must converge on this boundary rather than place blobs into business tables.
 
 ## Stop vs reset
 
@@ -374,4 +327,4 @@ docker compose down -v --remove-orphans
 
 ## Scope boundary
 
-This runtime is still a Stage-2 local architecture laboratory. S4 does not certify S5 snapshots, S6 generality, S7 final Appointment integration, S8 G1 closure, Scheduler, multi-channel CTA adapters, Agent/Hermes or production deployment.
+This remains a Stage-2 architecture laboratory. Current certification does not claim full G1 closure, Scheduler, Telegram, WhatsApp, full durable multi-channel correlation, Agent, MCP, or production deployment.
