@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — G1 SERVICES ENGINE / S0–S4 CERTIFIED — S5 NEXT**
+**G0 CLOSED — G1 SERVICES ENGINE / S0–S5 CERTIFIED — S6 NEXT**
 
 MK1 starts from the frozen MK0 architecture laboratory and must not weaken or silently reinterpret any MK0 invariant.
 
@@ -33,6 +33,8 @@ build/mk1-s2-services-read-engine       S2 deterministic reads
 build/mk1-s3-services-eligibility       S3 eligibility / recommendation
         ↓
 build/mk1-s4-services-management        S4 versioned management
+        ↓
+build/mk1-s5-services-snapshots         S5 durable Workflow snapshots
 ```
 
 ## G0 result — foundation boundary
@@ -67,12 +69,10 @@ Canonical design/execution baseline:
 - [`Design/01-services-engine-contract.md`](Design/01-services-engine-contract.md)
 - [`Plan/01-services-engine-gates.md`](Plan/01-services-engine-gates.md)
 - [`golden-dataset/services-engine-v0.json`](golden-dataset/services-engine-v0.json)
-- [`Test/g1-services-engine-s0-s4.md`](Test/g1-services-engine-s0-s4.md)
+- [`Test/g1-services-engine-s0-s5.md`](Test/g1-services-engine-s0-s5.md)
 - [`Build/README.md`](Build/README.md)
 
 ### S0 — executable baseline promotion ✅ CERTIFIED
-
-S0 promoted the exact certified MK0 runtime tree into `mk1/runtime` and reran the inherited certification surface from the MK1 path.
 
 ```text
 Source SHA       6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1
@@ -86,7 +86,7 @@ Receipt: [`Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](Bui
 
 ### S1 — Services contracts + persistence ✅ CERTIFIED
 
-S1 evolved the inherited Service/Product seed into a generic Services contract with lifecycle/revision semantics, neutral Offerings, typed pricing, requirements, dependencies and deterministic eligibility-rule persistence.
+S1 established generic Service/Offering contracts, lifecycle/revision semantics, typed pricing, requirements, dependencies and eligibility-rule persistence.
 
 ```text
 Source SHA       550cdca619856fe246ab569588f9036a7025e7a7
@@ -109,8 +109,6 @@ ListOfferings
 GetOffering
 ```
 
-S2 proves deterministic ordering, business isolation, lifecycle-aware listing, historical explicit lookup, complete Offering hydration, revision visibility and Appointment compatibility.
-
 ```text
 Source SHA       cec97a2b90a7aee8ae1deb3660bad0d7a759ace6
 Run              33461895218
@@ -130,7 +128,7 @@ EvaluateOfferingEligibility
 RecommendOfferings
 ```
 
-S3 proves deterministic ranking, explicit reason codes, fail-closed malformed rules, requirements/dependencies evaluation and no Agent/LLM policy authority.
+S3 remains deterministic and does not depend on an Agent or LLM.
 
 ```text
 Source SHA       a6974cdbb669b66a07b8780d5e20c960d6a0cd64
@@ -155,9 +153,7 @@ UpdateOffering
 SetOfferingStatus
 ```
 
-S4 introduces a Temporal-managed mutation boundary, PostgreSQL command ledger, business-scoped idempotency, exact replay, material-conflict rejection, optimistic revision control, explicit ACTIVE/INACTIVE lifecycle changes and Mongo semantic audit before terminal Workflow return.
-
-The final hardening run also proves a missing Offering dependency is rejected before mutation with no partial Offering and no mutation-command row, while the rejection remains auditable.
+S4 certifies Temporal-managed mutations, PostgreSQL command-ledger authority, business-scoped idempotency, exact replay, material-conflict rejection, optimistic concurrency, lifecycle changes, Mongo terminal audit and rejection safety.
 
 ```text
 Source SHA       f3e54b853af5f01fb2e9ed7d032f784e3cffb81e
@@ -170,9 +166,37 @@ Artifact SHA256  275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9
 
 Receipt: [`Build/evidence/s4-services-management-certification-2026-09-01.md`](Build/evidence/s4-services-management-certification-2026-09-01.md)
 
+### S5 — durable running-Workflow snapshots ✅ CERTIFIED
+
+S5 proves that a running Temporal Workflow can capture Service/Offering revision `N`, remain on `N` while S4 publishes `N+1`, survive a real Worker restart, and complete using the original frozen semantics. A newly started Workflow observes `N+1`.
+
+```text
+Source SHA       7568618062f4192b34caf6e916b58534f304ad3f
+Run              33539683548
+Job              99962550022
+Result           SUCCESS
+Artifact         9813129778
+Artifact SHA256  22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708
+```
+
+Runtime proof:
+
+```text
+original Service revision    1
+original Offering revision   1
+published Service revision   2
+published Offering revision  2
+Worker before restart        PID 31
+Worker after restart         PID 36
+original completed with      revision 1
+new Workflow observed        revision 2
+```
+
+Receipt: [`Build/evidence/s5-services-snapshot-certification-2026-09-01.md`](Build/evidence/s5-services-snapshot-certification-2026-09-01.md)
+
 ## Current Services boundary
 
-S0–S4 now prove:
+S0–S5 now prove:
 
 ```text
 certified executable baseline
@@ -182,35 +206,50 @@ deterministic eligibility/recommendation
 versioned/idempotent management mutations
 optimistic concurrency protection
 terminal semantic audit
+durable revision-specific Workflow snapshots across Worker restart
 ```
 
 G1 is **not** complete yet. Still open:
 
 ```text
-S5 — running-Workflow durable snapshot semantics
 S6 — multi-business generality
 S7 — Appointment Services integration
 S8 — final clean G1 certification
 ```
 
-## Parallel CTA channel design track
+## Multi-channel CTA track — frozen phase boundary
 
-A separate design track now frames a future proof across WebChat, Telegram and WhatsApp without mixing channel code into Services S4:
+The channel proof remains explicitly **without Agent and without MCP**.
+
+Architecture:
+
+```text
+CLI / WebChat / Telegram / later WhatsApp
+              │
+              ▼
+      Channel Adapter
+              │
+              ▼
+   canonical CTA operation
+              │
+              ▼
+           Temporal
+              │
+              ▼
+    same Workflow Library
+```
+
+WebChat is first and should remain a minimal static HTML/CSS/JS proof. Telegram is second and should use a bot over the same canonical adapter contract. WhatsApp is later; its provider mechanism is intentionally not frozen yet.
+
+No Agent, LLM orchestration, semantic AI router or MCP is permitted in the WebChat/Telegram phase.
+
+Provider differences terminate at adapter/renderer boundaries. Workflows, Services, Scheduler and Customer logic must not implement provider-specific business paths.
+
+Channel design artifacts:
 
 - [`Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md`](Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md)
 - [`Design/02-cta-channel-adapter-contract.md`](Design/02-cta-channel-adapter-contract.md)
-
-Current preferred proof order:
-
-```text
-WebChat local controlled adapter
-→ Telegram polling
-→ Telegram webhook parity
-→ WhatsApp external adapter
-→ frozen cross-channel Golden comparison
-```
-
-These adapters are **not implemented or certified yet**. They must converge on the same canonical CTA/orchestration boundary and must not own business rules.
+- [`Plan/02-cta-multichannel-poc-gates.md`](Plan/02-cta-multichannel-poc-gates.md)
 
 ## Carry-forward invariants
 
@@ -220,13 +259,13 @@ documented != verified
 prototype != certified engine
 channel behavior != business authority
 availability shown != reservation persisted
-Agent inference != orchestration authority
 running Workflow snapshot != mutable catalog head
 same idempotency identity + different material != overwrite
 stale revision != silent last-write-wins
+Agent/MCP != current phase
 ```
 
-Every new capability must receive a contract, Golden expectation, build gate, executable test evidence and closure receipt before it is called certified.
+Every new capability must receive a contract, Golden expectation, build gate, executable evidence and closure receipt before it is called certified.
 
 ## Current sequence
 
@@ -238,12 +277,17 @@ G1 — Services Engine
      S2 — deterministic read engine                 ✅ CERTIFIED
      S3 — eligibility + recommendation              ✅ CERTIFIED
      S4 — versioned management mutations            ✅ CERTIFIED
-     S5 — running-Workflow snapshots                🔧 NEXT
-     S6 — multi-business generality                 ⏭ QUEUED
+     S5 — running-Workflow snapshots                ✅ CERTIFIED
+     S6 — multi-business generality                 🔧 NEXT
      S7 — Appointment integration                    ⏭ QUEUED
      S8 — final clean certification                 ⏭ QUEUED
 G2 — Scheduler Engine                               ⏭ AFTER G1
-G3 — WebChat / Telegram / WhatsApp channel proof    ⏭ AFTER ENGINE PREREQUISITES
+G3 — channel proof
+     C0 — canonical adapter contract                ⏭ PLANNED
+     C1 — minimal HTML WebChat                      ⏭ FIRST CHANNEL
+     C2 — Telegram bot                              ⏭ SECOND CHANNEL
+     C3 — Telegram webhook parity                   ⏭ OPTIONAL FOLLOW-UP
+     C4 — WhatsApp                                  ⏭ LATER
 ```
 
-The Agent/Intelligence layer remains deliberately outside this phase until the platform works correctly without it.
+The Agent/Intelligence layer remains deliberately outside this phase until Engines works correctly through explicit Temporal/CTA contracts alone.
