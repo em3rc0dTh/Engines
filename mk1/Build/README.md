@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This directory records executable build history and certification receipts for MK1. Design intent belongs in `Brainstorming`, `mining-site`, `Design`, `Plan` and `golden-dataset`; this directory answers:
+This directory records executable build history and certification receipts for MK1. Design intent belongs in `Brainstorming`, `mining-site`, `Design`, `Plan`, and `golden-dataset`; this directory answers:
 
 > **What source was actually executed, what evidence was produced, and what bounded claim did that evidence certify?**
 
@@ -10,6 +10,7 @@ This directory records executable build history and certification receipts for M
 
 ```text
 G0 Foundation audit                  ✅ CLOSED
+
 G1 Services Engine
   S0 Runtime promotion               ✅ CERTIFIED
   S1 Contracts + persistence         ✅ CERTIFIED
@@ -22,6 +23,12 @@ G1 Services Engine
   S8 Final clean certification       ⏭ QUEUED
 
 G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
+
+G3 CTA channel proof
+  C0A Workflow-view projection       ✅ CERTIFIED
+  C1A Workflow-visible WebChat       ✅ CERTIFIED
+  C1B Durable channel semantics      🔧 OPEN
+  C2 Telegram                        ⏭ QUEUED
 ```
 
 ## Evidence ledger
@@ -35,39 +42,74 @@ G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
 | S3 | `a6974cdbb669b66a07b8780d5e20c960d6a0cd64` | `33531884206` | `99936776923` | `9810084527` | `fa6a9efaa67309a4255dbce62fe362402ff453643e90f63c82c1457099e9de60` | [`s3-services-eligibility-certification-2026-09-01.md`](evidence/s3-services-eligibility-certification-2026-09-01.md) |
 | S4 | `f3e54b853af5f01fb2e9ed7d032f784e3cffb81e` | `33538554471` | `99959020329` | `9812703293` | `275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c` | [`s4-services-management-certification-2026-09-01.md`](evidence/s4-services-management-certification-2026-09-01.md) |
 | S5 | `7568618062f4192b34caf6e916b58534f304ad3f` | `33539683548` | `99962550022` | `9813129778` | `22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708` | [`s5-services-snapshot-certification-2026-09-01.md`](evidence/s5-services-snapshot-certification-2026-09-01.md) |
+| C1A | `860629e9ada498e225ae803a9fe6f077949ec320` | `33542468975` | `99971830150` | `9814172765` | `a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3` | [`c1a-webchat-workflow-visibility-certification-2026-09-01.md`](evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md) |
 
-## S5 evidence highlights
+## Services evidence highlights
 
-S5 proved the hard versioning property for long-running Temporal consumers:
+S4 certifies versioned/idempotent Services management through Temporal, PostgreSQL command truth, optimistic revision protection, lifecycle changes, Mongo terminal audit, and no-partial-effect dependency rejection.
 
-```text
-original snapshot Service revision    1
-original snapshot Offering revision   1
-mutable catalog Service revision      2
-mutable catalog Offering revision     2
-waiting Workflow silently changed     false
-Worker process before restart         31
-Worker process after restart          36
-original Workflow completed with      revision 1
-new Workflow observed                  revision 2
-```
-
-Direct runtime markers:
+S5 certifies the long-running versioning property:
 
 ```text
-SERVICES_S5_PRE_RESTART_PASS
-SERVICES_S5_SNAPSHOT_PASS
+original snapshot revision  N=1
+mutable catalog revision    N+1=2
+Worker restart              PID 31 -> 36
+original Workflow result    revision 1
+new Workflow result         revision 2
 ```
 
-The final marker explicitly reported:
+The same S5 run retained S4 and inherited Appointment regression.
+
+## C1A WebChat evidence highlights
+
+C1A extends the CLI-style Appointment flow into a deliberately small browser surface:
 
 ```text
-originalSurvivedWorkerRestart=true
-originalCompletedWithFrozenSemantics=true
-newWorkflowObservedCatalogHead=true
+Browser WebChat
+→ WebChat transport server
+→ existing CTA HTTP boundary
+→ Temporal
+→ RegisterNewAppointment
 ```
 
-The same run also re-certified S4 management/rejection safety and the inherited Appointment specimen.
+Two pages are executed:
+
+```text
+/webchat/
+/webchat/workflow.html?workflowId=<id>
+```
+
+The certification marker is:
+
+```text
+WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
+```
+
+The executed Workflow reached `CREATED` with every visible checkpoint reported `COMPLETE`:
+
+```text
+01 Start Workflow
+02 Customer name
+03 Customer email
+04 Customer phone
+05 Resolve Customer
+06 Select Service
+07 Select Offering / Product
+08 Set Date
+09 Load Available Slots
+10 Select Slot
+11 Finalize Appointment
+12 Appointment Created
+```
+
+The same evidence explicitly reported:
+
+```text
+agent=false
+mcp=false
+```
+
+C1A is a workflow-visible interaction proof, not yet the complete durable channel-correlation gate.
 
 ## Failure / supersession provenance
 
@@ -83,32 +125,42 @@ Fix      test helper corrected
 Policy   no runtime/domain invariant weakened
 ```
 
-Only successful run `33531884206` is S3 authority.
-
 ### S4
 
-Run `33538120900` completed successfully for the first complete S4 implementation. Review then identified that dependency-reference rejection should be proven explicitly before any Offering mutation. S4 was hardened with a reference-preflight Activity and a no-partial-effect probe.
+Run `33538120900` was green before dependency-reference hardening. The final authority is `33538554471`; superseded/cancelled intermediate executions remain historical provenance.
 
-The final certification authority is run `33538554471`, which includes that safety proof. Intermediate runs cancelled by `cancel-in-progress` while newer commits were pushed are superseded executions, not product failures.
+### C1A
+
+```text
+Run      33542360241
+Result   FAILURE
+Cause    WebChat proxy RequestInit/BodyInit strict TypeScript incompatibility
+Stage    typecheck before runtime execution
+Fix      explicit UTF-8 proxy request body
+Policy   no Workflow/business invariant weakened
+```
+
+Final C1A authority is successful run `33542468975`.
 
 ## What the receipts mean
 
-A receipt is a **bounded certification claim**, not a general product-readiness statement.
+A receipt is a bounded certification claim, not general product readiness.
 
 ```text
-S0 -> promoted runtime baseline executable
-S1 -> Services contracts/persistence foundation
-S2 -> deterministic Services reads
-S3 -> deterministic eligibility/recommendation
-S4 -> versioned/idempotent Services management mutations
-S5 -> durable revision-specific Workflow snapshots across Worker restart
+S0  -> promoted runtime baseline executable
+S1  -> Services contracts/persistence foundation
+S2  -> deterministic Services reads
+S3  -> deterministic eligibility/recommendation
+S4  -> versioned/idempotent Services management
+S5  -> revision-stable Workflow snapshots across Worker restart
+C1A -> HTML WebChat can drive and expose the real durable Appointment flow
 ```
 
-None independently certifies the whole Services Engine.
+C1A does not imply C1B durable channel correlation/idempotency, Telegram, WhatsApp, Scheduler, Agent, MCP, or production readiness.
 
-## Required evidence for future gates
+## Required evidence rule
 
-Every subsequent build gate must record, at minimum:
+Every subsequent gate must record at minimum:
 
 ```text
 source SHA
@@ -118,46 +170,28 @@ job ID
 result
 artifact ID
 artifact SHA-256
-executed commands / probes
-Golden case accounting
+executed probes
 regression scope
 explicit non-claims
 human-readable verdict
 ```
 
-A documentation-only commit after a successful runtime run may index or explain the evidence, but it must not be represented as the source revision that was executed.
+Documentation-only commits after a runtime execution may index the evidence, but must never be represented as the source SHA that was executed.
 
-## Current next Services gate
+## Current next work
 
-S6 must prove materially different businesses can publish/read/evaluate Services through the same generic contracts without business-name branching or parallel business-specific implementations.
-
-## Parallel channel proof boundary
-
-The planned channel work is intentionally separate from Services source gates:
+Parallel bounded fronts:
 
 ```text
-C0 canonical CTA adapter contract
-C1 minimal HTML WebChat
-C2 Telegram bot / long polling
-C3 optional Telegram webhook parity
-C4 WhatsApp later
+Services: S6 multi-business generality
+Channel:  C1B durable conversation binding + inbound-event dedupe
 ```
 
-C0–C2 remain strictly:
-
-```text
-channel adapter
-→ canonical CTA operation
-→ Temporal
-→ existing Workflow contracts
-```
-
-No Agent, LLM orchestration or MCP belongs in this phase.
+Telegram remains after the WebChat channel contract is hardened sufficiently to prove that the second transport is reusing rather than redefining the architecture.
 
 ## Cross-reference
 
-- Gate plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
-- Consolidated verification: [`../Test/g1-services-engine-s0-s5.md`](../Test/g1-services-engine-s0-s5.md)
-- Services contract: [`../Design/01-services-engine-contract.md`](../Design/01-services-engine-contract.md)
-- Golden expectations: [`../golden-dataset/services-engine-v0.json`](../golden-dataset/services-engine-v0.json)
+- Services plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
+- Channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
 - Channel adapter design: [`../Design/02-cta-channel-adapter-contract.md`](../Design/02-cta-channel-adapter-contract.md)
+- Workflow visibility design: [`../Design/03-workflow-visibility-contract.md`](../Design/03-workflow-visibility-contract.md)
