@@ -2,7 +2,7 @@
 
 ## Status
 
-**S0 CERTIFIED — S1 SERVICES CONTRACTS + PERSISTENCE NEXT**
+**S0 + S1 CERTIFIED — S2 DETERMINISTIC READ ENGINE NEXT**
 
 ## Objective
 
@@ -16,7 +16,7 @@ Stage-2 integration branch:
 developer
 ```
 
-G0 audit branch is closed at the documentation/evidence level. The GitHub integration PR could not be opened during this session, so downstream branches preserve exact ancestry from the G0 closure head rather than bypassing that integration boundary.
+G0 audit is closed at the documentation/evidence level. Because the integration PR into `developer` could not be opened through the available GitHub path, downstream work preserves exact ancestry rather than moving `developer` or pretending integration occurred.
 
 Current lineage:
 
@@ -28,9 +28,11 @@ audit/stage2-core-126-completeness      G0 closed
 design/mk1-services-engine              G1 design + Golden expectations
         ↓
 build/mk1-s0-runtime-promotion          S0 certified baseline
+        ↓
+build/mk1-s1-services-contracts         S1 certified contracts/persistence
 ```
 
-No direct ref movement is used to pretend these branches were integrated into `developer`.
+No direct ref movement is used to bypass the integration boundary.
 
 ---
 
@@ -64,24 +66,41 @@ Receipt:
 
 Verdict: `S0 PASS`.
 
-## S1 — Services contracts + persistence migration — 🔧 NEXT
+## S1 — Services contracts + persistence migration — ✅ PASS
 
-Implement:
+Certified implementation:
 
 - Service revision/lifecycle fields;
 - Offering-compatible evolution of `service_products`;
-- pricing descriptor persistence;
+- typed pricing descriptor persistence;
 - requirements;
 - dependencies;
 - eligibility-rule persistence;
 - relational constraints/business scoping;
-- TypeScript canonical domain types.
+- TypeScript canonical Services domain types and validation.
 
-Tests must cover invalid pricing, duration, references and business scope.
+Certified evidence:
 
-Verdict required: `S1 PASS`.
+```text
+Source SHA       550cdca619856fe246ab569588f9036a7025e7a7
+Run              33461510248
+Job              99712416091
+Result           success
+Services tests    10 / 10 PASS
+Inherited tests   40 / 40 PASS
+Persistence       SERVICES_S1_PERSISTENCE_PASS
+Appointment       inherited full certification surface PASS
+Artifact ID       9783331341
+Artifact SHA-256  7f69bf9d33b2e854d5cc4941b41059dc358437675cf0bbb6d102c29f129b2097
+```
 
-## S2 — Deterministic read engine
+Receipt:
+
+[`../Build/evidence/s1-services-contracts-certification-2026-08-31.md`](../Build/evidence/s1-services-contracts-certification-2026-08-31.md)
+
+Verdict: `S1 PASS`.
+
+## S2 — Deterministic read engine — 🔧 NEXT
 
 Implement/test:
 
@@ -97,9 +116,11 @@ Required proofs:
 - deterministic ordering;
 - business isolation;
 - inactive definitions excluded from new-selection lists;
+- explicit identity lookups remain business-scoped;
 - revision returned;
+- full Offering projection includes pricing/requirements/dependencies/eligibility data;
 - no vertical branching;
-- Appointment compatibility adapter can still resolve the old `AppointmentService` / `AppointmentProduct` projection.
+- Appointment compatibility adapter can map the generic Service/Offering projections into the inherited `AppointmentService` / `AppointmentProduct` contract without moving Scheduler logic into Services.
 
 Verdict required: `S2 PASS`.
 
@@ -163,8 +184,6 @@ Required experiment:
 6. continue/finalize consumer using N semantics
 7. new Workflow read -> sees N+1
 ```
-
-This is the key proof that catalog mutations do not silently rewrite durable business conversations.
 
 Verdict required: `S5 PASS`.
 
