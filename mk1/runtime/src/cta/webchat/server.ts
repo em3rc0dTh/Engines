@@ -83,11 +83,12 @@ async function proxyToCta(request: IncomingMessage, response: ServerResponse, pa
   const contentType = request.headers['content-type'];
   if (typeof contentType === 'string') headers['content-type'] = contentType;
 
-  const upstream = await fetch(`${CTA_BASE_URL}${pathname}${search}`, {
-    method: request.method,
-    headers,
-    ...(body && body.byteLength > 0 ? { body } : {}),
-  });
+  const method = request.method ?? 'GET';
+  const init: RequestInit = body && body.byteLength > 0
+    ? { method, headers, body: body.toString('utf8') }
+    : { method, headers };
+
+  const upstream = await fetch(`${CTA_BASE_URL}${pathname}${search}`, init);
   const payload = Buffer.from(await upstream.arrayBuffer());
   sendBuffer(
     response,
