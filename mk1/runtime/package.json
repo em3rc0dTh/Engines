@@ -56,6 +56,8 @@
     "probe:services:s3": "tsx scripts/certify-services-s3-recommendation.ts",
     "probe:services:s4": "tsx scripts/certify-services-s4-management.ts",
     "probe:services:s4:safety": "tsx scripts/certify-services-s4-rejection-safety.ts",
+    "probe:services:s5:prepare": "tsx scripts/certify-services-s5-snapshot-prepare.ts",
+    "probe:services:s5:complete": "tsx scripts/certify-services-s5-snapshot-complete.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
