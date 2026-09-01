@@ -17,6 +17,7 @@
     "test:services:s2": "tsx --test src/services/appointment-catalog.compat.test.ts",
     "test:services:s3": "tsx --test src/services/eligibility-engine.test.ts",
     "test:services:s4": "tsx --test src/contracts/services-engine/management.test.ts",
+    "test:channel:c0": "tsx --test src/cta/channel-core/*.test.ts",
     "infra:up": "docker compose up -d postgres mongo",
     "infra:down": "docker compose down",
     "infra:status": "docker compose ps",
@@ -27,6 +28,7 @@
     "lab:logs": "docker compose logs -f worker cta",
     "lab:console": "tsx src/lab-console/launcher.ts",
     "lab:appointment": "tsx src/lab-console/appointment-launcher.ts",
+    "webchat:server": "tsx src/cta/webchat/server.ts",
     "temporal:dev": "temporal server start-dev --ui-port 8233",
     "worker:b0": "tsx src/orchestration/temporal/workers/b0.worker.ts",
     "smoke:b0": "tsx src/orchestration/temporal/clients/b0.client.ts",
@@ -58,6 +60,7 @@
     "probe:services:s4:safety": "tsx scripts/certify-services-s4-rejection-safety.ts",
     "probe:services:s5:prepare": "tsx scripts/certify-services-s5-snapshot-prepare.ts",
     "probe:services:s5:complete": "tsx scripts/certify-services-s5-snapshot-complete.ts",
+    "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"
