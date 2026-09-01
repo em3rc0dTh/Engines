@@ -2,7 +2,7 @@
 
 ## Status
 
-**PRE-BUILD PLAN — DESIGN BASELINE ESTABLISHED**
+**S0 CERTIFIED — S1 SERVICES CONTRACTS + PERSISTENCE NEXT**
 
 ## Objective
 
@@ -16,35 +16,55 @@ Stage-2 integration branch:
 developer
 ```
 
-G0 audit branch is closed at the documentation level. The GitHub connector was unable to open the integration PR during this session, so the Services design branch was created from the exact G0 closure head to preserve the intended ancestry:
+G0 audit branch is closed at the documentation/evidence level. The GitHub integration PR could not be opened during this session, so downstream branches preserve exact ancestry from the G0 closure head rather than bypassing that integration boundary.
+
+Current lineage:
 
 ```text
-design/mk1-services-engine
+main / developer stable MK0 base
+        ↓
+audit/stage2-core-126-completeness      G0 closed
+        ↓
+design/mk1-services-engine              G1 design + Golden expectations
+        ↓
+build/mk1-s0-runtime-promotion          S0 certified baseline
 ```
 
-No runtime build should be merged to `developer` until the G0 integration path is available and the design/golden expectations below are frozen.
+No direct ref movement is used to pretend these branches were integrated into `developer`.
 
 ---
 
 # Gate sequence
 
-## S0 — Promote certified MK0 runtime snapshot
+## S0 — Promote certified MK0 runtime snapshot — ✅ PASS
 
 Purpose:
 
 Create `mk1/runtime` as an exact starting snapshot of the stable `mk0/runtime` tree **without modifying `mk0/runtime`**.
 
-Required evidence:
+Certified evidence:
 
 ```text
-mk0/runtime tree SHA == initial mk1/runtime tree SHA
+Source SHA       6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1
+Run              33461008031
+Job              99710964036
+Result           success
+mk0/runtime tree 82dcec4a61ea28283537a2993d047b3bd444edef
+mk1/runtime tree 82dcec4a61ea28283537a2993d047b3bd444edef
+Fast tests        42 / 42 PASS
+B7 runtime        4 / 4 PASS
+Appointment       full inherited certification surface PASS
+Artifact ID       9783188036
+Artifact SHA-256  69a895416918dfb163be680f55c9a6dae2bda35fa60a6dd5107c93e971045958
 ```
 
-The promoted snapshot must pass the existing MK0 regression checks before new Services behavior is introduced.
+Receipt:
 
-Verdict required: `S0 PASS`.
+[`../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](../Build/evidence/s0-runtime-promotion-certification-2026-08-31.md)
 
-## S1 — Services contracts + persistence migration
+Verdict: `S0 PASS`.
+
+## S1 — Services contracts + persistence migration — 🔧 NEXT
 
 Implement:
 
@@ -218,7 +238,7 @@ Verdict required: `G1 SERVICES ENGINE CERTIFIED`.
 
 # Golden case families
 
-The frozen Golden dataset should include at least:
+The frozen Golden dataset includes:
 
 ```text
 CAT-*   catalog identity/lifecycle/read behavior
