@@ -1,0 +1,188 @@
+{
+  "artifact": "services_engine_golden_v0",
+  "version": "0.1.0",
+  "status": "PRE_BUILD_EXPECTATIONS",
+  "purpose": "Frozen executable expectations for G1 Services Engine certification",
+  "cases": [
+    {
+      "id": "CAT-001",
+      "title": "Business-scoped Service list",
+      "expect": ["Only active Services for requested business are returned", "Ordering is deterministic"]
+    },
+    {
+      "id": "CAT-002",
+      "title": "Same Service code in different businesses",
+      "expect": ["Both definitions may exist", "No cross-business collision"]
+    },
+    {
+      "id": "CAT-003",
+      "title": "Duplicate Service code in same business",
+      "expect": ["Mutation is rejected with typed duplicate identity error"]
+    },
+    {
+      "id": "CAT-004",
+      "title": "Inactive Service hidden from new selection",
+      "expect": ["ListServices excludes inactive Service", "Historical lookup by explicit identity remains possible if contract permits"]
+    },
+    {
+      "id": "CAT-005",
+      "title": "Offering belongs to selected Service",
+      "expect": ["ListOfferings returns only Offerings under requested Service"]
+    },
+    {
+      "id": "CAT-006",
+      "title": "Cross-business Offering reference rejected",
+      "expect": ["No Offering from another business can be selected by ID alone"]
+    },
+    {
+      "id": "PRC-001",
+      "title": "Fixed price minor units",
+      "expect": ["FIXED price persists integer amountMinor and uppercase currency exactly"]
+    },
+    {
+      "id": "PRC-002",
+      "title": "Free pricing",
+      "expect": ["FREE stores no fabricated monetary amount"]
+    },
+    {
+      "id": "PRC-003",
+      "title": "Quote-required pricing",
+      "expect": ["QUOTE_REQUIRED exposes no fake fixed price"]
+    },
+    {
+      "id": "PRC-004",
+      "title": "Invalid monetary amount",
+      "expect": ["Negative amount is rejected"]
+    },
+    {
+      "id": "PRC-005",
+      "title": "Invalid currency",
+      "expect": ["Malformed currency code is rejected"]
+    },
+    {
+      "id": "PRC-006",
+      "title": "Duration invariant",
+      "expect": ["durationMinutes must be a positive bounded integer", "Zero duration is rejected"]
+    },
+    {
+      "id": "REQ-001",
+      "title": "Canonical requirement projection",
+      "expect": ["Offering read returns requirement code/kind/required/config without channel-specific form metadata"]
+    },
+    {
+      "id": "REQ-002",
+      "title": "Missing dependency target",
+      "expect": ["Mutation is rejected before terminal success"]
+    },
+    {
+      "id": "REQ-003",
+      "title": "Self dependency",
+      "expect": ["Offering cannot depend on itself"]
+    },
+    {
+      "id": "REQ-004",
+      "title": "Contradictory direct dependency",
+      "expect": ["Same target cannot be both REQUIRES and EXCLUDES"]
+    },
+    {
+      "id": "ELG-001",
+      "title": "Eligibility ALL predicates pass",
+      "expect": ["Offering is eligible", "Reason codes are deterministic"]
+    },
+    {
+      "id": "ELG-002",
+      "title": "Eligibility predicate fails",
+      "expect": ["Offering is ineligible", "Configured failureCode is returned"]
+    },
+    {
+      "id": "ELG-003",
+      "title": "Eligibility missing context",
+      "expect": ["Missing required path fails closed rather than coercing to truth"]
+    },
+    {
+      "id": "ELG-004",
+      "title": "Malformed eligibility rule",
+      "expect": ["Rule is rejected with typed validation failure", "No arbitrary code execution"]
+    },
+    {
+      "id": "REC-001",
+      "title": "Deterministic recommendation ranking",
+      "expect": ["Eligible Offerings sort priority DESC then name ASC then offeringId ASC"]
+    },
+    {
+      "id": "REC-002",
+      "title": "Recommendation excludes inactive Offering",
+      "expect": ["Inactive Offering is not recommended"]
+    },
+    {
+      "id": "REC-003",
+      "title": "Recommendation explanation",
+      "expect": ["Result contains auditable reason codes for eligibility/exclusion"]
+    },
+    {
+      "id": "REV-001",
+      "title": "Create revision",
+      "expect": ["New Service/Offering starts at explicit revision"]
+    },
+    {
+      "id": "REV-002",
+      "title": "Optimistic update success",
+      "expect": ["expectedRevision equals current", "Material update increments revision exactly once"]
+    },
+    {
+      "id": "REV-003",
+      "title": "Optimistic revision conflict",
+      "expect": ["Stale expectedRevision is rejected", "Current definition is not overwritten"]
+    },
+    {
+      "id": "REV-004",
+      "title": "Running Workflow retains selected snapshot",
+      "expect": ["Workflow selecting revision N retains N after catalog publishes N+1", "New Workflow reads N+1"]
+    },
+    {
+      "id": "IDM-001",
+      "title": "Exact mutation replay",
+      "expect": ["Same scoped idempotency identity and same fingerprint returns same business result", "No duplicate Service/Offering row"]
+    },
+    {
+      "id": "IDM-002",
+      "title": "Mutation idempotency material conflict",
+      "expect": ["Same scoped idempotency identity with different initial material is rejected"]
+    },
+    {
+      "id": "IDM-003",
+      "title": "Idempotency isolated by business",
+      "expect": ["Same opaque key under another business is independent"]
+    },
+    {
+      "id": "ISO-001",
+      "title": "Automotive fixture",
+      "expect": ["Vehicle Care/Basic Wash is represented by generic Service/Offering contracts"]
+    },
+    {
+      "id": "ISO-002",
+      "title": "Veterinary fixture",
+      "expect": ["Consultation/General Consultation is represented by the same contracts and implementation"]
+    },
+    {
+      "id": "ISO-003",
+      "title": "No vertical switch",
+      "expect": ["Services Engine source contains no conditional behavior keyed to synthetic business or vertical names"]
+    },
+    {
+      "id": "CMP-001",
+      "title": "Appointment Service compatibility",
+      "expect": ["RegisterNewAppointment can consume Services Engine Service projection without hard-coded catalog"]
+    },
+    {
+      "id": "CMP-002",
+      "title": "Appointment Offering compatibility",
+      "expect": ["Selected Offering supplies duration and stable revision snapshot to Appointment flow"]
+    },
+    {
+      "id": "CMP-003",
+      "title": "Scheduler authority remains separate",
+      "expect": ["Services Engine does not calculate concrete resource slots", "Existing atomic booking conflict regression remains passing"]
+    }
+  ]
+}
