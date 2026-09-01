@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — G1 SERVICES ENGINE / S0 CERTIFIED — S1 NEXT**
+**G0 CLOSED — G1 SERVICES ENGINE / S0 + S1 CERTIFIED — S2 NEXT**
 
 MK1 starts from the frozen MK0 architecture laboratory and must not weaken or silently reinterpret any MK0 invariant.
 
@@ -25,6 +25,8 @@ audit/stage2-core-126-completeness      G0 foundation audit
 design/mk1-services-engine              G1 design / Golden expectations
         ↓
 build/mk1-s0-runtime-promotion          certified executable MK1 baseline
+        ↓
+build/mk1-s1-services-contracts         Services contract/persistence foundation
 ```
 
 ## G0 result
@@ -60,7 +62,7 @@ Design baseline:
 - [`Plan/01-services-engine-gates.md`](Plan/01-services-engine-gates.md)
 - [`golden-dataset/services-engine-v0.json`](golden-dataset/services-engine-v0.json)
 
-### S0 — executable baseline promotion
+### S0 — executable baseline promotion ✅
 
 S0 promoted the exact certified MK0 runtime tree into `mk1/runtime`, along with the exact frozen fixture/Golden dependencies required by that runtime, and independently reran the inherited certification surface from the MK1 path.
 
@@ -80,7 +82,29 @@ Receipt:
 
 [`Build/evidence/s0-runtime-promotion-certification-2026-08-31.md`](Build/evidence/s0-runtime-promotion-certification-2026-08-31.md)
 
-S0 proves that new MK1 product work can start from an executable baseline without changing or reopening the frozen MK0 laboratory.
+### S1 — Services contracts + persistence ✅
+
+S1 evolved the inherited catalog in place rather than creating a parallel Service model. It added revision/lifecycle semantics, a neutral Offering domain projection over `service_products`, typed pricing, requirements, dependencies and deterministic eligibility-rule storage while preserving the inherited Appointment path.
+
+```text
+S1 source        550cdca619856fe246ab569588f9036a7025e7a7
+GitHub run       33461510248
+Job              99712416091
+Result           ✅ SUCCESS
+Services tests   10 / 10 PASS
+Inherited tests  40 / 40 PASS
+Combined         50 / 50 PASS
+Persistence      SERVICES_S1_PERSISTENCE_PASS
+Appointment      inherited full certification surface PASS
+Artifact         9783331341
+Artifact SHA256  7f69bf9d33b2e854d5cc4941b41059dc358437675cf0bbb6d102c29f129b2097
+```
+
+Receipt:
+
+[`Build/evidence/s1-services-contracts-certification-2026-08-31.md`](Build/evidence/s1-services-contracts-certification-2026-08-31.md)
+
+S1 certifies the Services domain/persistence foundation only. Deterministic read behavior, recommendation evaluation, versioned management workflows and durable snapshot semantics remain later gates.
 
 ## Carry-forward invariants
 
@@ -101,8 +125,9 @@ MK1 may reuse MK0 code and evidence, but every new capability must receive its o
 G0 — Audit blocks 1 / 2 / 6                         ✅ CLOSED
 G1 — Services Engine
      S0 — runtime promotion                         ✅ CERTIFIED
-     S1 — contracts + persistence                   🔧 NEXT
-     S2–S8                                           ⏭ QUEUED
+     S1 — contracts + persistence                   ✅ CERTIFIED
+     S2 — deterministic read engine                 🔧 NEXT
+     S3–S8                                           ⏭ QUEUED
 G2 — Scheduler Engine                               ⏭ AFTER G1
 G3 — New CTA channel proof (Telegram candidate)     ⏭ AFTER G2
 ```
