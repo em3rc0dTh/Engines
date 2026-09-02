@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — G1 SERVICES S0–S5 CERTIFIED — WEBCHAT C1A CERTIFIED — S6/C1B NEXT**
+**G0 CLOSED — G1 SERVICES S0–S5 CERTIFIED — WEBCHAT C1A CERTIFIED + HUMAN VERIFIED POST-FIX — S6/C1B NEXT**
 
 MK1 starts from the frozen MK0 architecture laboratory and must not weaken or silently reinterpret any MK0 invariant.
 
@@ -164,7 +164,7 @@ Channel references:
 
 ### C0A — provider-independent Workflow view ✅ CERTIFIED
 
-The channel-core now projects a durable Appointment Workflow into a visible engineering checklist without inventing new Temporal phases.
+The channel-core projects a durable Appointment Workflow into a visible engineering checklist without inventing new Temporal phases.
 
 ```text
 01 Start Workflow
@@ -181,9 +181,9 @@ The channel-core now projects a durable Appointment Workflow into a visible engi
 12 Appointment Created
 ```
 
-The real `phase` and `nextAction` are still shown and remain authoritative.
+The real `phase` and `nextAction` remain visible and authoritative.
 
-### C1A — minimal workflow-visible WebChat ✅ CERTIFIED
+### C1A — minimal workflow-visible WebChat ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
 
 Implemented on:
 
@@ -216,7 +216,7 @@ Start Workflow
 → CREATED
 ```
 
-Final certification:
+Original certification:
 
 ```text
 Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
@@ -232,9 +232,30 @@ The proof ended with all twelve visible steps `COMPLETE`, `finalPhase=CREATED`, 
 
 Receipt: [`Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`](Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md)
 
+Human verification then exposed duplicate presentation prompts around the date and finalize transitions. The durable business result was not duplicated. The renderer was corrected in:
+
+```text
+ed207f8c82ae9138f92fd505209c30c4eeba243b
+fix(c1a): prevent duplicate prompts while Temporal advances
+```
+
+Post-fix regression:
+
+```text
+Run              33560864234
+Job              100032737031
+Result           SUCCESS
+Artifact         9821207955
+Artifact SHA256  4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff
+```
+
+A second complete human run on 2026-09-02 confirmed that the Step 08 and Step 11 duplicate prompts were no longer observed, all twelve visible steps reached `COMPLETE`, the WebChat reached `COMPLETED / CREATED / next=NONE`, and the separate Workflow Inspector showed the same final durable state. That run also exercised a newly-created Customer path and Spanish `viernes` date normalization.
+
+Human verification record: [`Test/c1a-webchat-human-verification-2026-09-01.md`](Test/c1a-webchat-human-verification-2026-09-01.md)
+
 ### C1B — durable channel semantics 🔧 OPEN
 
-C1A is visually and functionally testable, but the complete channel gate is not yet closed. Still required:
+C1A is visually and functionally verified, but the complete WebChat channel gate is not yet closed. Still required:
 
 ```text
 server-side durable conversation binding
@@ -286,7 +307,7 @@ G2 Scheduler Engine                           ⏭ AFTER G1
 
 G3 CTA channel proof
   C0A Workflow-view projection                ✅ CERTIFIED
-  C1A minimal workflow-visible WebChat         ✅ CERTIFIED
+  C1A minimal workflow-visible WebChat         ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
   C0B/C1B durable correlation/dedupe           🔧 NEXT CHANNEL HARDENING
   C2 Telegram bot                              ⏭ SECOND CHANNEL
   C3 Telegram webhook parity                   ⏭ OPTIONAL
