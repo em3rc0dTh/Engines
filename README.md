@@ -10,13 +10,35 @@ OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED
 
 MK1 — STAGE 2
 ACTIVE
-Services S0–S5 certified
-WebChat C1A workflow visibility certified + human verified
-WebChat C1B durable channel semantics certified
-Telegram C2 next channel proof
+Services S0–S6 certified
+S7 Appointment→Services integration next
+WebChat C1A visible flow certified + human verified
+WebChat C1B durable channel certified + human restart verified
+Scheduler Step 4 designed, not yet built/certified
+Telegram adapter designed, physical proof deferred
+Agent / MCP intentionally absent
 ```
 
 MK0 remains the frozen evidence base. MK1 evolves from that foundation without rewriting `mk0/runtime`.
+
+## Branch narrative
+
+Repository branch policy is documented in [`BRANCHES.md`](BRANCHES.md).
+
+Meaningful current milestones include:
+
+```text
+release/mk0-complete
+build/mk0-b3-cli-cta-adapter
+build/mk0-http-postman-proof
+build/mk1-s5-services-snapshots
+build/mk1-c0-c1-webchat
+build/mk1-c1b-durable-channel
+design/mk1-services-scheduler-integration
+build/mk1-s6-services-multibusiness
+```
+
+Every new bounded architecture gate gets a new branch. Intermediate/scratch branches are not permanent evidence authorities.
 
 ## MK0 — certified foundation
 
@@ -26,21 +48,21 @@ Temporal orchestration core                ✅ CERTIFIED FOUNDATION
 Persistence authority model                ✅ CERTIFIED FOUNDATION
 RegisterNewCustomer                        ✅ CERTIFIED
 RegisterNewAppointment                     ✅ CERTIFIED
-Golden Customer dataset                    ✅ 18 / 18 PASS
+Golden Customer accounting                 ✅ 18 / 18 PASS
 Postman Customer collection                ✅ 37 / 37 PASS
 WSL2 + Docker Compose laboratory            ✅ PHYSICALLY PROVEN
 Observability + Lab Console                ✅ CERTIFIED
 Customer Child Workflow reuse              ✅ PROVEN
-Service / Product catalog seed              ✅ PROVEN
-Date / slot conversation                    ✅ PROVEN
-Atomic appointment slot conflict            ✅ PROVEN
+Service/Product catalog seed                ✅ PROVEN
+Date/slot conversation                      ✅ PROVEN
+Atomic Appointment slot conflict            ✅ PROVEN
 Production deployment                       ❌ NOT CERTIFIED
-Public/internet exposure                    ❌ NOT CERTIFIED
+Public exposure/security hardening          ❌ NOT CERTIFIED
 ```
 
 Canonical MK0 index: [`mk0/README.md`](mk0/README.md).
 
-## MK1 — Services Engine progress
+## MK1 — Step 3 Services Engine
 
 ```text
 G0 Foundation completeness audit           ✅ CLOSED
@@ -52,151 +74,124 @@ S2 Deterministic read engine               ✅ CERTIFIED
 S3 Eligibility + recommendation            ✅ CERTIFIED
 S4 Versioned management mutations          ✅ CERTIFIED
 S5 Running-Workflow snapshots              ✅ CERTIFIED
-S6 Multi-business generality               🔧 NEXT
-S7 Appointment integration                 ⏭ QUEUED
+S6 Multi-business generality               ✅ CERTIFIED
+S7 Appointment integration                 🔧 NEXT
 S8 Final clean certification               ⏭ QUEUED
 
 G1 SERVICES ENGINE                         ❌ NOT YET FULLY CERTIFIED
-G2 SCHEDULER ENGINE                        ⏭ AFTER G1
 ```
 
-S4 certifies versioned/idempotent Service/Offering management through Temporal. S5 certifies revision-specific running Workflow snapshots across catalog change and Worker restart.
+S6 authority:
+
+```text
+Branch           build/mk1-s6-services-multibusiness
+Source SHA       3eed68b45036154bcf1776564f479cd02e30d0d4
+Run              33666790884
+Job              100370414068
+Result           SUCCESS
+Artifact         9860927146
+Artifact SHA256  543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564
+```
+
+S6 proves the same Services implementation across materially different automotive and veterinary specimens with business-scoped reads, idempotency and dependency references, deterministic eligibility, and no fixture/vertical branching in implementation files.
+
+Receipt: [`mk1/Build/evidence/s6-services-multibusiness-certification-2026-09-02.md`](mk1/Build/evidence/s6-services-multibusiness-certification-2026-09-02.md).
 
 Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Build/evidence index: [`mk1/Build/README.md`](mk1/Build/README.md).
 
-## G3 — CTA channel proof
+## Step 4 — Scheduler boundary
 
-No Agent, MCP, LLM orchestration or semantic AI router is part of the current channel work.
-
-The architecture continues the explicit CLI model:
+The design separates commercial semantics from real capacity:
 
 ```text
-CLI / WebChat / Telegram / later transport
-              │
-              ▼
-        Channel Adapter
-              │
-              ▼
+SERVICES
+What is being offered?
+  Service / Offering
+  price / duration
+  requirements / dependencies
+  eligibility / revision
+  abstract scheduling demand
+
+SCHEDULER
+When and with what real capacity can it happen?
+  Resource / capability
+  schedules / overrides
+  availability
+  hold
+  reservation / assignment
+  conflict
+```
+
+Core invariant remains:
+
+```text
+availability shown != reservation persisted
+```
+
+No Scheduler runtime is certified yet. Design authority lives in:
+
+- [`mk1/Design/05-services-scheduler-boundary.md`](mk1/Design/05-services-scheduler-boundary.md)
+- [`mk1/Design/06-scheduler-engine-contract.md`](mk1/Design/06-scheduler-engine-contract.md)
+- [`mk1/Plan/04-platform-steps-3-4-5-roadmap.md`](mk1/Plan/04-platform-steps-3-4-5-roadmap.md)
+
+## CTA / channel proof
+
+No Agent, MCP, LLM orchestration or semantic AI router is part of current channel execution.
+
+```text
+CLI / WebChat / later Telegram / later WhatsApp
+              ↓
+         ChannelAdapter
+              ↓
    CanonicalChannelEnvelope
-              │
-              ▼
+              ↓
       ChannelExecutionCore
-              │
+              ↓
        ┌──────┴─────────┐
        ▼                ▼
 PostgreSQL           Temporal
-channel binding      Workflow authority
-+ event ledger           │
+binding/event        Workflow authority
+ledger                   │
                          ▼
                   same Workflow Library
 ```
-
-Provider differences stop at adapter/renderer boundaries. Customer, Services, Scheduler and Workflow policy remain provider-independent.
 
 Current channel status:
 
 ```text
 C0A Workflow-view projection               ✅ CERTIFIED
-C1A workflow-visible HTML WebChat           ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
-C1B durable correlation/event semantics     ✅ CERTIFIED
-C2 Telegram Bot / long polling              🔧 NEXT
-C3 Telegram webhook parity                  ⏭ OPTIONAL
-C4 WhatsApp                                 ⏭ LATER
+C1A workflow-visible HTML WebChat           ✅ CERTIFIED + HUMAN VERIFIED
+C1B durable correlation/event semantics     ✅ CERTIFIED + HUMAN RESTART VERIFIED
+C2 Telegram adapter design                  ✅ DESIGNED
+C2 Telegram physical proof                  ⏭ DEFERRED
+WhatsApp                                    ⏭ LATER
 ```
 
-## C1A — workflow-visible WebChat
-
-The first WebChat proof deliberately uses a small HTML/CSS/JS surface:
-
-```text
-/webchat/
-  conversational interaction
-
-/webchat/workflow.html?workflowId=<id>
-  live Temporal Workflow inspector
-```
-
-Both expose the real durable Workflow ID/status, Temporal phase, next action and a deterministic 12-step execution map. C1A was automated-certified, then human tested; a prompt-render timing defect was fixed and human verified post-fix.
-
-Original C1A authority:
-
-```text
-Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
-Run              33542468975
-Artifact         9814172765
-```
-
-Human/renderer hardening authority:
-
-```text
-Source SHA       ed207f8c82ae9138f92fd505209c30c4eeba243b
-Run              33560864234
-Artifact         9821207955
-```
-
-## C1B — durable WebChat channel semantics
-
-C1B removes `workflowId` browser/process memory as the authoritative conversation binding.
-
-PostgreSQL now owns:
-
-```text
-channel_conversation_bindings
-channel_inbound_events
-```
-
-The certified semantics are:
-
-```text
-same event identity + same canonical material
-→ exact replay
-→ one logical Temporal operation
-
-same event identity + different canonical material
-→ CHANNEL_EVENT_IDENTITY_CONFLICT
-→ no conflicting Workflow mutation
-
-WebChat adapter process restart
-→ recover external conversation binding from PostgreSQL
-→ continue the same Temporal Workflow
-```
-
-Final authority:
+C1B authority:
 
 ```text
 Source SHA       2008fce4f863fdabf8e8f323eee1d7cda05cb454
 Run              33647842017
 Job              100307008849
-Result           SUCCESS
 Artifact         9853555059
 Artifact SHA256  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
 ```
 
-The run physically restarted the WebChat adapter (`PID 7982 → 8190`), recovered the same Workflow through the durable binding, completed the Appointment at `COMPLETED / CREATED`, replayed the terminal event from the durable event ledger, and retained the full C1A 12-step visibility proof.
+## Step 5 — Integration boundary
 
-Receipt: [`mk1/Build/evidence/c1b-durable-channel-certification-2026-09-02.md`](mk1/Build/evidence/c1b-durable-channel-certification-2026-09-02.md).
-
-Verification ledger: [`mk1/Test/c1b-durable-channel-semantics-2026-09-02.md`](mk1/Test/c1b-durable-channel-semantics-2026-09-02.md).
-
-## C2 — Telegram next
-
-Telegram is now the second transport proof and must reuse the certified C1B core:
+The Integration Engine is designed as a provider boundary only:
 
 ```text
-Telegram Bot API / long polling
+Temporal / domain operation
         ↓
-TelegramAdapter
+Integration Port
         ↓
-CanonicalChannelEnvelope
+Provider Adapter
         ↓
-existing ChannelExecutionCore
-        ↓
-existing PostgreSQL binding/event semantics
-        ↓
-existing Temporal Workflow Library
+external payment / ERP / notification / maps / webhook system
 ```
 
-No separate Telegram Appointment Workflow, no provider-specific Services/Scheduler rules, no Agent, and no MCP.
+It does not own Customer, Services, Scheduler, Appointment or Workflow state. No Integration runtime is certified yet.
 
 ## Authority model
 
@@ -206,7 +201,7 @@ Temporal
 
 PostgreSQL
   canonical transactional business truth
-  durable channel conversation/event correlation truth
+  durable channel correlation/event truth
 
 MongoDB
   semantic/execution audit, not shadow business truth
@@ -215,7 +210,7 @@ AttachmentStore
   binary/document integrity and lifecycle
 
 Channel adapters
-  replaceable transport normalization/rendering only
+  transport normalization/rendering only
 ```
 
 ## Documentation progression
@@ -231,24 +226,29 @@ Brainstorming
 → Certification
 ```
 
+## Current next work
+
+```text
+CURRENT  Step 3 / S7 — Appointment consumes canonical Services snapshot
+NEXT     Step 3 / S8 — final clean Services certification
+THEN     Step 4 / Scheduler build gates
+LATER    Telegram physical proof
+LAST     Agent / MCP / Intelligence layer
+```
+
 ## Evidence discipline
 
 ```text
 UNKNOWN != PASS
 documented != verified
-CI green != a broader claim unless that CI proved it
+CI green != broader claim unless CI proved it
 runtime source SHA != later documentation SHA
-browser memory != durable channel authority
+channel != business authority
+Services != Scheduler
+availability shown != reservation persisted
 provider identity != business policy
-```
-
-## Current next work
-
-```text
-Services track  S6 multi-business generality
-Channel track   C2 Telegram Bot / long polling
 ```
 
 ## What is not yet claimed
 
-Engines does not yet certify full G1 Services closure, Scheduler, Telegram, WhatsApp, full cross-channel equivalence, Agent/MCP, a complete production Integration Engine, or production deployment/security hardening.
+Engines does not yet certify full G1 Services closure, Scheduler, Telegram physical transport, WhatsApp, Integration Engine runtime, Agent/MCP, production deployment or production security hardening.
