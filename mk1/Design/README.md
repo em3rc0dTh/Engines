@@ -12,7 +12,7 @@
 
 3 Services Engine
   S0–S5                                  ✅ CERTIFIED
-  S6–S8                                  OPEN
+  S6–S8                                  COMPLETION DESIGN
   Services→Scheduler handoff             DESIGN FROZEN CANDIDATE
 
 4 Scheduler Engine                       ACTIVE DESIGN
@@ -32,8 +32,9 @@
 
 - `01-services-engine-contract.md`
 - `05-services-scheduler-boundary.md`
+- `09-services-engine-completion-contract.md`
 
-The Services Engine answers what a business offers and freezes immutable Offering semantics for running Workflows. It does not own concrete availability/resources.
+The Services Engine answers what a business offers and freezes immutable Offering semantics for running Workflows. It does not own concrete availability/resources. The S6–S8 completion addendum now defines multi-business proof, canonical Appointment consumption and the abstract scheduling requirement carried inside the selected Offering snapshot.
 
 ### Step 4 — Scheduler
 
