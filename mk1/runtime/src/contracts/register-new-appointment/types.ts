@@ -1,4 +1,11 @@
 import type { CustomerDraft } from '../register-new-customer/types.js';
+import type {
+  EligibilityRuleSet,
+  PricingDescriptor,
+  ServiceDependency,
+  ServiceRequirement,
+  ServiceStatus,
+} from '../services-engine/types.js';
 
 export const REGISTER_NEW_APPOINTMENT_OPERATION = 'RegisterNewAppointment' as const;
 export const REGISTER_NEW_APPOINTMENT_SCHEMA_VERSION = 'mk0.register-appointment.v0' as const;
@@ -33,12 +40,31 @@ export type RegisterNewAppointmentStartEnvelope = Readonly<{
   schemaVersion: RegisterNewAppointmentSchemaVersion;
 }>;
 
+/**
+ * Appointment-compatible projection of a canonical Services ServiceDefinition.
+ *
+ * The original MK0 renderer fields remain stable. MK1 S7 adds optional canonical
+ * Services semantics so a running Appointment can retain the selected revision
+ * without forcing channel/renderers to understand the full Services contract.
+ */
 export type AppointmentService = Readonly<{
   serviceId: string;
   code: string;
   name: string;
+  businessSlug?: string;
+  description?: string;
+  status?: ServiceStatus;
+  revision?: number;
+  tags?: readonly string[];
 }>;
 
+/**
+ * Appointment-compatible projection of a canonical Services ServiceOffering.
+ *
+ * Once selected, this object lives in durable Workflow state. The optional MK1
+ * fields therefore form the Services snapshot semantics used by S7 while the
+ * original productId/serviceId/code/name/duration contract remains compatible.
+ */
 export type AppointmentProduct = Readonly<{
   productId: string;
   serviceId: string;
@@ -46,6 +72,15 @@ export type AppointmentProduct = Readonly<{
   name: string;
   description?: string;
   durationMinutes: number;
+  businessSlug?: string;
+  status?: ServiceStatus;
+  revision?: number;
+  pricing?: PricingDescriptor;
+  priority?: number;
+  tags?: readonly string[];
+  requirements?: readonly ServiceRequirement[];
+  dependencies?: readonly ServiceDependency[];
+  eligibilityRuleSet?: EligibilityRuleSet;
 }>;
 
 export type AppointmentSlot = Readonly<{
