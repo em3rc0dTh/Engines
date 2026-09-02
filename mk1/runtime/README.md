@@ -1,6 +1,6 @@
 # MK1 Runtime
 
-Executable Stage-2 laboratory for Engines. S0 promoted the exact certified MK0 runtime tree into this directory; later gates evolve `mk1/runtime` without rewriting the frozen `mk0/runtime` evidence base.
+Executable Stage-2 laboratory for Engines. S0 promoted the certified MK0 runtime into this directory; later gates evolve `mk1/runtime` without rewriting the frozen `mk0/runtime` evidence base.
 
 ## Current status
 
@@ -9,28 +9,24 @@ Inherited MK0 runtime             ✅ certified baseline
 RegisterNewCustomer               ✅ regression protected
 AttachmentStore/B7                ✅ regression protected
 RegisterNewAppointment            ✅ regression protected
-Services S1 contracts             ✅ certified
-Services S2 deterministic reads   ✅ certified
-Services S3 recommendation        ✅ certified
-Services S4 management mutations  ✅ certified
-Services S5 durable snapshots     ✅ certified
+Services S1–S5                    ✅ certified
 WebChat C0A workflow view         ✅ certified
-WebChat C1A visible E2E flow      ✅ certified
+WebChat C1A visible E2E flow      ✅ certified + human verified
+WebChat C1B durable channel       ✅ certified
 Services S6                       🔧 next Services gate
-WebChat C1B durable binding       🔧 next channel hardening
+Telegram C2                       🔧 next channel gate
 Scheduler Engine                  ❌ not certified
-Telegram                          ❌ not implemented yet
 Agent / MCP                       ❌ intentionally absent
 Production deployment             ❌ not certified
 ```
 
 Canonical status: [`../README.md`](../README.md)
 
-Services plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
+C1B gate/receipt:
 
-Channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
-
-Workflow visibility contract: [`../Design/03-workflow-visibility-contract.md`](../Design/03-workflow-visibility-contract.md)
+- [`../Plan/03-c1b-durable-channel-gate.md`](../Plan/03-c1b-durable-channel-gate.md)
+- [`../Build/evidence/c1b-durable-channel-certification-2026-09-02.md`](../Build/evidence/c1b-durable-channel-certification-2026-09-02.md)
+- [`../Test/c1b-durable-channel-semantics-2026-09-02.md`](../Test/c1b-durable-channel-semantics-2026-09-02.md)
 
 ## Runtime profile
 
@@ -44,14 +40,15 @@ Task Queue         engines-mk0-registration
 PostgreSQL         17.8
 MongoDB            8.0.29
 CTA HTTP           127.0.0.1:8787
-WebChat PoC        127.0.0.1:8790
+Channel Core       127.0.0.1:8788
+WebChat            127.0.0.1:8790
 Temporal gRPC      localhost:7233
 Temporal UI        localhost:8233
 ```
 
-Inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming is a separate compatibility decision.
+Inherited package/task-queue names still contain `mk0` because S0 promoted the certified runtime exactly. Renaming remains a separate compatibility decision.
 
-## Install and typecheck
+## Install and verify
 
 ```bash
 cd mk1/runtime
@@ -78,28 +75,30 @@ npm run test:services:s3
 npm run test:services:s4
 ```
 
-Channel/view regression:
+Channel regression:
 
 ```bash
 npm run test:channel:c0
+npm run test:channel:c1b
 ```
 
-## Start the local Temporal laboratory
+## Start local laboratory
 
 ```bash
 docker compose up --build -d
 docker compose ps
 curl -fsS http://127.0.0.1:8787/health
+curl -fsS http://127.0.0.1:8788/health
 ```
 
-For a destructive clean certification run:
+For a destructive clean run:
 
 ```bash
 docker compose down -v --remove-orphans
 docker compose up --build -d
 ```
 
-Compose dependency chain:
+Current Compose dependency shape:
 
 ```text
 PostgreSQL + MongoDB
@@ -109,15 +108,155 @@ PostgreSQL + MongoDB
       Temporal
         ↓
        Worker
-        ↓
-        CTA
+      ↙     ↘
+    CTA    Channel Core
 ```
 
-## WebChat C1A — minimal visual proof
+The migration service now applies the inherited Customer/Appointment/Services migrations plus:
 
-No framework is required. The C1A server serves static HTML/CSS/JS and forwards explicit Appointment operations to the already-existing CTA HTTP boundary.
+```text
+007_channel_adapter_durability.sql
+```
 
-Start it after the Compose laboratory is healthy:
+## C1B channel architecture
+
+```text
+raw transport event
+        ↓
+ChannelAdapterRegistry
+        ↓
+provider adapter
+        ↓
+CanonicalChannelEnvelope
+        ↓
+ChannelExecutionCore
+        ↓
+PostgreSQL durable correlation
+        ↓
+existing Temporal operation identity
+        ↓
+RegisterNewAppointment Workflow
+```
+
+There is no Agent, MCP, LLM router or provider-specific Appointment Workflow.
+
+### Canonical actions
+
+C1B currently exposes the explicit Appointment actions needed for the proof:
+
+```text
+START_APPOINTMENT
+PROVIDE_CUSTOMER
+RESOLVE_CUSTOMER
+SELECT_SERVICE
+SELECT_OFFERING
+SET_DATE
+SELECT_SLOT
+FINALIZE_APPOINTMENT
+```
+
+These are explicit operations, not inferred intents.
+
+### Adapter composition
+
+`ChannelAdapterRegistry` resolves adapters by transport type. `WebChatAdapter` is the first certified adapter. Telegram C2 must register another adapter against the same canonical envelope and execution core rather than adding business branches.
+
+## Durable channel persistence
+
+### `channel_conversation_bindings`
+
+Operational authority for:
+
+```text
+business scope
+channel
+external conversation identity
+workflowId
+operation
+ACTIVE / COMPLETED / FAILED binding status
+```
+
+The key property is restart-safe recovery:
+
+```text
+externalConversationId
+→ PostgreSQL binding
+→ same Temporal workflowId
+```
+
+### `channel_inbound_events`
+
+Operational authority for:
+
+```text
+business scope
+channel
+external message identity
+external conversation identity
+canonical material hash
+PROCESSING / APPLIED / REJECTED
+terminal response
+error code
+```
+
+These tables are transport/correlation truth only. They do not duplicate canonical Appointment business state.
+
+## Replay and conflict semantics
+
+Canonical fingerprinting uses deterministic sorted-object JSON plus SHA-256.
+
+```text
+same business + channel + externalMessageId
++ same canonical material
+→ exact replay
+→ durable stored terminal result when available
+
+same logical identity
++ different canonical material
+→ CHANNEL_EVENT_IDENTITY_CONFLICT
+→ no conflicting Workflow mutation
+```
+
+The event identity also derives the existing Temporal logical-operation identity:
+
+```text
+channel:<channel>:<externalMessageId>
+```
+
+For Workflow start it becomes the Appointment idempotency key. For Workflow Updates it becomes the Appointment `inputId`.
+
+This is important for the crash window:
+
+```text
+Temporal effect succeeds
+→ adapter dies before event row is finalized
+→ transport retries same event
+→ same Temporal logical identity
+→ no second logical business effect
+```
+
+## Channel Core HTTP surface
+
+Default port `8788`:
+
+```text
+GET  /health
+POST /channel/events
+GET  /channel/conversations/:externalConversationId?businessSlug=<slug>&channel=<kind>
+```
+
+Health explicitly reports:
+
+```text
+persistence=postgresql
+orchestration=temporal
+agent=false
+mcp=false
+```
+
+## Hardened WebChat
+
+Start after Compose is healthy:
 
 ```bash
 npm run webchat:server
@@ -129,49 +268,28 @@ Open:
 http://127.0.0.1:8790/webchat/
 ```
 
-The chat page shows continuously:
+C1B WebChat uses a durable external conversation identity. The browser may store that identity for convenience, but it no longer needs to own the `workflowId` binding.
+
+State recovery path:
 
 ```text
-workflowId
-workflowStatus
-Temporal phase
-nextAction
-human-readable workflow steps
-raw durable state
+browser conversationId
+→ /api/channel/conversations/<conversationId>/view
+→ Channel Core
+→ PostgreSQL binding
+→ Temporal Workflow query
+→ C1A Workflow view
 ```
 
-From the active chat, open the separate inspector or use:
+The same separate inspector remains available:
 
 ```text
 http://127.0.0.1:8790/webchat/workflow.html?workflowId=<workflowId>
 ```
 
-The inspector shows:
+It follows Temporal, not the transport provider.
 
-```text
-Workflow ID
-Run ID
-Workflow status
-Temporal phase
-next action
-last refresh
-all visible steps
-Customer projection
-selected Service
-selected Offering/Product
-Appointment date
-available slots
-selected slot
-issues
-terminal result
-raw Workflow response
-```
-
-Both pages poll the same real durable Workflow state. The browser does not own a parallel phase machine.
-
-## Visible Appointment execution map
-
-The provider-independent CTA view projects the current durable Appointment state into:
+## Visible Appointment map retained
 
 ```text
 01 Start Workflow
@@ -188,128 +306,107 @@ The provider-independent CTA view projects the current durable Appointment state
 12 Appointment Created
 ```
 
-The current `RegisterNewAppointment` domain contract has one Customer `name` field plus contact email/phones. The UI does not fabricate a separate surname domain field.
+Human data-capture checkpoints do not invent Temporal phases. `phase` and `nextAction` remain separately visible.
 
-Customer name/email/phone rows are human data-capture checkpoints, not new Temporal phases. The actual phase remains one of the canonical Appointment phases and is always displayed separately.
+## C1B certification probes
 
-## WebChat execution boundary
-
-```text
-HTML WebChat
-   ↓
-WebChat transport server
-   ↓
-existing CTA HTTP routes
-   ↓
-Temporal
-   ↓
-RegisterNewAppointment
-```
-
-Explicitly absent:
-
-```text
-Agent
-MCP
-LLM orchestration
-semantic intent router
-AI tool selection
-```
-
-The interaction is deterministic like the CLI: the UI renders legal choices and submits explicit Workflow updates.
-
-## WebChat certification probe
+Automated full probe:
 
 ```bash
-npm run probe:webchat:c1
+npm run probe:webchat:c1b
 ```
 
-The successful certification executed the full path through the WebChat transport:
+CI splits it around a real WebChat process restart:
+
+```bash
+C1B_PHASE=prepare npm run probe:webchat:c1b
+# stop/start WebChat adapter process
+C1B_PHASE=complete npm run probe:webchat:c1b
+```
+
+Successful certification authority:
 
 ```text
-Start
-→ Customer name
-→ Customer email
-→ Customer phone
-→ Resolve Customer
-→ Service
-→ Offering
-→ Date
-→ Slots
-→ Slot
-→ Finalize
-→ CREATED
+Source SHA       2008fce4f863fdabf8e8f323eee1d7cda05cb454
+Run              33647842017
+Job              100307008849
+Artifact         9853555059
+Artifact SHA256  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
 ```
 
-Final C1A authority:
+Observed restart:
 
 ```text
-Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
-Run              33542468975
-Job              99971830150
-Artifact         9814172765
-Artifact SHA256  a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3
-Marker           WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
+WebChat PID before  7982
+WebChat PID after   8190
 ```
 
-All twelve visible steps reached `COMPLETE`, final phase was `CREATED`, and the health/proof surface reported `agent=false` and `mcp=false`.
-
-Receipt: [`../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`](../Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md)
-
-## C1A versus C1B
-
-C1A is ready for visual/manual testing, but it is not the complete durable channel gate.
-
-Current C1A resume behavior can use a known `workflowId` from URL/local browser storage. This is not canonical server-side transport correlation.
-
-C1B still must add and certify:
+Direct markers:
 
 ```text
-server-side durable ChannelConversationBinding
-server-side ChannelInboundEvent identity/fingerprint
-same-event replay protection
-same-identity/different-material conflict
-adapter-process restart/recovery
-duplicate browser-submit transport semantics
+WEBCHAT_C1B_PRE_RESTART_PASS
+WEBCHAT_C1B_DURABLE_CHANNEL_PASS
+WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
 ```
 
-These belong to the CTA/channel boundary, not to Customer/Services/Scheduler business logic.
+Final C1B evidence reported:
+
+```text
+finalPhase=CREATED
+workflowStatus=COMPLETED
+allVisibleStepsComplete=true
+bindingRecoveredAfterAdapterRestart=true
+exactStartReplay=true
+exactUpdateReplay=true
+materialConflictRejected=true
+conflictMutationFree=true
+terminalReplayFromDurableLedger=true
+agent=false
+mcp=false
+```
+
+## C1B failure provenance
+
+First run `33647731151` failed strict TypeScript typecheck before runtime because the replay fallback violated `exactOptionalPropertyTypes`. The strict response construction was corrected in source `2008fce4...`; no business/channel invariant was weakened.
 
 ## Services through S5
 
 Services currently include generic Service/Offering contracts, deterministic read/recommendation, Temporal-managed versioned mutation commands, PostgreSQL canonical truth, Mongo semantic audit, optimistic revision control, and durable revision-specific Workflow snapshots.
 
-S4 final certification:
-
-```text
-Source SHA       f3e54b853af5f01fb2e9ed7d032f784e3cffb81e
-Run              33538554471
-Artifact         9812703293
-```
-
-S5 final certification:
-
-```text
-Source SHA       7568618062f4192b34caf6e916b58534f304ad3f
-Run              33539683548
-Artifact         9813129778
-```
-
-S5 proved a Workflow kept revision `N` while S4 published `N+1`, survived Worker restart, completed using `N`, and a new Workflow observed `N+1`.
+S6 remains the next Services gate; G1 is not complete.
 
 ## Persistence authority
 
-### PostgreSQL
+```text
+Temporal
+  durable orchestration / Event History / Workflow state
 
-Canonical business truth includes inherited Customer/Appointment data plus Services catalog and management command truth.
+PostgreSQL
+  Customer/Appointment/Services canonical transactional truth
+  channel conversation/event operational correlation truth
 
-### MongoDB
+MongoDB
+  semantic/execution audit, not shadow business/channel binding truth
 
-Semantic audit contains inherited execution/appointment evidence plus Services mutation audit. Mongo is not canonical Customer/Appointment/Services truth.
+AttachmentStore
+  binary/document integrity boundary
+```
 
-### AttachmentStore
+## Next channel gate — C2 Telegram
 
-Local laboratory filesystem provider remains the certified binary boundary. Channel binary/media work must converge on this boundary rather than place blobs into business tables.
+Telegram must reuse:
+
+```text
+CanonicalChannelEnvelope
+ChannelAdapterRegistry
+ChannelExecutionCore
+channel_conversation_bindings
+channel_inbound_events
+same Temporal Workflow Library
+same C1A Workflow projection
+```
+
+Initial delivery mechanism remains Telegram Bot API long polling. Transport identity such as Telegram `update_id` must map into the existing event identity semantics; Telegram must not redefine Appointment behavior.
 
 ## Stop vs reset
 
@@ -319,7 +416,7 @@ Preserve data/history:
 docker compose down
 ```
 
-Destructive laboratory reset:
+Destructive reset:
 
 ```bash
 docker compose down -v --remove-orphans
@@ -327,4 +424,4 @@ docker compose down -v --remove-orphans
 
 ## Scope boundary
 
-This remains a Stage-2 architecture laboratory. Current certification does not claim full G1 closure, Scheduler, Telegram, WhatsApp, full durable multi-channel correlation, Agent, MCP, or production deployment.
+This remains a Stage-2 architecture laboratory. C1B does not certify Telegram, WhatsApp, full G3, full G1 Services closure, Scheduler, Agent, MCP, production security or production deployment.
