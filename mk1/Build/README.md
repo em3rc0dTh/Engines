@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This directory answers one question:
+This index answers:
 
 > **What source was actually executed, what evidence was produced, and what bounded claim did that evidence certify?**
 
-Design intent belongs in `Brainstorming`, `mining-site`, `Design`, `Plan`, and `golden-dataset`. Documentation-only commits after a successful run never replace the executed source SHA.
+Design intent belongs in `Brainstorming`, `mining-site`, `Design`, `Plan`, and `golden-dataset`. Documentation commits after a successful run never replace the executed runtime SHA.
 
 ## Current status
 
@@ -20,8 +20,8 @@ G1 Services Engine
   S3 Eligibility + recommendation    ✅ CERTIFIED
   S4 Versioned management            ✅ CERTIFIED
   S5 Running-Workflow snapshots      ✅ CERTIFIED
-  S6 Multi-business generality       🔧 NEXT SERVICES
-  S7 Appointment integration         ⏭ QUEUED
+  S6 Multi-business generality       ✅ CERTIFIED
+  S7 Appointment integration         🔧 NEXT
   S8 Final clean certification       ⏭ QUEUED
 
 G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
@@ -29,8 +29,8 @@ G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
 G3 CTA channel proof
   C0A Workflow-view projection       ✅ CERTIFIED
   C1A Workflow-visible WebChat       ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
-  C1B Durable WebChat semantics      ✅ CERTIFIED
-  C2 Telegram                        🔧 NEXT CHANNEL
+  C1B Durable WebChat semantics      ✅ CERTIFIED + HUMAN RESTART VERIFIED
+  C2 Telegram                        ⏭ DEFERRED TRANSPORT PROOF
 ```
 
 ## Evidence ledger
@@ -44,55 +44,43 @@ G3 CTA channel proof
 | S3 | `a6974cdbb669b66a07b8780d5e20c960d6a0cd64` | `33531884206` | `99936776923` | `9810084527` | `fa6a9efaa67309a4255dbce62fe362402ff453643e90f63c82c1457099e9de60` | [`s3-services-eligibility-certification-2026-09-01.md`](evidence/s3-services-eligibility-certification-2026-09-01.md) |
 | S4 | `f3e54b853af5f01fb2e9ed7d032f784e3cffb81e` | `33538554471` | `99959020329` | `9812703293` | `275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c` | [`s4-services-management-certification-2026-09-01.md`](evidence/s4-services-management-certification-2026-09-01.md) |
 | S5 | `7568618062f4192b34caf6e916b58534f304ad3f` | `33539683548` | `99962550022` | `9813129778` | `22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708` | [`s5-services-snapshot-certification-2026-09-01.md`](evidence/s5-services-snapshot-certification-2026-09-01.md) |
+| S6 | `3eed68b45036154bcf1776564f479cd02e30d0d4` | `33666790884` | `100370414068` | `9860927146` | `543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564` | [`s6-services-multibusiness-certification-2026-09-02.md`](evidence/s6-services-multibusiness-certification-2026-09-02.md) |
 | C1A | `860629e9ada498e225ae803a9fe6f077949ec320` | `33542468975` | `99971830150` | `9814172765` | `a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3` | [`c1a-webchat-workflow-visibility-certification-2026-09-01.md`](evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md) |
-| C1A UI hardening | `ed207f8c82ae9138f92fd505209c30c4eeba243b` | `33560864234` | `100032737031` | `9821207955` | `4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff` | human record: [`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md) |
+| C1A UI hardening | `ed207f8c82ae9138f92fd505209c30c4eeba243b` | `33560864234` | `100032737031` | `9821207955` | `4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff` | [`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md) |
 | C1B | `2008fce4f863fdabf8e8f323eee1d7cda05cb454` | `33647842017` | `100307008849` | `9853555059` | `efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf` | [`c1b-durable-channel-certification-2026-09-02.md`](evidence/c1b-durable-channel-certification-2026-09-02.md) |
 
-## C1A — workflow-visible WebChat
+## S6 — multi-business generality
 
-C1A proved the minimal browser surface can drive the existing explicit Appointment Workflow to `CREATED` while exposing the real Temporal phase, next action and deterministic 12-step engineering view.
+S6 uses two materially different synthetic businesses through the same Services contracts, Temporal management Workflow and persistence/read/eligibility implementation.
 
-The first human run later exposed duplicate presentation prompts around date/finalize transitions. The renderer was fixed and re-certified; a second human run confirmed the symptom was gone while terminal Workflow state remained correct.
-
-## C1B — durable channel semantics
-
-C1B adds operational durability beneath that same visual surface:
+Direct marker:
 
 ```text
-WebChatAdapter
-→ CanonicalChannelEnvelope
-→ PostgreSQL binding/event ledger
-→ stable event-derived Temporal idempotencyKey/inputId
-→ same Appointment Workflow
+SERVICES_S6_MULTIBUSINESS_PASS {
+  "businesses":["s6-golden-auto","s6-golden-vet"],
+  "sharedServiceCode":"primary-service",
+  "sharedOfferingCode":"standard",
+  "businessScopedReads":true,
+  "businessScopedIdempotency":true,
+  "crossBusinessDependencyRejected":true,
+  "deterministicEligibility":true,
+  "autoDurationMinutes":30,
+  "vetDurationMinutes":45,
+  "workflowAuditCount":6
+}
 ```
 
-Successful run `33647842017` proved:
+The same run also emitted `SERVICES_S6_NO_VERTICAL_FIXTURE_BRANCHING_PASS`, re-ran dynamic S4 management/rejection proofs, and completed the inherited Appointment E2E including atomic slot-conflict and idempotency replay regression.
 
-```text
-exact START replay                           PASS
-exact Workflow UPDATE replay                 PASS
-same event identity + different material     409 conflict
-conflicting material changes Workflow        false
-WebChat process restart                      PID 7982 -> 8190
-durable conversation recovery                PASS
-same Workflow after restart                  PASS
-terminal Appointment                         COMPLETED / CREATED
-all 12 visible checkpoints                   COMPLETE
-terminal event exact replay                  durable stored result
-Agent                                        false
-MCP                                          false
-C1A full visibility regression               PASS
-```
+S6 therefore certifies **Services generality/isolation**, not S7 Appointment consumption of canonical Services snapshots.
 
-Runtime markers:
+Verification ledger: [`../Test/g1-services-engine-s0-s6.md`](../Test/g1-services-engine-s0-s6.md).
 
-```text
-WEBCHAT_C1B_PRE_RESTART_PASS
-WEBCHAT_C1B_DURABLE_CHANNEL_PASS
-WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
-```
+## Channel evidence boundary
 
-Verification details: [`../Test/c1b-durable-channel-semantics-2026-09-02.md`](../Test/c1b-durable-channel-semantics-2026-09-02.md).
+C1A proved a minimal browser surface can drive the explicit Appointment Workflow while exposing real Temporal state and a deterministic 12-step engineering view. A post-human timing fix removed duplicate Step 08/11 prompts and was human verified.
+
+C1B added durable PostgreSQL conversation/event correlation, exact replay, material-conflict rejection and physical WebChat process restart/recovery to the same Workflow. It did not add Agent/MCP or channel-specific business policy.
 
 ## Failure / supersession provenance
 
@@ -110,6 +98,21 @@ Cause    strict TypeScript exactOptionalPropertyTypes test-fixture mismatch
 
 Run `33538120900` was green before dependency-reference hardening. The final S4 authority is `33538554471`.
 
+### S6
+
+```text
+Run       33666702773
+Job       100370123359
+Source    1cf6c133c33eaabfd9539fffcf8b4568e6dc8d34
+Result    FAILURE
+Stage     static anti-vertical implementation guard, before Compose/runtime
+Cause     guard scanned an existing unit-test fixture string and false-positively matched `golden-auto`
+Artifact  9860853124
+SHA-256   a9e04c9e69742fddf9d8fc567546c90adc7ce629f58801ea112c17411479dc41
+```
+
+The guard was narrowed to implementation `.ts` files excluding `*.test.ts`. No Services runtime/business invariant changed. Run `33666790884` is the sole S6 certification authority.
+
 ### C1A
 
 ```text
@@ -118,8 +121,6 @@ Result   FAILURE
 Stage    typecheck before runtime
 Cause    RequestInit/BodyInit strict TypeScript incompatibility
 ```
-
-Final C1A original authority is `33542468975`; renderer hardening is separately evidenced by `33560864234`.
 
 ### C1B
 
@@ -133,19 +134,18 @@ Artifact  9853467649
 SHA-256   b663d43180b259ea1bd565b57f025884599dd63dbb9337401e37f1f32e91120e
 ```
 
-The response construction was corrected without changing channel/domain invariants. Successful run `33647842017` is the sole C1B certification authority.
-
-## What the receipts mean
+## Receipt meaning
 
 ```text
-S0  -> executable MK1 baseline
-S1  -> Services contracts/persistence
-S2  -> deterministic Services reads
-S3  -> deterministic eligibility/recommendation
-S4  -> versioned/idempotent Services management
-S5  -> revision-stable Workflow snapshots across Worker restart
-C1A -> HTML WebChat drives/exposes real durable Appointment flow
-C1B -> WebChat correlation/event semantics survive replay/conflict/process restart
+S0  executable MK1 baseline
+S1  Services contracts/persistence
+S2  deterministic Services reads
+S3  deterministic eligibility/recommendation
+S4  versioned/idempotent Services management
+S5  revision-stable Workflow snapshots across catalog change + Worker restart
+S6  same Services implementation proven across materially different businesses
+C1A HTML WebChat drives/exposes real durable Appointment flow
+C1B WebChat correlation/event semantics survive replay/conflict/process restart
 ```
 
 No individual receipt expands into a broader production-readiness claim.
@@ -172,15 +172,14 @@ human-readable verdict
 ## Current next work
 
 ```text
-Services track  S6 multi-business generality
-Channel track   C2 Telegram adapter / long polling
+Services track  S7 Appointment → canonical Services integration
+Scheduler track design frozen; build waits for the intended Services boundary
+Channel track   Telegram design exists; physical transport proof deferred
 ```
 
-Telegram must reuse the certified C1B `CanonicalChannelEnvelope`, durable PostgreSQL binding/event semantics and same Temporal Workflow library. No provider-specific business branch and no Agent/MCP are permitted.
-
-## Cross-reference
+Cross-references:
 
 - Services plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
+- Services S6 verification: [`../Test/g1-services-engine-s0-s6.md`](../Test/g1-services-engine-s0-s6.md)
+- Platform 3–4–5 roadmap: [`../Plan/04-platform-steps-3-4-5-roadmap.md`](../Plan/04-platform-steps-3-4-5-roadmap.md)
 - Multi-channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
-- C1B gate: [`../Plan/03-c1b-durable-channel-gate.md`](../Plan/03-c1b-durable-channel-gate.md)
-- Channel contract: [`../Design/04-c1b-durable-channel-contract.md`](../Design/04-c1b-durable-channel-contract.md)
