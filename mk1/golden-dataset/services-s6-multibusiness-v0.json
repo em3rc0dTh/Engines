@@ -1,0 +1,70 @@
+{
+  "artifact": "mk1-services-s6-multibusiness-v0",
+  "version": 1,
+  "gate": "G1-S6",
+  "status": "EXPECTATION_MANIFEST",
+  "designAuthority": "mk1/Design/09-services-engine-completion-contract.md",
+  "expectationsPredeclaredInDesignBeforeBuild": true,
+  "machineReadableFileCreatedAfterBuildStarted": true,
+  "evidenceDiscipline": "This JSON transcribes the already-existing S6 design assertions. It is not represented as an independently pre-Build Golden Dataset file.",
+  "specimens": [
+    {
+      "businessSlug": "s6-golden-auto",
+      "domain": "automotive",
+      "service": {
+        "code": "primary-service",
+        "name": "Vehicle Care"
+      },
+      "offering": {
+        "code": "standard",
+        "name": "Basic Wash",
+        "durationMinutes": 30,
+        "pricing": {
+          "kind": "FIXED",
+          "amountMinor": 3000,
+          "currency": "PEN"
+        },
+        "requirementCode": "vehicle-profile"
+      }
+    },
+    {
+      "businessSlug": "s6-golden-vet",
+      "domain": "veterinary",
+      "service": {
+        "code": "primary-service",
+        "name": "Consultation"
+      },
+      "offering": {
+        "code": "standard",
+        "name": "General Consultation",
+        "durationMinutes": 45,
+        "pricing": {
+          "kind": "FIXED",
+          "amountMinor": 7000,
+          "currency": "PEN"
+        },
+        "requirementCode": "pet-profile"
+      }
+    }
+  ],
+  "requiredAssertions": [
+    "same Services management Workflow code path handles both businesses",
+    "same service code is legal in distinct business scopes",
+    "same offering code is legal in distinct business scopes",
+    "same idempotency key is scoped independently by business",
+    "exact replay inside one business produces REPLAYED rather than a second effect",
+    "cross-business Service reads do not resolve",
+    "cross-business Offering reads do not resolve",
+    "cross-business dependencies are rejected before persistent partial Offering creation",
+    "eligibility/recommendation is deterministic for both materially different specimens",
+    "fixture business identities do not appear in runtime implementation files",
+    "existing Customer/CLI/Attachment/Appointment regressions remain green"
+  ],
+  "forbiddenClaims": [
+    "Scheduler is certified",
+    "Appointment consumes canonical OfferingSnapshot",
+    "Telegram is certified",
+    "Agent or MCP exists",
+    "production readiness"
+  ]
+}
