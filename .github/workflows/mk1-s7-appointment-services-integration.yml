@@ -19,7 +19,7 @@ concurrency:
 jobs:
   certify-services-s7:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     defaults:
       run:
@@ -72,13 +72,37 @@ jobs:
           grep -q 'servicesReadActivities.listOfferings' src/orchestration/temporal/activities/appointment.activities.ts
           echo 'SERVICES_S7_CANONICAL_ACTIVITY_BOUNDARY_PASS'
 
-      - name: Start clean Compose laboratory
+      - name: Start pristine regression laboratory
         run: |
           docker compose down -v --remove-orphans || true
           docker compose up --build -d
           docker compose ps
 
-      - name: Wait for CTA and worker health
+      - name: Wait for pristine regression laboratory
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify inherited Appointment behavior on pristine fixture
+        run: npx tsx scripts/certify-register-new-appointment.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Reset laboratory before S7 composition proof
+        run: |
+          docker compose down -v --remove-orphans
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for pristine S7 laboratory
         run: |
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8787/health >/dev/null \
@@ -96,11 +120,6 @@ jobs:
 
       - name: Certify S7 Appointment canonical Services integration
         run: npm run probe:services:s7
-        env:
-          ENGINES_CTA_URL: http://127.0.0.1:8787
-
-      - name: Certify inherited Appointment behavior after S7
-        run: npx tsx scripts/certify-register-new-appointment.ts
         env:
           ENGINES_CTA_URL: http://127.0.0.1:8787
 
