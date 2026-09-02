@@ -13,6 +13,11 @@ export function toAppointmentService(service: ServiceDefinition): AppointmentSer
     serviceId: service.serviceId,
     code: service.code,
     name: service.name,
+    businessSlug: service.businessSlug,
+    ...(service.description ? { description: service.description } : {}),
+    status: service.status,
+    revision: service.revision,
+    tags: service.tags,
   };
 }
 
@@ -24,6 +29,17 @@ export function toAppointmentProduct(offering: ServiceOffering): AppointmentProd
     name: offering.name,
     ...(offering.description ? { description: offering.description } : {}),
     durationMinutes: offering.durationMinutes,
+    businessSlug: offering.businessSlug,
+    status: offering.status,
+    revision: offering.revision,
+    pricing: offering.pricing,
+    priority: offering.priority,
+    tags: offering.tags,
+    requirements: offering.requirements,
+    dependencies: offering.dependencies,
+    ...(offering.eligibilityRuleSet
+      ? { eligibilityRuleSet: offering.eligibilityRuleSet }
+      : {}),
   };
 }
 
