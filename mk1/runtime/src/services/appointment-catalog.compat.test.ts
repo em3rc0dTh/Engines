@@ -15,6 +15,7 @@ const service: ServiceDefinition = {
   businessSlug: 'golden-business',
   code: 'generic-service',
   name: 'Generic Service',
+  description: 'Canonical Service fixture',
   status: 'ACTIVE',
   revision: 4,
   tags: ['generic'],
@@ -40,17 +41,27 @@ const offering: ServiceOffering = {
     config: { path: 'customer.contact' },
   }],
   dependencies: [],
+  eligibilityRuleSet: {
+    mode: 'ALL',
+    predicates: [{ path: 'customer.contact', operator: 'EXISTS' }],
+    failureCode: 'CONTACT_REQUIRED',
+  },
 };
 
-test('CMP-001: generic Service projects to inherited AppointmentService without policy duplication', () => {
+test('CMP-001: canonical Service projection preserves renderer fields and revision semantics', () => {
   assert.deepEqual(toAppointmentService(service), {
     serviceId: 'svc_generic',
     code: 'generic-service',
     name: 'Generic Service',
+    businessSlug: 'golden-business',
+    description: 'Canonical Service fixture',
+    status: 'ACTIVE',
+    revision: 4,
+    tags: ['generic'],
   });
 });
 
-test('CMP-002: generic Offering projects to inherited AppointmentProduct duration contract', () => {
+test('CMP-002: canonical Offering projection preserves Appointment compatibility plus snapshot semantics', () => {
   assert.deepEqual(toAppointmentProduct(offering), {
     productId: 'off_generic',
     serviceId: 'svc_generic',
@@ -58,6 +69,15 @@ test('CMP-002: generic Offering projects to inherited AppointmentProduct duratio
     name: 'Generic Offering',
     description: 'Compatibility fixture',
     durationMinutes: 45,
+    businessSlug: 'golden-business',
+    status: 'ACTIVE',
+    revision: 7,
+    pricing: { kind: 'FIXED', amountMinor: 8000, currency: 'PEN' },
+    priority: 10,
+    tags: ['fixture'],
+    requirements: offering.requirements,
+    dependencies: [],
+    eligibilityRuleSet: offering.eligibilityRuleSet,
   });
 });
 
