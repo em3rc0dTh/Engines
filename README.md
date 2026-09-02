@@ -11,10 +11,12 @@ OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED
 MK1 — STAGE 2
 ACTIVE
 Services S0–S5 certified
-Workflow-visible WebChat C1A certified
+WebChat C1A workflow visibility certified + human verified
+WebChat C1B durable channel semantics certified
+Telegram C2 next channel proof
 ```
 
-MK0 remains the frozen evidence base. MK1 evolves from that certified foundation without rewriting `mk0/runtime`.
+MK0 remains the frozen evidence base. MK1 evolves from that foundation without rewriting `mk0/runtime`.
 
 ## MK0 — certified foundation
 
@@ -36,72 +38,75 @@ Production deployment                       ❌ NOT CERTIFIED
 Public/internet exposure                    ❌ NOT CERTIFIED
 ```
 
-Canonical MK0 index: [`mk0/README.md`](mk0/README.md). Evidence index: [`mk0/Build/evidence/README.md`](mk0/Build/evidence/README.md).
+Canonical MK0 index: [`mk0/README.md`](mk0/README.md).
 
 ## MK1 — Services Engine progress
 
 ```text
-G0 — Foundation completeness audit          ✅ CLOSED
+G0 Foundation completeness audit           ✅ CLOSED
 
-G1 — Services Engine
-S0 — Runtime promotion                     ✅ CERTIFIED
-S1 — Contracts + persistence               ✅ CERTIFIED
-S2 — Deterministic read engine             ✅ CERTIFIED
-S3 — Eligibility + recommendation          ✅ CERTIFIED
-S4 — Versioned management mutations        ✅ CERTIFIED
-S5 — Running-Workflow snapshots            ✅ CERTIFIED
-S6 — Multi-business generality             🔧 NEXT
-S7 — Appointment integration               ⏭ QUEUED
-S8 — Final clean certification             ⏭ QUEUED
+G1 Services Engine
+S0 Runtime promotion                       ✅ CERTIFIED
+S1 Contracts + persistence                 ✅ CERTIFIED
+S2 Deterministic read engine               ✅ CERTIFIED
+S3 Eligibility + recommendation            ✅ CERTIFIED
+S4 Versioned management mutations          ✅ CERTIFIED
+S5 Running-Workflow snapshots              ✅ CERTIFIED
+S6 Multi-business generality               🔧 NEXT
+S7 Appointment integration                 ⏭ QUEUED
+S8 Final clean certification               ⏭ QUEUED
 
 G1 SERVICES ENGINE                         ❌ NOT YET FULLY CERTIFIED
 G2 SCHEDULER ENGINE                        ⏭ AFTER G1
 ```
 
-S4 certifies Temporal-orchestrated Service/Offering management with business-scoped idempotency, exact replay, material-conflict protection, optimistic revision control, explicit lifecycle changes, reference safety, and semantic audit before terminal Workflow return.
+S4 certifies versioned/idempotent Service/Offering management through Temporal. S5 certifies revision-specific running Workflow snapshots across catalog change and Worker restart.
 
-S5 certifies that a running Temporal consumer can keep revision `N` while the mutable Services catalog advances to `N+1`, survive Worker restart, finish with `N`, and allow a newly started Workflow to observe `N+1`.
+Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Build/evidence index: [`mk1/Build/README.md`](mk1/Build/README.md).
 
-Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Services plan: [`mk1/Plan/01-services-engine-gates.md`](mk1/Plan/01-services-engine-gates.md). Build/evidence index: [`mk1/Build/README.md`](mk1/Build/README.md).
+## G3 — CTA channel proof
 
-## CTA channel proof — current boundary
+No Agent, MCP, LLM orchestration or semantic AI router is part of the current channel work.
 
-No Agent, MCP, LLM orchestration, or semantic AI router is part of the current channel work.
-
-The architecture remains the explicit CLI-style path:
+The architecture continues the explicit CLI model:
 
 ```text
 CLI / WebChat / Telegram / later transport
               │
               ▼
-       Channel Adapter
+        Channel Adapter
               │
               ▼
-    canonical CTA operation
+   CanonicalChannelEnvelope
               │
               ▼
-           Temporal
+      ChannelExecutionCore
               │
-              ▼
-     same Workflow Library
+       ┌──────┴─────────┐
+       ▼                ▼
+PostgreSQL           Temporal
+channel binding      Workflow authority
++ event ledger           │
+                         ▼
+                  same Workflow Library
 ```
 
-Provider differences stop at adapter/renderer boundaries. Customer, Services, Scheduler, and Workflow logic remain provider-independent.
+Provider differences stop at adapter/renderer boundaries. Customer, Services, Scheduler and Workflow policy remain provider-independent.
 
 Current channel status:
 
 ```text
-C0A — provider-independent Workflow view    ✅ CERTIFIED
-C1A — minimal workflow-visible WebChat       ✅ CERTIFIED
-C1B — durable channel correlation/dedupe     🔧 OPEN
-C2  — Telegram Bot                          ⏭ SECOND CHANNEL
-C3  — Telegram webhook parity               ⏭ OPTIONAL
-C4  — WhatsApp                              ⏭ LATER
+C0A Workflow-view projection               ✅ CERTIFIED
+C1A workflow-visible HTML WebChat           ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
+C1B durable correlation/event semantics     ✅ CERTIFIED
+C2 Telegram Bot / long polling              🔧 NEXT
+C3 Telegram webhook parity                  ⏭ OPTIONAL
+C4 WhatsApp                                 ⏭ LATER
 ```
 
 ## C1A — workflow-visible WebChat
 
-The first WebChat proof deliberately uses only a small HTML/CSS/JS surface.
+The first WebChat proof deliberately uses a small HTML/CSS/JS surface:
 
 ```text
 /webchat/
@@ -111,78 +116,107 @@ The first WebChat proof deliberately uses only a small HTML/CSS/JS surface.
   live Temporal Workflow inspector
 ```
 
-The WebChat and inspector continuously expose the real durable `workflowId`, `workflowStatus`, Temporal `phase`, and `nextAction`.
+Both expose the real durable Workflow ID/status, Temporal phase, next action and a deterministic 12-step execution map. C1A was automated-certified, then human tested; a prompt-render timing defect was fixed and human verified post-fix.
 
-The provider-independent visible execution map is:
-
-```text
-01 Start Workflow
-02 Customer name
-03 Customer email
-04 Customer phone
-05 Resolve Customer
-06 Select Service
-07 Select Offering / Product
-08 Set Date
-09 Load Available Slots
-10 Select Slot
-11 Finalize Appointment
-12 Appointment Created
-```
-
-The Customer field rows are human interaction checkpoints projected from durable Workflow data. They do not replace or fabricate Temporal phases.
-
-C1A certification executed the complete `RegisterNewAppointment` flow through the WebChat transport and ended with all twelve visible checkpoints `COMPLETE` and final Temporal phase `CREATED`.
+Original C1A authority:
 
 ```text
 Source SHA       860629e9ada498e225ae803a9fe6f077949ec320
 Run              33542468975
-Job              99971830150
 Artifact         9814172765
-Artifact SHA256  a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3
-Marker           WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
 ```
 
-Receipt: [`mk1/Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`](mk1/Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md)
-
-C1A is ready for visual/manual proof. C1 itself is not fully closed because C1B still needs server-side durable conversation binding, inbound-event dedupe/conflict semantics, and adapter-restart recovery.
-
-Channel references:
-
-- [`mk1/Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md`](mk1/Brainstorming/03-cta-telegram-whatsapp-webchat-poc.md)
-- [`mk1/Design/02-cta-channel-adapter-contract.md`](mk1/Design/02-cta-channel-adapter-contract.md)
-- [`mk1/Design/03-workflow-visibility-contract.md`](mk1/Design/03-workflow-visibility-contract.md)
-- [`mk1/Plan/02-cta-multichannel-poc-gates.md`](mk1/Plan/02-cta-multichannel-poc-gates.md)
-
-## Architecture authority model
+Human/renderer hardening authority:
 
 ```text
-CHANNELS / CLIENTS
-CLI · HTTP/Postman · Lab Consoles · WebChat · future Telegram/WhatsApp
-                ↓
-          CTA ADAPTER
- transport parsing / canonicalization
-                ↓
-       TEMPORAL / ENGINES
- durable Workflow Executions
- Query / Update / Child Workflow
- retry / replay / recovery
-                ↓
-          ACTIVITIES / PORTS
-       ┌────────┼──────────┐
-       ↓        ↓          ↓
- PostgreSQL   MongoDB   AttachmentStore
- business    semantic    binary/document
- truth       audit       truth
+Source SHA       ed207f8c82ae9138f92fd505209c30c4eeba243b
+Run              33560864234
+Artifact         9821207955
 ```
 
-Authority remains separated:
+## C1B — durable WebChat channel semantics
 
-- **Temporal** — durable orchestration and Event History.
-- **PostgreSQL** — canonical transactional/business truth.
-- **MongoDB** — semantic/execution audit, not shadow business truth.
-- **AttachmentStore** — binary/document integrity and lifecycle.
-- **CTA/channel** — replaceable transport/presentation boundary, not business authority.
+C1B removes `workflowId` browser/process memory as the authoritative conversation binding.
+
+PostgreSQL now owns:
+
+```text
+channel_conversation_bindings
+channel_inbound_events
+```
+
+The certified semantics are:
+
+```text
+same event identity + same canonical material
+→ exact replay
+→ one logical Temporal operation
+
+same event identity + different canonical material
+→ CHANNEL_EVENT_IDENTITY_CONFLICT
+→ no conflicting Workflow mutation
+
+WebChat adapter process restart
+→ recover external conversation binding from PostgreSQL
+→ continue the same Temporal Workflow
+```
+
+Final authority:
+
+```text
+Source SHA       2008fce4f863fdabf8e8f323eee1d7cda05cb454
+Run              33647842017
+Job              100307008849
+Result           SUCCESS
+Artifact         9853555059
+Artifact SHA256  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
+```
+
+The run physically restarted the WebChat adapter (`PID 7982 → 8190`), recovered the same Workflow through the durable binding, completed the Appointment at `COMPLETED / CREATED`, replayed the terminal event from the durable event ledger, and retained the full C1A 12-step visibility proof.
+
+Receipt: [`mk1/Build/evidence/c1b-durable-channel-certification-2026-09-02.md`](mk1/Build/evidence/c1b-durable-channel-certification-2026-09-02.md).
+
+Verification ledger: [`mk1/Test/c1b-durable-channel-semantics-2026-09-02.md`](mk1/Test/c1b-durable-channel-semantics-2026-09-02.md).
+
+## C2 — Telegram next
+
+Telegram is now the second transport proof and must reuse the certified C1B core:
+
+```text
+Telegram Bot API / long polling
+        ↓
+TelegramAdapter
+        ↓
+CanonicalChannelEnvelope
+        ↓
+existing ChannelExecutionCore
+        ↓
+existing PostgreSQL binding/event semantics
+        ↓
+existing Temporal Workflow Library
+```
+
+No separate Telegram Appointment Workflow, no provider-specific Services/Scheduler rules, no Agent, and no MCP.
+
+## Authority model
+
+```text
+Temporal
+  durable orchestration / Event History / Workflow state
+
+PostgreSQL
+  canonical transactional business truth
+  durable channel conversation/event correlation truth
+
+MongoDB
+  semantic/execution audit, not shadow business truth
+
+AttachmentStore
+  binary/document integrity and lifecycle
+
+Channel adapters
+  replaceable transport normalization/rendering only
+```
 
 ## Documentation progression
 
@@ -203,21 +237,18 @@ Brainstorming
 UNKNOWN != PASS
 documented != verified
 CI green != a broader claim unless that CI proved it
-observed != supported
 runtime source SHA != later documentation SHA
-known workflowId in browser != server-side durable channel binding
+browser memory != durable channel authority
+provider identity != business policy
 ```
-
-A runtime claim must point to an identified executed source revision and bounded receipt.
 
 ## Current next work
 
 ```text
-Services: S6 multi-business generality
-Channel:  C1B durable correlation + inbound-event idempotency
-Then:    C2 Telegram Bot using the same CTA/Temporal architecture
+Services track  S6 multi-business generality
+Channel track   C2 Telegram Bot / long polling
 ```
 
 ## What is not yet claimed
 
-Engines does not yet certify full G1 Services closure, the Scheduler Engine, complete durable multi-channel correlation, Telegram, WhatsApp, a complete Integration Engine, Agent/MCP, or production deployment/security hardening.
+Engines does not yet certify full G1 Services closure, Scheduler, Telegram, WhatsApp, full cross-channel equivalence, Agent/MCP, a complete production Integration Engine, or production deployment/security hardening.
