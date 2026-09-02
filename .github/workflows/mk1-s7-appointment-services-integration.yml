@@ -1,0 +1,143 @@
+name: mk1 S7 Appointment Services integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/mk1-s7-appointment-services-integration
+    paths:
+      - 'mk1/runtime/**'
+      - '.github/workflows/mk1-s7-appointment-services-integration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-s7-appointment-services-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-services-s7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Services contract and projection regression
+        run: |
+          npm run test:services:s1
+          npm run test:services:s2
+          npm run test:services:s3
+          npm run test:services:s4
+
+      - name: Frozen Customer CLI Attachment Appointment regression
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:appointment
+
+      - name: Channel projection regression
+        run: |
+          npm run test:channel:c0
+          npm run test:channel:c1b
+
+      - name: Guard canonical Appointment catalog boundary
+        run: |
+          if grep -nE 'listAppointmentServices|listAppointmentProducts' src/orchestration/temporal/activities/appointment.activities.ts \
+            | grep -q 'persistence/postgres/appointment.repository'; then
+            echo 'Appointment catalog authority still points directly at appointment.repository.'
+            exit 1
+          fi
+          grep -q 'servicesReadActivities.listServices' src/orchestration/temporal/activities/appointment.activities.ts
+          grep -q 'servicesReadActivities.listOfferings' src/orchestration/temporal/activities/appointment.activities.ts
+          echo 'SERVICES_S7_CANONICAL_ACTIVITY_BOUNDARY_PASS'
+
+      - name: Start clean Compose laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA and worker health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Re-certify S6 multi-business boundary
+        run: docker compose exec -T worker npm run probe:services:s6
+
+      - name: Certify S7 Appointment canonical Services integration
+        run: npm run probe:services:s7
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Certify inherited Appointment behavior after S7
+        run: npx tsx scripts/certify-register-new-appointment.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Capture S7 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/mk1-s7
+          git rev-parse HEAD > /tmp/mk1-s7/git-sha.txt
+          cd mk1/runtime
+          docker compose ps -a > /tmp/mk1-s7/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk1-s7/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk1-s7/cta.log 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,service_id,service_code,service_name,revision,status FROM service_catalog WHERE business_slug='golden-business' ORDER BY service_id;" \
+            > /tmp/mk1-s7/postgres-services.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,product_id,product_code,product_name,duration_minutes,price_kind,price_amount_minor,price_currency,revision,status FROM service_products WHERE business_slug='golden-business' ORDER BY product_id;" \
+            > /tmp/mk1-s7/postgres-offerings.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT appointment_id,workflow_id,service_id,product_id,appointment_date,start_time::text,end_time::text,status FROM appointments ORDER BY created_at;" \
+            > /tmp/mk1-s7/postgres-appointments.txt 2>&1 || true
+          docker compose exec -T mongo mongosh --quiet engines_mk0 --eval \
+            "printjson(db.services_mutation_audit.find({businessSlug:'golden-business'},{_id:0,workflowId:1,operation:1,outcomeStatus:1,outcomeCode:1}).toArray())" \
+            > /tmp/mk1-s7/mongo-services-audit.txt 2>&1 || true
+          docker compose exec -T mongo mongosh --quiet engines_mk0 --eval \
+            "printjson(db.appointment_audit.find({businessSlug:'golden-business'},{_id:0,workflowId:1,eventType:1,phase:1,appointmentId:1}).toArray())" \
+            > /tmp/mk1-s7/mongo-appointment-audit.txt 2>&1 || true
+
+      - name: Upload S7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-s7-appointment-services-${{ github.run_id }}
+          path: /tmp/mk1-s7
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
