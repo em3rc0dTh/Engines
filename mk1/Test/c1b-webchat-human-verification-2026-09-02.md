@@ -2,11 +2,13 @@
 
 ## Verdict
 
-**HUMAN E2E COMPLETION OBSERVED — RESTART/RECOVERY ATTESTATION PENDING**
+**✅ C1B HUMAN RESTART/RECOVERY VERIFIED**
 
-This record captures the human browser execution reported on 2026-09-02 against `build/mk1-c1b-durable-channel`.
+This record captures the human browser executions reported on 2026-09-02 against `build/mk1-c1b-durable-channel`.
 
-The submitted transcript proves a complete durable Appointment execution through the hardened WebChat channel and matching Workflow Inspector. It does **not** itself contain an observable process-stop/process-start event, so the human restart/recovery claim remains pending explicit tester confirmation even though automated C1B already certifies that property.
+Automated C1B had already certified durable WebChat conversation binding, event replay/conflict semantics, and physical adapter-process restart. Human testing now independently confirms the same operational property from the browser: the tester stopped only the WebChat adapter, restarted `npm run webchat:server` while the durable laboratory remained alive, reopened/resumed the same WebChat conversation, recovered the same active Temporal Workflow, and continued it to terminal Appointment creation.
+
+Contact data and execution identifiers are intentionally not duplicated in this public repository record.
 
 ## Human-observed terminal state
 
@@ -23,48 +25,63 @@ Agent                absent
 MCP                  absent
 ```
 
-The WebChat view and the separate Workflow Inspector agreed on the same Workflow ID, Run ID, final phase, selected business data, slot, and created Appointment result.
+The WebChat view and the separate Workflow Inspector converged on the same durable final execution.
+
+## Human restart/recovery proof
+
+The tester explicitly attested that the requested restart procedure worked:
+
+```text
+1. Start a new durable WebChat Appointment conversation.
+2. Advance the Workflow through Customer / Service / Offering interaction.
+3. Stop only the WebChat adapter process with Ctrl+C.
+4. Keep Temporal, PostgreSQL, MongoDB, Worker and CTA/channel-core running.
+5. Start a new WebChat adapter process with npm run webchat:server.
+6. Resume the same external WebChat conversation.
+7. Recover the same Temporal Workflow rather than creating a new one.
+8. Continue through Date -> Slots -> Slot -> Finalize.
+9. Reach COMPLETED / CREATED.
+```
+
+Human verdict:
+
+```text
+WebChat process replacement           PASS
+external conversation recovery        PASS
+same durable Workflow recovery        PASS
+continued multi-turn execution        PASS
+terminal Appointment creation         PASS
+12/12 visible Workflow map            PASS
+```
+
+This closes the previously pending human restart/recovery attestation.
 
 ## Negative-input observations
 
-The human run also exercised rejection and recovery behavior rather than only the happy path:
+Human testing also exercised rejection and recovery behavior rather than only the happy path:
 
 ```text
-email step: non-email text        -> CHANNEL_EVENT_INVALID
-phone step: alphanumeric input    -> CHANNEL_EVENT_INVALID
-date step: unsupported text       -> INVALID_DATE
+non-email text at email step          -> CHANNEL_EVENT_INVALID
+invalid/alphanumeric phone material   -> CHANNEL_EVENT_INVALID
+short invalid phone material          -> CHANNEL_EVENT_INVALID
+unsupported date text                 -> INVALID_DATE
 ```
 
-After each rejection, the Workflow remained usable and the user continued without a duplicated Appointment result.
+After rejection, the conversation remained usable and the tester could submit corrected material without creating a duplicate Workflow or duplicate Appointment result.
 
 ## Availability/date observation
 
-A valid human weekday input for Sunday advanced to slot loading and then returned to `WAITING_FOR_DATE`, after which the user selected Saturday and received three slots.
-
-This is consistent with a date that normalizes successfully but has no available slots in the current laboratory schedule.
+A human run also observed a valid weekday/date normalization that advanced into slot loading and then returned to `WAITING_FOR_DATE` when no slots were available for that date. A later valid date produced available slots and completed normally.
 
 ### UX finding C1B-H01 — non-blocking
 
-The UI currently re-prompts Step 08 after a no-slot date without an explicit human explanation such as:
+The UI currently re-prompts Step 08 after a no-slot date without an explicit explanation such as:
 
 ```text
 No available slots for <date>. Choose another date.
 ```
 
-The durable state transition is correct, but the presentation can be clearer. This is a renderer/CTA-view UX issue, not a Temporal or Appointment truth defect.
-
-## Business result observed
-
-The user selected:
-
-```text
-Service   Car Wash
-Offering  Basic Clean
-Date      2026-09-05
-Slot      06:00–06:30
-```
-
-The final durable projection contained one created Customer and one created Appointment result. Contact values and execution identifiers are intentionally not duplicated in this repository record.
+The durable state transition is correct. This remains a renderer/CTA-view UX improvement, not a Temporal, channel-binding, or Appointment truth defect.
 
 ## Human-visible step map
 
@@ -85,15 +102,15 @@ The final durable projection contained one created Customer and one created Appo
 
 ## Evidence boundary
 
-This report supports:
+This human verification supports the bounded statement:
 
-> A human user can drive the hardened C1B WebChat through invalid-input recovery and complete the real durable `RegisterNewAppointment` Workflow, with WebChat and Workflow Inspector converging on `COMPLETED / CREATED` and all twelve visible checkpoints complete.
+> A human user can drive the hardened C1B WebChat, recover the same active Temporal Appointment Workflow after replacing the WebChat adapter process, continue the same durable conversation, survive invalid-input corrections, and complete the Appointment at `COMPLETED / CREATED` with WebChat and Workflow Inspector parity.
 
-This submitted transcript alone does **not** prove that the tester actually stopped and restarted the WebChat process mid-run. Automated C1B certification already proves adapter restart/recovery; the human restart/recovery label should be added only after explicit tester attestation.
+It does not expand the automated C1B claim into Telegram, WhatsApp, Scheduler, Agent/MCP, production security, or general production readiness.
 
-## Related certification
+## Related automated certification
 
-Automated C1B authority:
+Automated C1B authority remains unchanged:
 
 ```text
 Source SHA    2008fce4f863fdabf8e8f323eee1d7cda05cb454
@@ -105,11 +122,10 @@ Artifact SHA  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
 
 Receipt: `../Build/evidence/c1b-durable-channel-certification-2026-09-02.md`.
 
-## Pending tester attestation
+## Closure
 
-To upgrade the human verdict to **C1B HUMAN RESTART/RECOVERY VERIFIED**, record one explicit statement that during this same run the tester:
-
-1. stopped only the WebChat adapter process;
-2. restarted `npm run webchat:server` while Temporal/PostgreSQL/Worker remained alive;
-3. reopened/resumed the same external WebChat conversation;
-4. recovered the same Workflow and continued to the terminal result shown above.
+```text
+C1A workflow-visible WebChat            ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
+C1B durable WebChat semantics           ✅ CERTIFIED + HUMAN RESTART/RECOVERY VERIFIED
+C2 Telegram                             🔧 NEXT CHANNEL GATE
+```
