@@ -1,0 +1,132 @@
+name: mk1 S6 Services multi-business certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/mk1-s6-services-multibusiness
+    paths:
+      - 'mk1/runtime/**'
+      - '.github/workflows/mk1-s6-services-multibusiness.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-s6-services-multibusiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-services-s6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Services S1-S4 contract regression
+        run: |
+          npm run test:services:s1
+          npm run test:services:s2
+          npm run test:services:s3
+          npm run test:services:s4
+
+      - name: Frozen Customer CLI Attachment Appointment regression
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:appointment
+
+      - name: Guard against vertical fixture branching in runtime source
+        run: |
+          if grep -R -nE 's6-golden-auto|s6-golden-vet|golden-auto|golden-vet' src; then
+            echo 'S6 fixture identity leaked into runtime implementation.'
+            exit 1
+          fi
+          echo 'SERVICES_S6_NO_VERTICAL_FIXTURE_BRANCHING_PASS'
+
+      - name: Start clean Compose laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA and worker health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify inherited versioned management semantics
+        run: |
+          docker compose exec -T worker npm run probe:services:s4
+          docker compose exec -T worker npm run probe:services:s4:safety
+
+      - name: Certify S6 multi-business generality
+        run: docker compose exec -T worker npm run probe:services:s6
+
+      - name: Certify inherited Appointment behavior
+        run: npx tsx scripts/certify-register-new-appointment.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Capture S6 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/mk1-s6
+          git rev-parse HEAD > /tmp/mk1-s6/git-sha.txt
+          cd mk1/runtime
+          docker compose ps -a > /tmp/mk1-s6/compose-ps.txt || true
+          docker compose logs worker > /tmp/mk1-s6/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk1-s6/cta.log 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,service_id,service_code,service_name,revision,status FROM service_catalog WHERE business_slug IN ('s6-golden-auto','s6-golden-vet') ORDER BY business_slug,service_id;" \
+            > /tmp/mk1-s6/postgres-services.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,product_id,product_code,product_name,duration_minutes,price_kind,price_amount_minor,revision,status FROM service_products WHERE business_slug IN ('s6-golden-auto','s6-golden-vet') ORDER BY business_slug,product_id;" \
+            > /tmp/mk1-s6/postgres-offerings.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,operation,entity_id,status FROM service_mutation_commands WHERE business_slug IN ('s6-golden-auto','s6-golden-vet') ORDER BY business_slug,created_at;" \
+            > /tmp/mk1-s6/postgres-commands.txt 2>&1 || true
+          docker compose exec -T mongo mongosh --quiet engines_mk0 --eval \
+            "printjson(db.services_mutation_audit.find({businessSlug:{\$in:['s6-golden-auto','s6-golden-vet']}},{_id:0,workflowId:1,businessSlug:1,operation:1,outcomeStatus:1,outcomeCode:1}).toArray())" \
+            > /tmp/mk1-s6/mongo-services-audit.txt 2>&1 || true
+
+      - name: Upload S6 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-s6-services-multibusiness-${{ github.run_id }}
+          path: /tmp/mk1-s6
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
