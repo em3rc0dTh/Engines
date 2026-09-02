@@ -56,9 +56,12 @@ jobs:
           npm run test:b7
           npm run test:appointment
 
-      - name: Guard against vertical fixture branching in runtime source
+      - name: Guard against vertical fixture branching in runtime implementation
         run: |
-          if grep -R -nE 's6-golden-auto|s6-golden-vet|golden-auto|golden-vet' src; then
+          matches="$(find src -type f -name '*.ts' ! -name '*.test.ts' -print0 \
+            | xargs -0 grep -nE 's6-golden-auto|s6-golden-vet|golden-auto|golden-vet' || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
             echo 'S6 fixture identity leaked into runtime implementation.'
             exit 1
           fi
