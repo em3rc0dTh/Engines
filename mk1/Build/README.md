@@ -26,7 +26,7 @@ G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
 
 G3 CTA channel proof
   C0A Workflow-view projection       ✅ CERTIFIED
-  C1A Workflow-visible WebChat       ✅ CERTIFIED
+  C1A Workflow-visible WebChat       ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
   C1B Durable channel semantics      🔧 OPEN
   C2 Telegram                        ⏭ QUEUED
 ```
@@ -43,6 +43,7 @@ G3 CTA channel proof
 | S4 | `f3e54b853af5f01fb2e9ed7d032f784e3cffb81e` | `33538554471` | `99959020329` | `9812703293` | `275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c` | [`s4-services-management-certification-2026-09-01.md`](evidence/s4-services-management-certification-2026-09-01.md) |
 | S5 | `7568618062f4192b34caf6e916b58534f304ad3f` | `33539683548` | `99962550022` | `9813129778` | `22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708` | [`s5-services-snapshot-certification-2026-09-01.md`](evidence/s5-services-snapshot-certification-2026-09-01.md) |
 | C1A | `860629e9ada498e225ae803a9fe6f077949ec320` | `33542468975` | `99971830150` | `9814172765` | `a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3` | [`c1a-webchat-workflow-visibility-certification-2026-09-01.md`](evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md) |
+| C1A UI hardening | `ed207f8c82ae9138f92fd505209c30c4eeba243b` | `33560864234` | `100032737031` | `9821207955` | `4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff` | post-fix regression; human record in [`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md) |
 
 ## Services evidence highlights
 
@@ -79,7 +80,7 @@ Two pages are executed:
 /webchat/workflow.html?workflowId=<id>
 ```
 
-The certification marker is:
+The original certification marker is:
 
 ```text
 WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
@@ -109,7 +110,30 @@ agent=false
 mcp=false
 ```
 
-C1A is a workflow-visible interaction proof, not yet the complete durable channel-correlation gate.
+### Human verification and renderer hardening
+
+Human browser execution subsequently proved the same complete flow with both an `EXISTING` Customer path and a `CREATED` Customer path.
+
+The first human run discovered duplicate presentation prompts around Step 08 and Step 11. The durable Workflow/business result remained singular. The renderer guard was fixed in `ed207f8c82ae9138f92fd505209c30c4eeba243b`, then the complete C1 regression passed again in run `33560864234`.
+
+A second human run on 2026-09-02 confirmed:
+
+```text
+Step 08 duplicate prompt       NOT OBSERVED
+Step 11 duplicate prompt       NOT OBSERVED
+workflowStatus                 COMPLETED
+phase                          CREATED
+nextAction                     NONE
+issues                         []
+all 12 visible steps           COMPLETE
+Workflow Inspector parity      PASS
+```
+
+Public human evidence is intentionally redacted of tester contact and execution identifiers:
+
+[`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md)
+
+C1A is therefore certified and human verified post-fix, but it remains a workflow-visible interaction proof rather than the complete durable channel-correlation gate.
 
 ## Failure / supersession provenance
 
@@ -140,7 +164,7 @@ Fix      explicit UTF-8 proxy request body
 Policy   no Workflow/business invariant weakened
 ```
 
-Final C1A authority is successful run `33542468975`.
+Final original C1A certification authority is successful run `33542468975`. Post-certification renderer hardening is separately evidenced by successful run `33560864234` and repeated human verification.
 
 ## What the receipts mean
 
@@ -195,3 +219,4 @@ Telegram remains after the WebChat channel contract is hardened sufficiently to 
 - Channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
 - Channel adapter design: [`../Design/02-cta-channel-adapter-contract.md`](../Design/02-cta-channel-adapter-contract.md)
 - Workflow visibility design: [`../Design/03-workflow-visibility-contract.md`](../Design/03-workflow-visibility-contract.md)
+- Human WebChat verification: [`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md)
