@@ -64,6 +64,7 @@
     "probe:services:s4:safety": "tsx scripts/certify-services-s4-rejection-safety.ts",
     "probe:services:s5:prepare": "tsx scripts/certify-services-s5-snapshot-prepare.ts",
     "probe:services:s5:complete": "tsx scripts/certify-services-s5-snapshot-complete.ts",
+    "probe:services:s6": "tsx scripts/certify-services-s6-multibusiness.ts",
     "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "probe:webchat:c1b": "tsx scripts/certify-webchat-c1b.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
