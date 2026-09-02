@@ -2,30 +2,45 @@
 
 ## Status
 
-**BUILD ACTIVE**
-
-Parent proof:
+**✅ CERTIFIED — C2 TELEGRAM NEXT**
 
 ```text
 C0A Workflow view               ✅ CERTIFIED
 C1A WebChat workflow visibility ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
-C1B durable channel semantics   🔧 THIS GATE
-C2 Telegram                     ⏭ AFTER C1B
+C1B durable channel semantics   ✅ CERTIFIED
+C2 Telegram                     🔧 NEXT CHANNEL GATE
 ```
 
-## Build order
+Certification authority:
 
-### B1 — contract and migration
+```text
+Source SHA    2008fce4f863fdabf8e8f323eee1d7cda05cb454
+Run           33647842017
+Job           100307008849
+Artifact      9853555059
+Artifact SHA  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
+```
+
+Receipt: [`../Build/evidence/c1b-durable-channel-certification-2026-09-02.md`](../Build/evidence/c1b-durable-channel-certification-2026-09-02.md)
+
+Verification ledger: [`../Test/c1b-durable-channel-semantics-2026-09-02.md`](../Test/c1b-durable-channel-semantics-2026-09-02.md)
+
+## Build completion
+
+### B1 — contract and migration ✅
+
+Implemented:
 
 - canonical channel types;
-- canonical material fingerprint;
+- deterministic canonical material fingerprint;
 - PostgreSQL `channel_conversation_bindings`;
 - PostgreSQL `channel_inbound_events`;
-- migration runner and Compose integration.
+- migration `007_channel_adapter_durability.sql`;
+- Compose migration integration.
 
-### B2 — repository semantics
+### B2 — repository semantics ✅
 
-Implement transactional repository operations for:
+Implemented:
 
 ```text
 claimInboundEvent
@@ -36,116 +51,148 @@ bindConversation
 updateBindingStatus
 ```
 
-Required unit/integration proofs: exact replay, conflict, business isolation, restart-safe reads.
+Certified semantics:
 
-### B3 — adapter + registry
+```text
+same identity + same material       replay
+same identity + different material  typed conflict
+terminal response                   durable replay source
+```
 
-Implement:
+### B3 — adapter + registries ✅
+
+Implemented:
 
 ```text
 WebChatAdapter
 ChannelAdapterRegistry
-CanonicalActionRegistry
+canonical action registry
 ```
 
-No provider-specific branch is allowed in Appointment/Services/Scheduler/Workflow code.
+Provider choice terminates at adapter/renderer composition. Appointment/Customer/Services/Scheduler/Workflow policy remains provider-independent.
 
-### B4 — hardened WebChat channel endpoint
+### B4 — hardened channel endpoint ✅
 
-Introduce generic WebChat channel API that:
+Implemented generic channel core:
 
-- receives raw WebChat event;
-- resolves adapter by registry;
-- claims durable event;
-- resolves/creates durable binding;
-- invokes existing CTA/Temporal operation using stable event-derived idempotency identity;
-- persists terminal response;
-- returns Workflow projection.
+```text
+POST /channel/events
+GET  /channel/conversations/:externalConversationId
+GET  /health
+```
 
-### B5 — browser migration
+The channel core owns transport correlation only. Temporal remains Workflow authority.
 
-C1A browser switches from direct CTA proxy routes to the hardened channel endpoint while keeping the same visible 12-step Workflow map.
+### B5 — browser migration ✅
 
-The browser keeps `externalConversationId` only as transport identity. It no longer treats `workflowId` local storage as binding authority.
+The C1B WebChat browser now sends explicit canonical actions through the durable channel endpoint and polls state by external conversation identity.
 
-### B6 — certification probe
+The browser can keep `externalConversationId` as convenience state, but `workflowId` recovery comes from PostgreSQL binding authority rather than local storage.
 
-Clean Compose proof must execute:
+### B6 — certification probe ✅
+
+The successful clean-Compose run executed:
 
 ```text
 new conversation
-start event
-exact start replay
-customer data event
-exact customer replay
-material-conflict attempt
-assert no state change
-continue workflow
-restart WebChat adapter process
-recover binding by conversation id
-continue same workflow
-finalize
-assert CREATED
+→ start event
+→ exact start replay
+→ customer update
+→ exact update replay
+→ same event id / different material conflict
+→ prove Workflow state unchanged
+→ physically restart WebChat adapter process
+→ recover same Workflow via durable binding
+→ continue Appointment
+→ finalize
+→ CREATED / COMPLETED
+→ replay terminal event from durable event result
+→ run full C1A visibility regression
 ```
 
-Capture PostgreSQL rows and Workflow projection.
-
-## Golden requirements
-
-- one binding for one `(business,channel,externalConversationId)`;
-- one event row for one `(business,channel,externalMessageId)`;
-- exact replay is response-stable;
-- conflict is typed and mutation-free;
-- same event identity can be independent across business scopes;
-- process restart does not change workflow identity;
-- final Appointment business result remains singular;
-- visibility still shows all real Temporal phases/checkpoints.
-
-## CI gate
-
-New workflow:
+Physical process replacement:
 
 ```text
-.github/workflows/mk1-c1b-durable-channel.yml
+before PID 7982
+after  PID 8190
 ```
 
-Minimum steps:
+Runtime markers:
 
 ```text
-npm ci
-npm run check
-C0 view tests
-C1B channel-core tests
-inherited Customer/CTA/Appointment regressions
-clean docker compose up
-wait CTA + Worker
-start WebChat server
-run C1B probe
-restart WebChat server
-complete C1B probe
-capture postgres/channel/worker/webchat evidence
-upload artifact
-cleanup
+WEBCHAT_C1B_PRE_RESTART_PASS
+WEBCHAT_C1B_DURABLE_CHANNEL_PASS
+WEBCHAT_C1_WORKFLOW_VISIBILITY_PASS
 ```
 
-## Stop conditions
-
-Stop and redesign if any of these appear:
+## Golden result
 
 ```text
-browser/localStorage is required to recover workflowId
-same event id can produce a second Workflow update
-same event id + different payload reaches Temporal
-WebChat server memory is required for conversation recovery
-provider name appears in Appointment Workflow policy
-channel repository stores duplicate Appointment business truth
+C1B-001 durable conversation binding          PASS
+C1B-002 adapter restart recovery               PASS
+C1B-003 exact start replay                     PASS
+C1B-004 exact update replay                    PASS
+C1B-005 material conflict                      PASS
+C1B-006 conflict leaves Workflow unchanged     PASS
+C1B-007 duplicate transport/business safety    PASS
+C1B-008 complete Appointment via hardened path PASS
+C1B-009 C1A visibility retained                PASS
+C1B-010 provider-independent execution core    PASS
+C1B-011 business-scoped identity               schema/contract protected; broader runtime generality deferred
+C1B-012 durable terminal event response        PASS
+```
+
+## Failure provenance
+
+First attempt:
+
+```text
+Run       33647731151
+Source    9cedded6ca7ebd3e0d5ddd12468a358784573089
+Result    FAILURE
+Stage     strict TypeScript typecheck
+Cause     exactOptionalPropertyTypes replay fallback mismatch
+```
+
+The strict-optional construction was corrected in `2008fce4...`; no runtime/domain invariant was weakened. Run `33647842017` is the sole C1B certification authority.
+
+## Stop conditions carried forward to C2
+
+C2 must stop and redesign if any of these appear:
+
+```text
+Telegram needs a separate Appointment business Workflow
+Telegram chat memory becomes binding authority
+update_id/message replay can produce a second logical Workflow update
+provider-specific values enter Services/Scheduler/Appointment policy
+canonical action semantics are forked for Telegram
 Agent/MCP/LLM is introduced
 ```
 
-## Claim boundary
+## Certified claim boundary
 
-Passing C1B permits only:
+C1B permits only:
 
-> The WebChat channel can durably correlate one external conversation to one Temporal Workflow and safely process at-least-once inbound events across exact replay, material conflict, and adapter restart.
+> The WebChat channel can durably correlate one external conversation to one Temporal Workflow and safely process at-least-once inbound events across exact replay, material conflict, and adapter restart while preserving C1A Workflow visibility.
 
 It does not certify Telegram, WhatsApp, production security, Scheduler, full G3, Agent, or MCP.
+
+## Next — C2 Telegram
+
+C2 must reuse, not redesign:
+
+```text
+Telegram Bot API / long polling
+        ↓
+TelegramAdapter
+        ↓
+CanonicalChannelEnvelope
+        ↓
+existing ChannelExecutionCore
+        ↓
+existing PostgreSQL binding/event semantics
+        ↓
+existing Temporal Workflow Library
+```
+
+The HTML Workflow Inspector remains useful as an engineering view because it follows `workflowId`, not the provider.
