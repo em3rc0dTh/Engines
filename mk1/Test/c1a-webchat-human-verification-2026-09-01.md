@@ -1,12 +1,12 @@
-# C1A — WebChat Human Verification — 2026-09-01
+# C1A — WebChat Human Verification — 2026-09-01 / 2026-09-02
 
 ## Verdict
 
-**✅ PASS — HUMAN MANUAL VERIFICATION OF THE C1A WORKFLOW-VISIBLE WEBCHAT**
+**✅ PASS — C1A WORKFLOW-VISIBLE WEBCHAT HUMAN VERIFIED, INCLUDING POST-FIX VISUAL CONFIRMATION**
 
-This record captures a real manual browser execution performed after the automated C1A certification. It supplements, but does not replace, the CI authority recorded in `Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`.
+This record captures two real manual browser executions performed after the automated C1A certification. It supplements, but does not replace, the CI authority recorded in `Build/evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md`.
 
-The public repository intentionally does **not** reproduce the tester's email address or phone number. Those values were present during the test and were visibly captured by the Workflow, but are redacted here as personal information.
+The public repository intentionally does **not** reproduce tester email addresses, phone numbers, customer IDs, Workflow IDs, Run IDs, or Appointment IDs. Those values were present during testing and were visibly captured by the Workflow, but are redacted here as personal/operational information.
 
 ## Tested architecture
 
@@ -24,7 +24,7 @@ RegisterNewAppointment
 existing persistence / audit boundaries
 ```
 
-Explicit phase boundary during this test:
+Explicit phase boundary during both tests:
 
 ```text
 Agent  NOT PRESENT
@@ -34,9 +34,7 @@ LLM    NOT PRESENT
 
 ## Manual execution result
 
-The tester completed one full Appointment Workflow through the browser.
-
-Observed terminal state:
+Both human runs completed a full Appointment Workflow through the browser and reached:
 
 ```text
 workflowStatus  COMPLETED
@@ -45,7 +43,7 @@ nextAction      NONE
 issues          []
 ```
 
-The Workflow inspector and chat surface both showed the same durable Workflow identity and terminal state.
+The Workflow inspector and WebChat surface showed the same durable Workflow identity and terminal state.
 
 ## Human-visible path executed
 
@@ -64,9 +62,9 @@ The Workflow inspector and chat surface both showed the same durable Workflow id
 12 Appointment Created          COMPLETE
 ```
 
-## Important observed values
+## First human run — 2026-09-01
 
-Non-sensitive business values observed during the manual run:
+Non-sensitive business values observed:
 
 ```text
 Business scope          golden-business
@@ -80,37 +78,18 @@ Selected slot           07:00–07:30
 Terminal result         Appointment created
 ```
 
-The Spanish human date input `Sábado` normalized to the canonical date `2026-09-05` and the Workflow proceeded to slot selection and final creation.
+The Spanish human date input `Sábado` normalized to the canonical date and the Workflow proceeded through slot selection to final creation.
 
-## Durable-state observations
+### UX defect discovered
 
-The final raw state showed:
+The business flow passed, but two presentation timing defects were visible:
 
 ```text
-workflowStatus = COMPLETED
-phase          = CREATED
-nextAction     = NONE
-issues         = []
-customer       = EXISTING
-selectedService.name = Car Wash
-selectedProduct.name = Executive Clean
-appointmentDate = 2026-09-05
-selectedSlot.start = 07:00
-selectedSlot.end   = 07:30
+Step 08 date prompt rendered twice
+Step 11 finalize prompt rendered twice
 ```
 
-The `view.steps` projection also reported every checkpoint as `COMPLETE`.
-
-This is important because the browser did not merely display a success message; the terminal result was reflected in the same durable Temporal-derived state used by the Workflow inspector.
-
-## UX observations found during the human test
-
-The business flow passed, but two presentation issues were visible in the first human run:
-
-1. The Step 08 date prompt was rendered twice around the transition from date submission to `WAITING_FOR_SLOT`.
-2. The Step 11 finalize prompt was rendered twice around the transition from `READY_TO_FINALIZE` to `CREATED`.
-
-These were **presentation/render timing defects**, not duplicate business effects. The durable state contained one selected date, one selected slot, and one terminal Appointment result.
+These were not duplicate business effects. Durable state contained one selected date, one selected slot, and one terminal Appointment result.
 
 Root cause:
 
@@ -121,8 +100,6 @@ accepted user action
 → same prompt rendered again
 → Temporal then advanced normally
 ```
-
-The WebChat renderer was corrected so the prompt key remains stable until the durable Workflow state actually advances.
 
 Remediation commit:
 
@@ -143,32 +120,104 @@ Artifact SHA  4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff
 
 The post-fix run passed strict typecheck, C0 Workflow-view tests, inherited CTA/Appointment regressions, clean Compose startup, WebChat startup, and the complete Appointment-through-WebChat certification path.
 
-The duplicate-prompt correction is therefore automated-regression green. A later human run can visually confirm the presentation symptom is gone; this document does not misrepresent the automated rerun as a second human observation.
+## Second human run — 2026-09-02 — post-fix visual verification
 
-Also observed:
+A complete new Appointment flow was executed after the renderer correction.
 
-- Step 09 (`Load Available Slots`) is correctly represented in the execution map as a durable progress checkpoint rather than requiring an artificial user action.
-- The completed Workflow remained inspectable with the raw durable state visible.
+Non-sensitive business values observed:
+
+```text
+Business scope          golden-business
+Customer resolution     CREATED
+Service                 Car Wash
+Offering                Salon Clean
+Human date input        viernes
+Canonical date          2026-09-04
+Available slots         3
+Selected slot           06:30–07:00
+Terminal result         Appointment created
+```
+
+Observed durable result:
+
+```text
+workflowStatus = COMPLETED
+phase          = CREATED
+nextAction     = NONE
+issues         = []
+customer       = CREATED
+selectedService.name = Car Wash
+selectedProduct.name = Salon Clean
+appointmentDate = 2026-09-04
+selectedSlot.start = 06:30
+selectedSlot.end   = 07:00
+```
+
+The `view.steps` projection reported all twelve checkpoints `COMPLETE`, and the dedicated Workflow Inspector displayed the same final state and business projection.
+
+### Post-fix presentation result
+
+The exact defects discovered in the first human run were re-checked:
+
+```text
+Step 08 duplicate date prompt       NOT OBSERVED
+Step 11 duplicate finalize prompt   NOT OBSERVED
+```
+
+The WebChat transitioned cleanly:
+
+```text
+WAITING_FOR_DATE
+→ user date input
+→ WAITING_FOR_SLOT
+
+READY_TO_FINALIZE
+→ explicit Finalize Appointment
+→ CREATED
+```
+
+No duplicated prompt was visible in either transition.
+
+## Additional human observations
+
+- Intermediate durable phases such as `RESOLVING_CUSTOMER`, `CUSTOMER_READY`, and `LOADING_PRODUCTS` remained visible rather than being hidden by the chat renderer.
+- Step 09 (`Load Available Slots`) correctly appeared as a Workflow progress checkpoint without inventing an artificial user command.
+- A newly created Customer path was also proven, complementing the first run's existing-Customer path.
+- Spanish natural date forms remained deterministic CTA inputs without any Agent/LLM interpretation layer.
+- The completed Workflow remained inspectable through the separate Workflow Inspector after terminal creation.
 
 ## Manual evidence classification
 
-This test strengthens the C1A claim from automated browser-transport execution to an actual human interaction proof:
-
 ```text
-Automated C1A CI proof             ✅ PASS
-Human manual WebChat proof         ✅ PASS
-Human Workflow inspector proof     ✅ PASS
-12-step visible progression        ✅ PASS
-Spanish date normalization         ✅ PASS
-Terminal Appointment creation      ✅ PASS
-No Agent / No MCP                  ✅ CONFIRMED
-Prompt duplication defect          ✅ FIXED + CI REGRESSION PASS
-Post-fix human visual confirmation ⏳ NOT YET REPEATED
+Automated C1A CI proof                ✅ PASS
+Human WebChat flow #1                 ✅ PASS
+Human Workflow Inspector #1           ✅ PASS
+Prompt duplication defect discovered  ✅ DOCUMENTED
+Prompt duplication remediation        ✅ IMPLEMENTED
+Post-fix automated regression          ✅ PASS
+Human WebChat flow #2 post-fix         ✅ PASS
+Human Workflow Inspector #2            ✅ PASS
+Step 08 duplication after fix          ✅ NOT OBSERVED
+Step 11 duplication after fix          ✅ NOT OBSERVED
+12-step visible progression            ✅ PASS
+EXISTING Customer path                 ✅ PASS
+CREATED Customer path                  ✅ PASS
+Spanish date normalization             ✅ PASS
+Terminal Appointment creation          ✅ PASS
+No Agent / No MCP / No LLM             ✅ CONFIRMED
 ```
+
+## C1A closure statement
+
+C1A is now supported by both automated evidence and repeated human browser evidence, including post-fix visual confirmation of the renderer timing correction.
+
+Truthful bounded statement:
+
+> Engines can drive the explicit CTA → Temporal `RegisterNewAppointment` workflow through the minimal HTML WebChat, expose the real durable phase and next action throughout execution, show the complete 12-step human-readable Workflow map, and reach a persisted terminal Appointment without Agent, MCP, LLM orchestration, or a browser-owned business state machine.
 
 ## Remaining boundary
 
-This manual result does **not** close C1B.
+This result does **not** close C1B.
 
 Still open:
 
@@ -180,10 +229,10 @@ same event identity + different material conflict proof
 adapter restart/recovery using durable binding
 ```
 
-Therefore the truthful status remains:
+Therefore the truthful status is:
 
 ```text
-C1A workflow-visible WebChat            ✅ CERTIFIED + HUMAN VERIFIED
+C1A workflow-visible WebChat            ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
 C1B durable channel semantics           ❌ OPEN
 full WebChat channel gate               ❌ NOT YET CLOSED
 Telegram                                ⏭ AFTER C1B
@@ -191,4 +240,4 @@ Telegram                                ⏭ AFTER C1B
 
 ## Privacy note
 
-The source manual test contained real contact data. This repository record deliberately stores only the fact that email/phone capture succeeded and omits the actual values. Public engineering evidence must not require publishing tester PII.
+The source manual tests contained real contact and execution identifiers. This public repository record stores only the facts necessary for engineering evidence and deliberately omits the actual personal/contact identifiers.
