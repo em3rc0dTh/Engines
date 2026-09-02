@@ -1,0 +1,82 @@
+{
+  "artifact": "scheduler_engine_v0",
+  "status": "design_expectations_only",
+  "schemaVersion": 1,
+  "principles": [
+    "availability_shown_is_not_reservation_persisted",
+    "scheduler_consumes_immutable_services_snapshot",
+    "business_scope_is_mandatory",
+    "resource_semantics_are_generic_not_vertical_specific",
+    "mutation_idempotency_is_material_sensitive",
+    "reservation_confirmation_revalidates_capacity_atomically"
+  ],
+  "fixtures": [
+    {
+      "id": "SCH-001",
+      "business": "golden-auto",
+      "description": "one wash bay with one unit capacity yields deterministic candidates for a 30 minute offering",
+      "expected": "available_candidates_sorted_by_start"
+    },
+    {
+      "id": "SCH-002",
+      "business": "golden-auto",
+      "description": "two concurrent reservation confirmations compete for the final unit of capacity",
+      "expected": "exactly_one_reserved_exactly_one_capacity_conflict"
+    },
+    {
+      "id": "SCH-003",
+      "business": "golden-auto",
+      "description": "slot candidate becomes stale after another reservation consumes capacity",
+      "expected": "slot_no_longer_available_no_partial_effect"
+    },
+    {
+      "id": "SCH-004",
+      "business": "golden-auto",
+      "description": "exact replay of ConfirmReservation with same operation identity and same material",
+      "expected": "same_reservation_exact_replay"
+    },
+    {
+      "id": "SCH-005",
+      "business": "golden-auto",
+      "description": "same reservation operation identity with different material",
+      "expected": "idempotency_material_conflict"
+    },
+    {
+      "id": "SCH-006",
+      "business": "golden-vet",
+      "description": "veterinary consultation uses the same resource/capability engine with materially different resource kinds",
+      "expected": "same_engine_no_vertical_branch"
+    },
+    {
+      "id": "SCH-007",
+      "business": "golden-auto",
+      "description": "Offering revision N is selected, catalog advances to N+1, Scheduler still consumes demand derived from N",
+      "expected": "snapshot_stability"
+    },
+    {
+      "id": "SCH-008",
+      "business": "golden-auto",
+      "description": "expired hold does not continue blocking capacity even before cleanup",
+      "expected": "logical_expiry_releases_capacity"
+    },
+    {
+      "id": "SCH-009",
+      "business": "golden-auto",
+      "description": "cross-business resource reference is attempted",
+      "expected": "business_scope_rejection"
+    },
+    {
+      "id": "SCH-010",
+      "business": "golden-auto",
+      "description": "resource does not possess required capability",
+      "expected": "capability_unsatisfied"
+    }
+  ],
+  "nonClaims": [
+    "not_executed",
+    "not_scheduler_certified",
+    "not_multi_resource_certified",
+    "not_appointment_scheduler_integrated",
+    "not_production_ready"
+  ]
+}
