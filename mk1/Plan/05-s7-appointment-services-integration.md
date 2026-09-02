@@ -4,44 +4,26 @@ Date: 2026-09-02
 
 ## Status
 
-**BUILD GATE OPEN — NOT CERTIFIED**
-
-Branch:
+**✅ CERTIFIED**
 
 ```text
-build/mk1-s7-appointment-services-integration
+Branch           build/mk1-s7-appointment-services-integration
+Certified SHA    6fc8814830038b5600c4c6376cd9b4ed7ef34b7a
+Run              33668593216
+Job              100376325350
+Artifact         9861631780
+SHA256           e700cfcdc43e753cbc894abd30211e322097fd010d0ec86dcae01d7d3290dd6a
 ```
 
-Base:
-
-```text
-build/mk1-s6-services-multibusiness
-S0–S6 Services certified
-```
+Receipt: [`../Build/evidence/s7-appointment-services-integration-certification-2026-09-02.md`](../Build/evidence/s7-appointment-services-integration-certification-2026-09-02.md)
 
 ## Purpose
 
-S7 removes the remaining authority ambiguity between the inherited MK0 Appointment catalog compatibility path and the standalone MK1 Services Engine.
+S7 removes the remaining catalog-authority ambiguity between the inherited MK0 Appointment compatibility path and the standalone MK1 Services Engine.
 
-After S7, `RegisterNewAppointment` must select Service/Offering data from canonical Services reads and freeze a revision-aware selected snapshot into Workflow state.
+`RegisterNewAppointment` now obtains Service/Offering selections from canonical Services reads and freezes revision-aware selected semantics into durable Workflow state while preserving the inherited date/slot/finalization behavior until Scheduler assumes that authority in Step 4.
 
-S7 must preserve all already-certified Appointment behavior while **not** redesigning Scheduler.
-
-## Before S7
-
-```text
-RegisterNewAppointment
-  ↓
-inherited Appointment catalog compatibility
-  ↓
-Service/Product-shaped projection
-  ↓
-date / slot / finalization
-```
-
-The inherited path is regression-protected, but it is not sufficient as the final Step-3 ownership model because Services is now an independently versioned engine.
-
-## Target after S7
+## Certified flow
 
 ```text
 RegisterNewAppointment
@@ -50,11 +32,13 @@ Customer resolution
         ↓
 Services.ListServices
         ↓
-select Service revision
+select canonical Service revision N
         ↓
-Services.ListOfferings / GetOffering
+Services.ListOfferings
         ↓
-freeze selected Service + Offering snapshot
+select canonical Offering revision N
+        ↓
+freeze revision-aware selection in Workflow state
         ↓
 existing date / availability compatibility boundary
         ↓
@@ -78,7 +62,7 @@ duration
 requirements
 dependencies
 eligibility metadata
-selected immutable snapshot
+selected immutable semantics
 ```
 
 S7 does **not** authorize Services to own:
@@ -95,125 +79,129 @@ resource assignments
 
 Those remain Step 4 Scheduler responsibilities.
 
-## Required Workflow state
+## Durable selected projection
 
-Once an Offering is selected, the Appointment Workflow must expose a frozen snapshot sufficient to prove it is no longer interpreting mutable catalog head as selected truth.
-
-Minimum selected snapshot semantics:
+The existing renderer-compatible state objects remain:
 
 ```text
-businessSlug
-serviceId
-serviceRevision
-serviceCode
-serviceName
-offeringId
-offeringRevision
-offeringCode
-offeringName
-durationMinutes
-pricing
-requirements
-dependencies
-eligibilityRuleSet (when present)
+selectedService
+selectedProduct
 ```
 
-The existing compatibility `selectedService` / `selectedProduct` projections may remain for renderer/backward compatibility, but they must be derived from or consistent with canonical Services data.
+but now carry canonical Services fields. Service selection retains business scope/status/revision/tags; Offering selection retains business scope/status/revision/pricing/requirements/dependencies/eligibility metadata in addition to existing Appointment-compatible fields.
 
-## Required experiment
+Because the objects are copied into Workflow state at selection, mutable catalog head cannot silently replace the chosen revision.
+
+## Certified N → N+1 experiment
 
 ```text
-1. start Appointment A
-2. select Service + Offering revision N from canonical Services
-3. query Appointment A and capture selected Services snapshot N
-4. publish Offering revision N+1 through certified S4 management path
-5. query Appointment A again
-6. prove selected snapshot is still N
-7. continue Appointment A to CREATED using N-compatible duration/selection semantics
-8. start Appointment B after publication
-9. prove Appointment B sees N+1
+Appointment A selects Basic Clean revision 1
+  pricing = QUOTE_REQUIRED
+        ↓
+Services management publishes revision 2
+  pricing = FIXED PEN 3100
+        ↓
+Appointment A queried again
+  still revision 1 / QUOTE_REQUIRED
+        ↓
+Appointment A completes to CREATED
+        ↓
+Appointment B starts after publication
+  sees revision 2 / FIXED PEN 3100
+        ↓
+Appointment B completes to CREATED
 ```
 
-This is an Appointment-specific composition proof. It complements S5 rather than replacing it.
-
-## Regression requirements
-
-S7 cannot close unless the same clean runtime also proves:
+Markers:
 
 ```text
-new Customer Child Workflow path              PASS
-existing Customer resolution path             PASS
-Service selection                              PASS
-Offering selection                             PASS
-English/Spanish human date normalization       PASS
-past date rejection                            PASS
-slot loading                                   PASS
-explicit finalization                          PASS
-Appointment exact replay                       PASS
-atomic same-slot conflict                      PASS
-C1A/C1B workflow-view compatibility            PASS or explicitly unaffected by static proof
+SERVICES_S7_CANONICAL_ACTIVITY_BOUNDARY_PASS
+SERVICES_S7_CANONICAL_SELECTION_PASS
+SERVICES_S7_CATALOG_N_PLUS_1_PASS
+SERVICES_S7_ACTIVE_SNAPSHOT_STILL_N_PASS
+SERVICES_S7_FIRST_APPOINTMENT_CREATED_PASS
+SERVICES_S7_NEW_APPOINTMENT_SEES_N_PLUS_1_PASS
+SERVICES_S7_APPOINTMENT_INTEGRATION_PASS
 ```
 
-## Forbidden implementation shortcuts
-
-S7 fails if any of these appear:
-
-- Appointment imports PostgreSQL and bypasses Services repository/activity boundaries for catalog semantics;
-- channel/WebChat code decides Service/Offering business policy;
-- selected snapshot is reconstructed from mutable catalog head after selection;
-- Offering revision changes silently alter an active Appointment;
-- Scheduler resource/capacity code is moved into Services;
-- a vertical/business name conditional is introduced;
-- `mk0/runtime` is modified.
-
-## Golden cases
+S6 was also re-run successfully after a clean reset:
 
 ```text
-S7-CAT-001  Appointment Service list comes from canonical Services read path
-S7-CAT-002  Appointment Offering list comes from canonical Services read path
-S7-REV-001  selected snapshot records Service/Offering revisions
-S7-REV-002  active Appointment snapshot survives N → N+1 catalog publication
-S7-REV-003  new Appointment sees N+1
-S7-CMP-001  compatibility projections remain correct
-S7-CMP-002  inherited Appointment E2E remains passing
-S7-CMP-003  exact replay remains passing
-S7-CMP-004  slot conflict remains one winner
-S7-BND-001  Scheduler authority is not introduced into Services
-S7-BND-002  no provider/channel-specific business policy
+SERVICES_S6_MULTIBUSINESS_PASS
 ```
 
-## Evidence required to certify
+## Appointment regression
 
-A successful S7 receipt must contain:
+The successful S7 workflow deliberately uses two pristine Docker/DB laboratories:
 
 ```text
-executed source SHA
-GitHub Actions run/job
-artifact ID/digest
-canonical read markers
-snapshot revision-N marker
-catalog publication N+1 marker
-active snapshot-still-N marker
-new Appointment-sees-N+1 marker
-full Appointment regression markers
-PostgreSQL evidence
-Mongo Services/Appointment audit evidence
-explicit non-claims
+pristine lab A
+  → inherited full Appointment certification
+  → destroy volumes
+
+pristine lab B
+  → S6 re-proof
+  → S7 N→N+1 composition proof
+```
+
+Inherited markers all pass:
+
+```text
+APPOINTMENT_NEW_CUSTOMER_CHILD_PASS
+APPOINTMENT_CATALOG_PASS
+APPOINTMENT_PAST_DATE_REJECTED
+APPOINTMENT_DATE_AND_SLOTS_PASS
+APPOINTMENT_BOOKING_PASS
+APPOINTMENT_IDEMPOTENCY_REPLAY_PASS
+APPOINTMENT_SLOT_CONFLICT_PASS
+MK0_REGISTER_NEW_APPOINTMENT_PASS
+```
+
+## First-run provenance
+
+The first CI attempt is retained:
+
+```text
+Run              33668304438
+Job              100375359804
+Source           784bf57439512b69d941d9828f6c5abd5fc06225
+Result           FAILURE
+Artifact         9861484659
+SHA256           d9f27f3d97639767cfc106d20eb319e1d96c43d1f6a28b94e71a9ed8f9365721
+```
+
+The S7 probe itself passed. The job later failed because S7 had legitimately consumed a Friday slot before the inherited regression expected a pristine three-slot fixture. The certification harness was corrected to isolate the two proof phases with a full volume reset. No runtime/business rule was relaxed.
+
+## Golden cases — result
+
+```text
+S7-CAT-001  canonical Service read path                         PASS
+S7-CAT-002  canonical Offering read path                       PASS
+S7-REV-001  selected revision semantics recorded               PASS
+S7-REV-002  active selection survives N → N+1                 PASS
+S7-REV-003  new Appointment sees N+1                           PASS
+S7-CMP-001  compatibility projections remain correct           PASS
+S7-CMP-002  inherited Appointment E2E                           PASS
+S7-CMP-003  exact replay                                       PASS
+S7-CMP-004  same-slot race one winner                          PASS
+S7-BND-001  Scheduler authority not introduced into Services   PASS
+S7-BND-002  no channel-specific Services policy                PASS
 ```
 
 ## Verdict boundary
 
-Only after executable proof may documentation say:
+Allowed statement:
 
-> `S7 Appointment → canonical Services integration CERTIFIED`.
+> **S7 Appointment → canonical Services integration is certified.**
 
-Even after S7:
+Still open:
 
 ```text
-G1 Services overall   not complete until S8
-Scheduler             not certified
-Telegram physical     not certified
-Integration runtime   not certified
-Agent / MCP            absent
-production             not certified
+S8 full clean G1 closure    NEXT
+G1 Services overall         not yet certified until S8
+Scheduler                   not certified
+Telegram physical           not certified
+Integration runtime         not certified
+Agent / MCP                  absent
+production                   not certified
 ```
