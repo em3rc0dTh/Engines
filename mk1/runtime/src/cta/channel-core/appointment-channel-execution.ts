@@ -135,13 +135,14 @@ export class AppointmentChannelExecutionCore {
     const claim = await this.repository.claimInboundEvent(envelope);
     if (claim.kind === 'REPLAY_APPLIED' || claim.kind === 'REPLAY_REJECTED') {
       const saved = record(claim.response);
-      return {
-        ...(saved as CanonicalChannelExecutionResponse | undefined ?? {
+      const base: CanonicalChannelExecutionResponse = saved
+        ? saved as CanonicalChannelExecutionResponse
+        : {
           ok: claim.kind === 'REPLAY_APPLIED',
-          code: claim.event.errorCode,
-        }),
-        replayed: true,
-      };
+          replayed: false,
+          ...(claim.event.errorCode ? { code: claim.event.errorCode } : {}),
+        };
+      return { ...base, replayed: true };
     }
 
     try {
@@ -160,11 +161,12 @@ export class AppointmentChannelExecutionCore {
   }
 
   private async startAppointment(envelope: CanonicalChannelEnvelope): Promise<CanonicalChannelExecutionResponse> {
+    const draft = record(envelope.payload.draft);
     const adapted = adaptRegisterNewAppointmentCtaInput({
       businessSlug: envelope.businessSlug,
       idempotencyKey: channelOperationInputId(envelope),
       correlationId: envelope.externalConversationId,
-      ...(record(envelope.payload.draft) ? { draft: record(envelope.payload.draft) } : {}),
+      ...(draft ? { draft } : {}),
     }, { channel: envelope.channel.toLowerCase() });
     if (!adapted.ok) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', adapted.issues[0]?.message);
 
