@@ -35,7 +35,19 @@ test('TG-RNC-003 shared contact supplies a phone patch without owning completene
     { customerPatch: { contact: { phones: [{ number: '+51999111222' }] } } });
 });
 
-test('Telegram renderer exposes inline consent and native shared-contact affordance', () => {
+test('B2 Telegram duplicate callback maps only with duplicate render context', () => {
+  const envelope = adapter.normalizeInbound(callback('resolve_customer_duplicate_existing', 44), {
+    businessSlug: 'golden-business', registrationRenderIntent: 'RESOLVE_CUSTOMER_DUPLICATE',
+  });
+  assert.equal(envelope?.action, 'RESOLVE_CUSTOMER_DUPLICATE');
+  assert.deepEqual(envelope?.payload, { decision: 'USE_EXISTING' });
+  assert.throws(() => adapter.normalizeInbound(callback('resolve_customer_duplicate_new', 45), {
+    businessSlug: 'golden-business',
+  }), /TELEGRAM_CONTEXT_REQUIRED/);
+});
+
+test('Telegram renderer exposes consent, shared-contact and duplicate-decision affordances', () => {
   assert.ok(renderTelegramRegistration('CONSENT').replyMarkup);
   assert.ok(renderTelegramRegistration('ASK_CUSTOMER_PHONE').replyMarkup);
+  assert.ok(renderTelegramRegistration('RESOLVE_CUSTOMER_DUPLICATE').replyMarkup);
 });

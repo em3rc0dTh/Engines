@@ -79,6 +79,16 @@ export type FinalizeRegistrationUpdateResult =
   | Readonly<{ ok: true; duplicateInput: boolean; state: RegistrationStateProjection }>
   | Readonly<{ ok: false; issues: readonly ContractIssue[]; state: RegistrationStateProjection }>;
 
+export type ResolveCustomerDuplicateDecision = 'USE_EXISTING' | 'CREATE_NEW';
+export type ResolveCustomerDuplicateInput = Readonly<{
+  inputId: string;
+  decision: ResolveCustomerDuplicateDecision;
+  customerId?: string;
+}>;
+export type ResolveCustomerDuplicateUpdateResult =
+  | Readonly<{ ok: true; duplicateInput: boolean; state: RegistrationStateProjection }>
+  | Readonly<{ ok: false; issues: readonly ContractIssue[]; state: RegistrationStateProjection }>;
+
 export const getRegistrationStateQuery = defineQuery<RegistrationStateProjection>('GetRegistrationState');
 export const getInitialStartFingerprintQuery = defineQuery<string>('GetInitialStartFingerprint');
 export const provideCustomerDataUpdate = defineUpdate<
@@ -89,6 +99,10 @@ export const finalizeRegistrationUpdate = defineUpdate<
   FinalizeRegistrationUpdateResult,
   [FinalizeRegistrationInput]
 >('FinalizeRegistration');
+export const resolveCustomerDuplicateUpdate = defineUpdate<
+  ResolveCustomerDuplicateUpdateResult,
+  [ResolveCustomerDuplicateInput]
+>('ResolveCustomerDuplicate');
 
 function resolveRegistrationPolicy(businessSlug: string, version: '1' | '2' = '1') {
   return businessSlug === GOLDEN_REGISTRATION_POLICY_V1.businessSlug
@@ -112,9 +126,14 @@ export async function registerNewCustomerWorkflow(
   let draft: RegisterNewCustomerDraft = normalizeRegistrationDraft(start.draft);
   const acceptedInputIds = new Set<string>();
   const acceptedFinalizeInputIds = new Set<string>();
+  const acceptedDuplicateDecisionInputIds = new Set<string>();
   const requiredAuditEvents: Array<Readonly<{ eventType: RegistrationAuditEventInput['eventType']; logicalKey: string }>> = [];
   let workflowFailure: Readonly<{ code: string; message: string }> | undefined;
   let possibleDuplicate: RegistrationStateProjection['possibleDuplicate'];
+  let duplicateDecision: Readonly<{
+    decision: ResolveCustomerDuplicateDecision;
+    customerId?: string;
+  }> | undefined;
   let customerId: string | undefined;
   let dataCollectionClosed = false;
   let finalizeRequested = false;
@@ -130,7 +149,7 @@ export async function registerNewCustomerWorkflow(
     const current = completeness();
     const nextAction: RegistrationStateProjection['nextAction'] = workflowFailure || terminalResult
       ? 'NONE'
-      : phase === 'WAITING_FOR_DUPLICATE_DECISION'
+      : phase === 'WAITING_FOR_DUPLICATE_DECISION' && !duplicateDecision
         ? 'RESOLVE_DUPLICATE'
         : explicitFinalize && current.complete && !finalizeRequested && !dataCollectionClosed
           ? 'FINALIZE_REGISTRATION'
@@ -397,6 +416,89 @@ export async function registerNewCustomerWorkflow(
     return { ok: true, duplicateInput: false, state: projectState() };
   });
 
+  setHandler(resolveCustomerDuplicateUpdate, async (
+    input: ResolveCustomerDuplicateInput,
+  ): Promise<ResolveCustomerDuplicateUpdateResult> => {
+    const inputId = input.inputId?.trim();
+    if (!inputId) {
+      return {
+        ok: false,
+        issues: [{ code: 'INVALID_INPUT_ID', path: 'inputId', message: 'inputId is required' }],
+        state: projectState(),
+      };
+    }
+
+    if (acceptedDuplicateDecisionInputIds.has(inputId)) {
+      return { ok: true, duplicateInput: true, state: projectState() };
+    }
+
+    if (workflowFailure || terminalResult || phase !== 'WAITING_FOR_DUPLICATE_DECISION' || !possibleDuplicate) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'INVALID_CUSTOMER_PATCH',
+          path: 'phase',
+          message: `Duplicate resolution is not available in phase ${phase}`,
+        }],
+        state: projectState(),
+      };
+    }
+
+    if (input.decision !== 'USE_EXISTING' && input.decision !== 'CREATE_NEW') {
+      return {
+        ok: false,
+        issues: [{
+          code: 'INVALID_CUSTOMER_PATCH',
+          path: 'decision',
+          message: 'decision must be USE_EXISTING or CREATE_NEW',
+        }],
+        state: projectState(),
+      };
+    }
+
+    let acceptedDecision: Readonly<{
+      decision: ResolveCustomerDuplicateDecision;
+      customerId?: string;
+    }>;
+
+    if (input.decision === 'USE_EXISTING') {
+      const selectedCustomerId = input.customerId?.trim();
+      if (!selectedCustomerId || !possibleDuplicate.candidateCustomerIds.includes(selectedCustomerId)) {
+        return {
+          ok: false,
+          issues: [{
+            code: 'INVALID_CUSTOMER_PATCH',
+            path: 'customerId',
+            message: 'USE_EXISTING requires a Customer from the current soft-match candidate set',
+          }],
+          state: projectState(),
+        };
+      }
+      acceptedDecision = { decision: 'USE_EXISTING', customerId: selectedCustomerId };
+    } else {
+      acceptedDecision = { decision: 'CREATE_NEW' };
+    }
+
+    await persistMandatoryAudit([
+      auditEvent(
+        'DUPLICATE_DECISION_ACCEPTED',
+        `duplicate-decision:${inputId}`,
+        'WAITING_FOR_DUPLICATE_DECISION',
+        {
+          decision: acceptedDecision.decision,
+          candidateCount: possibleDuplicate.candidateCustomerIds.length,
+          selectedCustomerId: acceptedDecision.customerId ?? null,
+          inputId,
+        },
+        acceptedDecision.customerId,
+      ),
+    ]);
+
+    acceptedDuplicateDecisionInputIds.add(inputId);
+    duplicateDecision = acceptedDecision;
+    return { ok: true, duplicateInput: false, state: projectState() };
+  });
+
   phase = 'RESERVING_REGISTRATION';
   const reservation = await postgres.reserveRegistrationSession({ start, workflowId: info.workflowId });
   registrationId = reservation.registrationId;
@@ -522,6 +624,8 @@ export async function registerNewCustomerWorkflow(
     }),
   ]);
 
+  let outcome: RegistrationOutcomeKind;
+
   if (duplicate.classification === 'SOFT_MATCH') {
     await postgres.recordSoftDuplicate({ registrationId });
     possibleDuplicate = {
@@ -530,13 +634,39 @@ export async function registerNewCustomerWorkflow(
     };
     await verifyMandatoryAudit();
     phase = 'WAITING_FOR_DUPLICATE_DECISION';
-    await condition(() => false);
-    throw new Error('unreachable');
-  }
+    await condition(() => Boolean(duplicateDecision) || Boolean(workflowFailure));
+    throwIfWorkflowFailed();
 
-  let outcome: RegistrationOutcomeKind;
+    const decision = duplicateDecision;
+    if (!decision) {
+      throw ApplicationFailure.nonRetryable(
+        'Duplicate resolution condition completed without a decision',
+        'DUPLICATE_DECISION_MISSING',
+      );
+    }
 
-  if (duplicate.classification === 'HARD_UNIQUE') {
+    if (decision.decision === 'USE_EXISTING') {
+      if (!decision.customerId) {
+        throw ApplicationFailure.nonRetryable(
+          'USE_EXISTING duplicate decision is missing customerId',
+          'DUPLICATE_DECISION_MISSING_CUSTOMER',
+        );
+      }
+      customerId = decision.customerId;
+      outcome = 'ALREADY_EXISTS';
+      await postgres.recordExistingCustomer({ registrationId, customerId });
+    } else {
+      phase = 'PERSISTING_CUSTOMER';
+      const persisted = await postgres.createCustomer({
+        registrationId,
+        businessSlug: start.businessSlug,
+        customer: draft.customer ?? {},
+        enforceHardUniqueDocument: policy.duplicatePolicy.hardUnique.includes(DOCUMENT_SELECTOR),
+      });
+      customerId = persisted.customerId;
+      outcome = persisted.kind === 'HARD_DUPLICATE' ? 'ALREADY_EXISTS' : 'CREATED';
+    }
+  } else if (duplicate.classification === 'HARD_UNIQUE') {
     customerId = duplicate.customerId;
     outcome = 'ALREADY_EXISTS';
     await postgres.recordExistingCustomer({ registrationId, customerId });

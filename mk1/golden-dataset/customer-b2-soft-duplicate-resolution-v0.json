@@ -1,0 +1,93 @@
+{
+  "artifact": "customer-b2-soft-duplicate-resolution",
+  "version": "0.1.0",
+  "date": "2026-09-04",
+  "status": "certified",
+  "authority": "mk1/Plan/09-b2-customer-soft-duplicate-resolution.md",
+  "runtimeAuthority": {
+    "source": "36afff68af3237bd6431fd643d7d969e5452a296",
+    "run": "33899907141",
+    "job": "101111281727",
+    "artifact": "9947248334",
+    "sha256": "2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a"
+  },
+  "invariants": [
+    "Temporal remains duplicate-decision orchestration truth",
+    "PostgreSQL remains Customer business truth",
+    "provider adapters do not own duplicate policy",
+    "exact accepted canonical duplicate-decision event replay produces no second business effect",
+    "the Workflow Update implementation maintains its own accepted inputId guard",
+    "USE_EXISTING may only select a Customer from the Workflow candidate set",
+    "CREATE_NEW does not bypass hard-unique enforcement",
+    "B2 does not merge new contact material into an existing Customer"
+  ],
+  "fixtures": [
+    {
+      "id": "B2-01",
+      "name": "single soft match use existing",
+      "result": "PASS",
+      "expected": {
+        "preDecisionPhase": "WAITING_FOR_DUPLICATE_DECISION",
+        "preDecisionNextAction": "RESOLVE_DUPLICATE",
+        "decision": "USE_EXISTING",
+        "terminalPhase": "ALREADY_EXISTS",
+        "created": false,
+        "secondCustomerCreated": false
+      },
+      "marker": "CUSTOMER_B2_USE_EXISTING_PASS"
+    },
+    {
+      "id": "B2-02",
+      "name": "soft match explicitly create new",
+      "result": "PASS",
+      "expected": {
+        "preDecisionPhase": "WAITING_FOR_DUPLICATE_DECISION",
+        "decision": "CREATE_NEW",
+        "terminalPhase": "CREATED",
+        "created": true,
+        "hardUniqueStillAuthoritative": true
+      },
+      "marker": "CUSTOMER_B2_CREATE_NEW_PASS"
+    },
+    {
+      "id": "B2-03",
+      "name": "exact canonical duplicate-decision event replay",
+      "result": "PASS",
+      "expected": {
+        "sameCanonicalEventIdentityAndMaterial": true,
+        "durableChannelReplay": true,
+        "secondBusinessEffect": false
+      },
+      "marker": "CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS",
+      "evidenceBoundary": "Runtime certification proves end-to-end durable channel-event replay. It does not claim a second direct Temporal Update invocation after terminal completion."
+    },
+    {
+      "id": "B2-04",
+      "name": "invalid existing candidate",
+      "result": "PASS",
+      "expected": {
+        "decision": "USE_EXISTING",
+        "candidateMembershipRequired": true,
+        "accepted": false,
+        "phaseRemains": "WAITING_FOR_DUPLICATE_DECISION",
+        "nextActionRemains": "RESOLVE_DUPLICATE"
+      },
+      "marker": "CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS"
+    },
+    {
+      "id": "B2-05",
+      "name": "cross-channel local messaging resolution",
+      "result": "AUTOMATED_PASS_HUMAN_WHATSAPP_RETEST_PENDING",
+      "expected": {
+        "telegramPhonePrefilled": false,
+        "whatsappPhonePrefilled": true,
+        "whatsappPhoneReprompt": false,
+        "softMatchPresentedForResolution": true,
+        "sameWorkflowCompletesAfterDecision": true,
+        "useExistingOutcome": "ALREADY_EXISTS",
+        "agent": false,
+        "mcp": false
+      }
+    }
+  ]
+}

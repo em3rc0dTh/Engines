@@ -1,0 +1,126 @@
+name: MK1 B2 Customer Soft Duplicate Resolution
+
+on:
+  push:
+    branches:
+      - build/mk1-b2-customer-soft-duplicate-resolution
+  pull_request:
+    branches:
+      - build/mk1-c2-c4-local-interactive-e2e
+
+permissions:
+  contents: read
+
+jobs:
+  b2-soft-duplicate-resolution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: Customer + channel regressions
+        run: |
+          npm run test:b1
+          npm run test:channel:c1b
+          npx tsx --test src/cta/telegram/telegram.adapter.test.ts src/cta/whatsapp/whatsapp.adapter.test.ts
+
+      - name: Start clean Engines infrastructure
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo temporal migrate worker
+          docker compose build messaging-lab
+          docker compose ps
+
+      - name: Seed Customer through Telegram
+        shell: bash
+        run: |
+          set -o pipefail
+          export SHARED_EMAIL="b2.crosschannel.${GITHUB_RUN_ID}@example.com"
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_MESSAGING_LAB_SCRIPT=TELEGRAM \
+            -e ENGINES_MESSAGING_LAB_EMAIL="${SHARED_EMAIL}" \
+            messaging-lab \
+            | tee /tmp/b2-telegram-seed.log
+          grep -F 'MESSAGING_LOCAL_E2E_PASS' /tmp/b2-telegram-seed.log
+          grep -F '"outcome":"CREATED"' /tmp/b2-telegram-seed.log
+
+      - name: Resolve cross-channel soft match through WhatsApp
+        shell: bash
+        run: |
+          set -o pipefail
+          export SHARED_EMAIL="b2.crosschannel.${GITHUB_RUN_ID}@example.com"
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_MESSAGING_LAB_SCRIPT=WHATSAPP \
+            -e ENGINES_MESSAGING_LAB_EMAIL="${SHARED_EMAIL}" \
+            -e ENGINES_MESSAGING_LAB_DUPLICATE_DECISION=USE_EXISTING \
+            messaging-lab \
+            | tee /tmp/b2-whatsapp-soft-match.log
+          grep -F 'Temporal: RUNNING / WAITING_FOR_DUPLICATE_DECISION / next=RESOLVE_DUPLICATE' /tmp/b2-whatsapp-soft-match.log
+          grep -F 'softMatchCandidates = 1' /tmp/b2-whatsapp-soft-match.log
+          grep -F 'MESSAGING_LOCAL_E2E_PASS' /tmp/b2-whatsapp-soft-match.log
+          grep -F '"channel":"WHATSAPP"' /tmp/b2-whatsapp-soft-match.log
+          grep -F '"outcome":"ALREADY_EXISTS"' /tmp/b2-whatsapp-soft-match.log
+          grep -F 'phonePrefilled":true' /tmp/b2-whatsapp-soft-match.log
+          if grep -F '¿Cuál es tu teléfono?' /tmp/b2-whatsapp-soft-match.log; then
+            echo 'WhatsApp incorrectly requested a phone already supplied by verified transport.' >&2
+            exit 1
+          fi
+
+      - name: Full B2 domain golden probe
+        shell: bash
+        run: |
+          set -o pipefail
+          docker compose run --rm --no-deps -T messaging-lab \
+            npm run probe:customer:b2:duplicate \
+            | tee /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_USE_EXISTING_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_CREATE_NEW_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_SOFT_DUPLICATE_RESOLUTION_PASS' /tmp/b2-domain-probe.log
+
+      - name: Capture B2 evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p /tmp/b2-evidence
+          cp /tmp/b2-telegram-seed.log /tmp/b2-evidence/ 2>/dev/null || true
+          cp /tmp/b2-whatsapp-soft-match.log /tmp/b2-evidence/ 2>/dev/null || true
+          cp /tmp/b2-domain-probe.log /tmp/b2-evidence/ 2>/dev/null || true
+          docker compose ps > /tmp/b2-evidence/compose-ps.txt || true
+          docker compose logs worker > /tmp/b2-evidence/worker.log 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT customer_id, business_slug, name, email FROM customers ORDER BY created_at;" \
+            > /tmp/b2-evidence/customers.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT registration_id, workflow_id, status, outcome, customer_id FROM customer_registrations ORDER BY created_at;" \
+            > /tmp/b2-evidence/registrations.txt 2>&1 || true
+          printf '%s\n' "${GITHUB_SHA}" > /tmp/b2-evidence/git-sha.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-b2-customer-soft-duplicate-${{ github.run_id }}
+          path: /tmp/b2-evidence
+          if-no-files-found: warn
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true

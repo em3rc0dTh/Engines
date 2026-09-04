@@ -41,8 +41,20 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
     if (callback) {
       const data = id(callback.data, 'callback_query.data');
       if (data === 'register_customer_no') return undefined;
-      if (data !== 'register_customer_yes') throw new Error('CHANNEL_OPERATION_NOT_SUPPORTED');
-      return { ...base, action: 'START_CUSTOMER_REGISTRATION', payload: { consentAccepted: true } };
+      if (data === 'register_customer_yes') {
+        return { ...base, action: 'START_CUSTOMER_REGISTRATION', payload: { consentAccepted: true } };
+      }
+      if (data === 'resolve_customer_duplicate_existing' || data === 'resolve_customer_duplicate_new') {
+        if (route.registrationRenderIntent !== 'RESOLVE_CUSTOMER_DUPLICATE') {
+          throw new Error('TELEGRAM_CONTEXT_REQUIRED');
+        }
+        return {
+          ...base,
+          action: 'RESOLVE_CUSTOMER_DUPLICATE',
+          payload: { decision: data === 'resolve_customer_duplicate_existing' ? 'USE_EXISTING' : 'CREATE_NEW' },
+        };
+      }
+      throw new Error('CHANNEL_OPERATION_NOT_SUPPORTED');
     }
 
     const contact = record(message?.contact);

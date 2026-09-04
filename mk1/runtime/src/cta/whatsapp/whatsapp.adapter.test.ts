@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import { WhatsAppAdapter } from './whatsapp.adapter.js';
+import { renderWhatsAppRegistration } from './whatsapp.renderer.js';
 import { MetaCloudApiTransport } from './whatsapp.transport.js';
 
 const body = JSON.stringify({
@@ -40,4 +41,21 @@ test('WA-RNC-003 text needs a core-derived intent and maps to one patch', () => 
 test('WA-RNC-004 negative interactive consent produces no Workflow operation', () => {
   const event = { ...transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature }), interactiveId: 'register_customer_no' };
   assert.equal(adapter.normalizeInbound(event, { businessSlug: 'golden-business' }), undefined);
+});
+
+test('B2 WhatsApp duplicate interactive reply maps only with duplicate render context', () => {
+  const base = transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature });
+  const event = { ...base, interactiveId: 'resolve_customer_duplicate_existing' };
+  const envelope = adapter.normalizeInbound(event, {
+    businessSlug: 'golden-business', registrationRenderIntent: 'RESOLVE_CUSTOMER_DUPLICATE',
+  });
+  assert.equal(envelope?.action, 'RESOLVE_CUSTOMER_DUPLICATE');
+  assert.deepEqual(envelope?.payload, { decision: 'USE_EXISTING' });
+  assert.throws(() => adapter.normalizeInbound(event, { businessSlug: 'golden-business' }), /WHATSAPP_CONTEXT_REQUIRED/);
+});
+
+test('WhatsApp renderer exposes duplicate-decision interactives', () => {
+  const rendered = renderWhatsAppRegistration('RESOLVE_CUSTOMER_DUPLICATE');
+  assert.equal(rendered.type, 'interactive');
+  assert.ok(Array.isArray(rendered.buttons));
 });

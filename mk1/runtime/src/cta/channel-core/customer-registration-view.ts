@@ -16,11 +16,13 @@ export function projectCustomerRegistration(state: RegistrationStateProjection):
 }> {
   const renderIntent: CustomerRegistrationRenderIntent = state.workflowStatus === 'FAILED'
     ? 'REGISTRATION_FAILED'
-    : state.phase === 'CREATED' || state.created
+    : state.phase === 'CREATED' || state.phase === 'ALREADY_EXISTS' || state.result
       ? 'REGISTRATION_COMPLETE'
-      : state.nextAction === 'FINALIZE_REGISTRATION'
-        ? 'FINALIZE_REGISTRATION'
-        : INTENT_BY_FIELD[state.missingFields[0] ?? ''] ?? 'WAIT';
+      : state.nextAction === 'RESOLVE_DUPLICATE'
+        ? 'RESOLVE_CUSTOMER_DUPLICATE'
+        : state.nextAction === 'FINALIZE_REGISTRATION'
+          ? 'FINALIZE_REGISTRATION'
+          : INTENT_BY_FIELD[state.missingFields[0] ?? ''] ?? 'WAIT';
   return {
     knownFields: state.knownFields,
     missingFields: state.missingFields,
