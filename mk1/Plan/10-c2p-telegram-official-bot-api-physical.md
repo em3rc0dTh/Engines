@@ -1,7 +1,7 @@
 # Plan 10 — C2P Telegram official Bot API physical proof
 
 Date: 2026-09-04
-Status: **REAL PROVIDER E2E PASS — FINAL HARDENING OBSERVATION PENDING**
+Status: **REAL PROVIDER E2E + INVALID-INPUT RECOVERY PASS — NATIVE CONTACT RETEST PENDING**
 Branch: `build/mk1-c2-telegram-bot-api-official`
 Base: `build/mk1-b2-customer-soft-duplicate-resolution`
 
@@ -18,8 +18,9 @@ C2P-2 long-poll runner                    ✅ BUILT
 C2P-3 deterministic CI                    ✅ PASS
 C2P-4 BotFather physical connection       ✅ HUMAN VERIFIED
 C2P-5 real Telegram registration E2E      ✅ HUMAN VERIFIED
-C2P-5H invalid-input/contact hardening    🧪 ONE FRESH RUN PENDING
-C2P-6 physical evidence + seal            ⏳ AFTER C2P-5H
+C2P-5H invalid-input recovery             ✅ HUMAN VERIFIED
+C2P-5C native request_contact visibility  🧪 RETEST PATCHED SOURCE
+C2P-6 physical evidence + seal            ⏳ AFTER C2P-5C
 ```
 
 ## Deterministic authority
@@ -79,34 +80,42 @@ Telegram Bot API
 
 Physical evidence: `mk1/Test/c2p-telegram-official-physical-human-verification-2026-09-04.md`.
 
-## C2P-5H / hardening observation
+## C2P-5H / invalid-input recovery ✅
 
-The first successful physical run used a valid typed phone immediately. It therefore did not separately observe the two hardening behaviors intentionally included in the original plan:
+A fresh real-provider run intentionally supplied invalid phone material twice and an invalid email once.
 
-```text
-invalid real-provider phone/email
-  → rejected
-  → same Temporal Workflow remains active
-
-native Compartir teléfono
-  → request_contact
-  → Telegram contact payload
-  → canonical Customer phone patch
-```
-
-These are already proven deterministically and in the local human harness, but the final physical seal waits for one fresh real-provider observation.
-
-Because the current conversation binding is terminal, the easiest fresh physical hardening run is:
+Observed each time:
 
 ```text
-stop telegram-bot
-reset local Docker volumes
-restart postgres/mongo/temporal/migrate/worker
-restart telegram-bot with the same local token
-/start in the same Telegram private chat
+invalid value
+→ Ese dato no es válido. Inténtalo nuevamente.
+→ same field requested again
+→ same registration conversation remains recoverable
 ```
 
-A second Telegram account/private chat is also valid.
+After later valid phone/email values, the Workflow completed and Telegram rendered `✅ Registro completado`.
+
+This closes the physical invalid-input recovery requirement.
+
+## C2P-5C / native contact UI retest
+
+The same hardening run exposed a client-facing gap: the expected native `Compartir teléfono` reply-keyboard button was not visibly presented to the operator, even though the renderer emitted a `request_contact` keyboard.
+
+This does not invalidate C2P-4/C2P-5/C2P-5H. Typed-phone input is a supported canonical path and the registration completed successfully.
+
+The C2P renderer was hardened to request a persistent official ReplyKeyboardMarkup:
+
+```text
+ASK_CUSTOMER_PHONE
+→ keyboard button: Compartir teléfono
+→ request_contact = true
+→ is_persistent = true
+→ resize_keyboard = true
+→ input_field_placeholder set
+→ text explicitly keeps typed-phone fallback available
+```
+
+C2P-5C requires one fresh run on that patched source where the operator confirms that the native button is visible and uses it successfully.
 
 ## Certification marker
 
@@ -114,9 +123,10 @@ Allowed now:
 
 ```text
 C2P TELEGRAM OFFICIAL BOT API — REAL PROVIDER E2E ✅ HUMAN VERIFIED
+C2P PHYSICAL INVALID-INPUT RECOVERY                     ✅ HUMAN VERIFIED
 ```
 
-Final marker remains reserved until C2P-5H:
+Final marker remains reserved until C2P-5C:
 
 ```text
 C2P TELEGRAM OFFICIAL BOT API ✅ PHYSICALLY VERIFIED / SEALED
