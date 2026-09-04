@@ -3,7 +3,8 @@
 Date: 2026-09-04
 Operator: Eduardo
 Initial branch under test: `build/mk1-c2-c4-local-interactive-e2e`
-Status: **TELEGRAM HUMAN VERIFIED — WHATSAPP B2 RETEST PENDING**
+Follow-up branch: `build/mk1-b2-customer-soft-duplicate-resolution`
+Status: **C2/C4 LOCAL INTERACTIVE E2E ✅ HUMAN VERIFIED**
 
 > Privacy note: user-entered phone numbers and email addresses are intentionally not copied into this public evidence record.
 
@@ -80,80 +81,116 @@ Verdict: **PASS**.
 
 This human run proves invalid Customer ingress is rejected without fabricating completion and without silently starting a second Workflow.
 
-## Test 3 — WhatsApp sender-phone prefill + discovered duplicate gap
+## Test 3 — WhatsApp sender-phone prefill exposed the B2 prerequisite
 
-Observed path before the blocker:
-
-```text
-WhatsApp presentation
-  → explicit consent
-  → locally HMAC-verified synthetic sender
-  → sender phone supplied to Temporal at start
-  → name requested
-  → email requested
-```
-
-Temporal correctly started with:
+Before B2 existed, the operator exercised WhatsApp and observed:
 
 ```text
 knownFields   = customer.contact.phone
 missingFields = customer.name, customer.contact.email
 ```
 
-The phone was **not** requested again.
+The verified sender phone was not requested again. The supplied email matched an existing Customer, producing the legitimate canonical `SOFT_MATCH` condition. At that time the local simulator failed closed because deterministic duplicate resolution had not yet been implemented.
 
-The email entered by the operator matched a Customer created during the earlier Telegram run. The canonical Customer duplicate policy therefore produced a legitimate `SOFT_MATCH` and the real Workflow moved toward `RESOLVE_DUPLICATE`.
-
-At the time of this human run, the simulator deliberately failed closed with:
-
-```text
-LOCAL_E2E_DUPLICATE_REQUIRES_UNIQUE_INPUT
-```
-
-That result is classified as a **Customer Engine prerequisite gap**, not a WhatsApp transport/adapter failure. Plan 07 had already reserved `RESOLVE_CUSTOMER_DUPLICATE` as a required shared operation.
+That finding created the bounded B2 Customer soft-duplicate resolution gate. It was a Customer-domain prerequisite, not a WhatsApp adapter defect.
 
 Verdict:
 
 ```text
-WhatsApp phone prefill                     PASS
+WhatsApp sender-phone prefill              PASS
 WhatsApp no redundant phone prompt         PASS
 WhatsApp real Temporal progression         PASS
-Customer soft-duplicate completion         BLOCKED BEFORE B2
-overall WhatsApp human local E2E            RETEST REQUIRED
+Customer duplicate-resolution prerequisite DISCOVERED
 ```
 
-## Follow-up gate
+## Test 4 — WhatsApp full local interactive completion after B2
 
-The gap is addressed on:
+On `build/mk1-b2-customer-soft-duplicate-resolution`, the operator reran the local messaging laboratory interactively with WhatsApp.
+
+Observed Temporal sequence:
 
 ```text
-build/mk1-b2-customer-soft-duplicate-resolution
+start
+Temporal      = RUNNING / RESERVING_REGISTRATION / next=PROVIDE_CUSTOMER_DATA
+knownFields   = customer.contact.phone
+missingFields = customer.name, customer.contact.email
+
+name supplied
+Temporal      = RUNNING / WAITING_FOR_REQUIRED_DATA / next=PROVIDE_CUSTOMER_DATA
+knownFields   = customer.name, customer.contact.phone
+missingFields = customer.contact.email
+
+email supplied
+Temporal      = COMPLETED / CREATED / next=NONE
+knownFields   = customer.name, customer.contact.phone, customer.contact.email
+missingFields = (none)
 ```
 
-The human retest must reproduce a cross-channel soft match and observe:
+The simulator emitted:
 
 ```text
-WAITING_FOR_DUPLICATE_DECISION / RESOLVE_DUPLICATE
-  → explicit Use existing / Create new choice
-  → same Temporal Workflow continues
-  → ALREADY_EXISTS or CREATED
-  → MESSAGING_LOCAL_E2E_PASS
+Outcome         CREATED
+channel         WHATSAPP
+phonePrefilled  true
+scripted        false
+agent           false
+mcp             false
+MESSAGING_LOCAL_E2E_PASS
 ```
 
-## Current claim boundary
+No phone prompt was rendered after the verified WhatsApp sender phone had been accepted at Workflow start.
 
-Allowed now:
+Verdict: **PASS**.
+
+## Human gate closure
+
+The human verification requirement for the local C2/C4 gate was:
+
+```text
+Telegram interactive path reaches real Temporal Customer completion
+WhatsApp interactive path reaches real Temporal Customer completion
+provider-derived WhatsApp phone is not requested again
+at least one invalid human input is rejected while the same Workflow remains active
+```
+
+All four conditions have now been observed by the operator.
+
+Allowed claim:
 
 ```text
 C2 Telegram local interactive deterministic E2E ✅ HUMAN VERIFIED
-C4 WhatsApp local sender-phone prefill           ✅ HUMAN VERIFIED
-B2 WhatsApp duplicate-resolution path            ⏳ HUMAN RETEST PENDING
+C4 WhatsApp local interactive deterministic E2E ✅ HUMAN VERIFIED
+C2/C4 LOCAL INTERACTIVE E2E                  ✅ HUMAN VERIFIED
 ```
 
-Not allowed yet:
+## B2 human-observation boundary
 
-- C2/C4 full local E2E human verification as a combined gate;
-- real Telegram Bot API certification;
-- real Meta Cloud API/Kapso certification;
-- public webhook certification;
+B2 itself is already deterministic runtime-certified by GitHub Actions. The final WhatsApp human run above followed the unique-input `CREATED` path, so the specific human UI path:
+
+```text
+WAITING_FOR_DUPLICATE_DECISION
+  → RESOLVE_DUPLICATE
+  → USE_EXISTING or CREATE_NEW
+```
+
+was **not separately observed by the operator in this final run**.
+
+Therefore the precise state is:
+
+```text
+B2 Customer soft-duplicate resolution       ✅ AUTOMATED / RUNTIME CERTIFIED
+B2 duplicate-decision UI path               ⏳ HUMAN OBSERVATION OPTIONAL / NOT REQUIRED FOR C2/C4 CLOSURE
+```
+
+## Non-claims
+
+This human verification does not certify:
+
+- real Telegram Bot API;
+- a real Telegram bot token/account path;
+- real Meta Cloud API or Kapso;
+- public webhook reachability;
+- Appointment over messaging;
+- Scheduler runtime;
+- Agent/MCP/LLM routing;
 - production readiness.
