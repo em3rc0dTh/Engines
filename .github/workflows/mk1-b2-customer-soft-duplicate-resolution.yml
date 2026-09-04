@@ -82,6 +82,19 @@ jobs:
             exit 1
           fi
 
+      - name: Full B2 domain golden probe
+        shell: bash
+        run: |
+          set -o pipefail
+          docker compose run --rm --no-deps -T messaging-lab \
+            npm run probe:customer:b2:duplicate \
+            | tee /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_USE_EXISTING_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_CREATE_NEW_PASS' /tmp/b2-domain-probe.log
+          grep -F 'CUSTOMER_B2_SOFT_DUPLICATE_RESOLUTION_PASS' /tmp/b2-domain-probe.log
+
       - name: Capture B2 evidence
         if: always()
         shell: bash
@@ -89,6 +102,7 @@ jobs:
           mkdir -p /tmp/b2-evidence
           cp /tmp/b2-telegram-seed.log /tmp/b2-evidence/ 2>/dev/null || true
           cp /tmp/b2-whatsapp-soft-match.log /tmp/b2-evidence/ 2>/dev/null || true
+          cp /tmp/b2-domain-probe.log /tmp/b2-evidence/ 2>/dev/null || true
           docker compose ps > /tmp/b2-evidence/compose-ps.txt || true
           docker compose logs worker > /tmp/b2-evidence/worker.log 2>&1 || true
           docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
