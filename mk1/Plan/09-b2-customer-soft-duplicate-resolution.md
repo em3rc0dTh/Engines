@@ -144,7 +144,7 @@ Note: this runtime marker certifies end-to-end channel-event replay. It does not
 
 Marker: `CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS`.
 
-### B2-05 — messaging cross-channel regression ✅ AUTOMATED / ⏳ HUMAN RETEST
+### B2-05 — messaging cross-channel regression ✅ AUTOMATED
 
 Automated clean run proved:
 
@@ -155,7 +155,23 @@ Automated clean run proved:
 - duplicate choice is rendered rather than treated as terminal simulator failure;
 - `USE_EXISTING` completes the same real Temporal Workflow as `ALREADY_EXISTS`.
 
-The earlier human Telegram run is already verified. The WhatsApp B2 path still requires one human retest on this branch before the combined C2/C4 gate is called HUMAN VERIFIED.
+The final human WhatsApp run on this branch instead used unique Customer material and completed the real Temporal path as `CREATED` with `MESSAGING_LOCAL_E2E_PASS`. That closes the broader C2/C4 local human interactive gate, but the specific B2 duplicate-decision UI path remains an optional human observation rather than a certification prerequisite.
+
+## Human verification closure
+
+The operator has now manually observed:
+
+```text
+Telegram normal registration                         ✅
+Telegram invalid phone rejected                      ✅
+same Telegram Workflow recovery                      ✅
+WhatsApp sender phone prefilled                      ✅
+WhatsApp no redundant phone prompt                   ✅
+WhatsApp real Temporal completion → CREATED          ✅
+C2/C4 local interactive deterministic E2E            ✅ HUMAN VERIFIED
+```
+
+Human evidence: `mk1/Test/c2-c4-local-interactive-human-verification-2026-09-04.md`.
 
 ## Failure provenance retained
 
@@ -182,10 +198,7 @@ Allowed now:
 
 ```text
 B2 CUSTOMER SOFT-DUPLICATE RESOLUTION ✅ CERTIFIED
+C2/C4 LOCAL INTERACTIVE DETERMINISTIC E2E ✅ HUMAN VERIFIED
 ```
 
-Not allowed until the remaining human retest:
-
-```text
-C2/C4 local interactive deterministic E2E ✅ HUMAN VERIFIED
-```
+The duplicate-decision UI itself may still be manually observed later, but that is no longer a blocker for either certified claim above.
