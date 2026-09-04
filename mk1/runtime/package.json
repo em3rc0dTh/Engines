@@ -58,6 +58,7 @@
     "migrate:appointment": "tsx scripts/migrate-postgres-appointment.ts",
     "migrate:services": "tsx scripts/migrate-postgres-services.ts",
     "migrate:channel": "tsx scripts/migrate-postgres-channel.ts",
+    "probe:customer:b2:duplicate": "tsx scripts/certify-customer-b2-soft-duplicate-resolution.ts",
     "probe:services:s1": "tsx scripts/certify-services-s1-persistence.ts",
     "probe:services:s2": "tsx scripts/certify-services-s2-read-engine.ts",
     "probe:services:s3": "tsx scripts/certify-services-s3-recommendation.ts",
