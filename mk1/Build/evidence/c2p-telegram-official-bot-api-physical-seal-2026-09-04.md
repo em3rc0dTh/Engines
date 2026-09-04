@@ -4,7 +4,7 @@ Date: 2026-09-04
 Branch: `build/mk1-c2-telegram-bot-api-official`
 Status: **PHYSICALLY VERIFIED / SEALED**
 
-## Runtime authority after contact-keyboard hardening
+## Physically observed runtime authority
 
 ```text
 Source SHA   28dd5c9f2dd2352d3e11b83cc6602cea1b568760
@@ -15,17 +15,32 @@ Artifact     9957384230
 SHA256       46bbd55f0b2c061ec9b7e61d55323dca0f5488d410120a3ac5b4510b90bdd79c
 ```
 
-The source-bound run passed:
+The source-bound run passed TypeScript, Telegram Bot API deterministic tests, Telegram adapter/render regression, clean Engines infrastructure startup and the real-Temporal Telegram local regression to Customer `CREATED`.
+
+This is the runtime lineage physically observed by Eduardo in Telegram Web after contact-keyboard hardening.
+
+## Post-seal client-aware copy hardening
+
+After Telegram Web again failed to visibly surface the native `Compartir teléfono` reply keyboard, the phone prompt was changed so it no longer promises that every Telegram client will render the button:
 
 ```text
-TypeScript                              ✅
-Telegram Bot API deterministic tests    ✅
-Telegram adapter/render regression      ✅
-clean Engines infrastructure startup    ✅
-real-Temporal Telegram local regression ✅ Customer CREATED
+Necesito tu teléfono.
+
+Si tu app muestra «Compartir teléfono», puedes usarlo. Si no, escribe tu número.
 ```
 
-The runtime source includes the hardened official phone prompt with `ReplyKeyboardMarkup`, `request_contact=true`, `is_persistent=true`, `resize_keyboard=true`, input placeholder, and typed-phone fallback.
+That wording-only runtime change is independently deterministic-CI clean:
+
+```text
+Source SHA   12cdd31f90261fc1b89d02c7569b02c60e10a499
+Run          33928701201
+Job          101202679780
+Result       SUCCESS
+Artifact     9957765591
+SHA256       e21c19fd6fa9bf31eaea0dae7885e8a3dc1432462d747ec29a05729b1234d35a
+```
+
+No Engine, Temporal, Customer, persistence, adapter or Bot API routing semantics changed in this post-seal UX copy hardening.
 
 ## Physical human evidence
 
