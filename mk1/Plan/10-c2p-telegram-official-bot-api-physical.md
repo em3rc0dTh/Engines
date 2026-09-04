@@ -1,7 +1,7 @@
 # Plan 10 — C2P Telegram official Bot API physical proof
 
 Date: 2026-09-04
-Status: **DETERMINISTIC PASS — PHYSICAL TEST NOW**
+Status: **REAL PROVIDER E2E PASS — FINAL HARDENING OBSERVATION PENDING**
 Branch: `build/mk1-c2-telegram-bot-api-official`
 Base: `build/mk1-b2-customer-soft-duplicate-resolution`
 
@@ -16,9 +16,10 @@ C2P-0 official-source review              ✅
 C2P-1 Bot API HTTP client                 ✅ BUILT
 C2P-2 long-poll runner                    ✅ BUILT
 C2P-3 deterministic CI                    ✅ PASS
-C2P-4 BotFather physical connection       🧪 NOW — EDUARDO
-C2P-5 real Telegram registration E2E      🧪 NOW — EDUARDO
-C2P-6 physical evidence + seal            ⏳ AFTER HUMAN PROOF
+C2P-4 BotFather physical connection       ✅ HUMAN VERIFIED
+C2P-5 real Telegram registration E2E      ✅ HUMAN VERIFIED
+C2P-5H invalid-input/contact hardening    🧪 ONE FRESH RUN PENDING
+C2P-6 physical evidence + seal            ⏳ AFTER C2P-5H
 ```
 
 ## Deterministic authority
@@ -34,89 +35,91 @@ SHA256       6e8606c4ab6082691e8f5699b2d98635d2ad6b94f6dfddf52ba09158a1a1c9f2
 
 The successful run proved TypeScript, six mocked official Bot API client cases, seven Telegram adapter/render cases, clean infrastructure startup and the inherited real-Temporal Telegram Customer registration path to `CREATED`.
 
-This is **not** external-provider certification.
+## C2P-4 / BotFather physical connection ✅
 
-## C2P-1 / client
+Eduardo created a real bot with BotFather, started the local C2P runner with a token supplied only through the local environment, opened the real private Telegram chat and received the Engines registration consent prompt.
 
-Implemented official methods:
-
-```text
-getMe
-getWebhookInfo
-getUpdates
-sendMessage
-answerCallbackQuery
-```
-
-No third-party Telegram SDK is required; the runtime uses Node fetch against `api.telegram.org`.
-
-## C2P-2 / runner
-
-The runner:
-
-- requires `TELEGRAM_BOT_TOKEN` from environment;
-- verifies bot identity with `getMe`;
-- fails closed if a webhook is active;
-- receives only message/callback updates via long polling;
-- keeps `businessSlug` in trusted deployment config;
-- presents consent before Workflow start;
-- passes provider material through `TelegramAdapter`;
-- routes canonical events through the existing Customer channel core;
-- queries real Temporal state for next render intent;
-- supports Telegram native shared-contact phone input;
-- preserves B2 duplicate-resolution callbacks;
-- rejects a shared contact whose Telegram `user_id` conflicts with the actual sender;
-- never logs the token.
-
-## C2P-4 / BotFather setup
-
-Human steps:
-
-```text
-Telegram → @BotFather
-/newbot
-choose display name
-choose username ending in bot
-receive token
-```
-
-The token is stored only in the local shell environment.
-
-No `api_id`, `api_hash`, public URL, webhook, reverse proxy or paid hosting is needed for this gate.
-
-## C2P-5 / physical E2E
-
-Required human observation:
+This proves:
 
 ```text
 real Telegram account
-  → real bot private chat
-  → /start
+  ↔ Telegram Bot API official
+  ↔ Engines long-poll runner
+```
+
+No `api_id`, `api_hash`, public URL, webhook, reverse proxy or paid hosting was required.
+
+## C2P-5 / real provider E2E ✅
+
+Human-observed physical sequence:
+
+```text
+/start
   → consent prompt
   → Registrarme
   → name
-  → one invalid phone/text attempt
-  → same Workflow remains active
-  → native Compartir teléfono
+  → valid typed phone
   → email
-  → real Temporal RegisterNewCustomer
-  → Customer CREATED
-  → Telegram completion message
+  → ✅ Registro completado
 ```
+
+Therefore the real provider path reached the same Engine behavior:
+
+```text
+Telegram Bot API
+  → getUpdates
+  → TelegramAdapter
+  → CanonicalChannelEnvelope
+  → CustomerRegistrationChannelExecutionCore
+  → PostgreSQL channel ledger
+  → Temporal RegisterNewCustomer
+  → Customer completion
+  → Telegram sendMessage
+```
+
+Physical evidence: `mk1/Test/c2p-telegram-official-physical-human-verification-2026-09-04.md`.
+
+## C2P-5H / hardening observation
+
+The first successful physical run used a valid typed phone immediately. It therefore did not separately observe the two hardening behaviors intentionally included in the original plan:
+
+```text
+invalid real-provider phone/email
+  → rejected
+  → same Temporal Workflow remains active
+
+native Compartir teléfono
+  → request_contact
+  → Telegram contact payload
+  → canonical Customer phone patch
+```
+
+These are already proven deterministically and in the local human harness, but the final physical seal waits for one fresh real-provider observation.
+
+Because the current conversation binding is terminal, the easiest fresh physical hardening run is:
+
+```text
+stop telegram-bot
+reset local Docker volumes
+restart postgres/mongo/temporal/migrate/worker
+restart telegram-bot with the same local token
+/start in the same Telegram private chat
+```
+
+A second Telegram account/private chat is also valid.
 
 ## Certification marker
 
-Only after physical evidence may the repository say:
+Allowed now:
 
 ```text
-C2P TELEGRAM OFFICIAL BOT API ✅ PHYSICALLY VERIFIED
+C2P TELEGRAM OFFICIAL BOT API — REAL PROVIDER E2E ✅ HUMAN VERIFIED
 ```
 
-Current allowed language:
+Final marker remains reserved until C2P-5H:
 
 ```text
-C2P Telegram official runner ✅ BUILT / DETERMINISTIC PASS
-real Telegram provider       🧪 READY FOR PHYSICAL TEST
+C2P TELEGRAM OFFICIAL BOT API ✅ PHYSICALLY VERIFIED / SEALED
 ```
 
 ## Non-claims
