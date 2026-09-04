@@ -15,6 +15,9 @@ function stringField(body: JsonRecord, key: string): string | undefined {
 
 const CHANNELS = new Set<ChannelKind>(['WEBCHAT', 'TELEGRAM', 'WHATSAPP']);
 const ACTIONS = new Set<CanonicalChannelAction>([
+  'START_CUSTOMER_REGISTRATION',
+  'PROVIDE_CUSTOMER_DATA',
+  'FINALIZE_CUSTOMER_REGISTRATION',
   'START_APPOINTMENT',
   'PROVIDE_CUSTOMER',
   'RESOLVE_CUSTOMER',
