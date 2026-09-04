@@ -34,6 +34,13 @@ type LiveRegistration = Readonly<{
   runId: string;
 }>;
 
+function scriptedChannel(): LabChannel | undefined {
+  const raw = process.env.ENGINES_MESSAGING_LAB_SCRIPT?.trim().toUpperCase();
+  if (!raw) return undefined;
+  if (raw === 'TELEGRAM' || raw === 'WHATSAPP') return raw;
+  throw new Error(`LOCAL_E2E_SCRIPT_CHANNEL_INVALID:${raw}`);
+}
+
 function randomDigits(count: number): string {
   let value = '';
   for (let index = 0; index < count; index += 1) value += Math.floor(Math.random() * 10).toString();
@@ -98,7 +105,17 @@ function assertEnvelope(
 }
 
 async function run(): Promise<void> {
-  const rl = createInterface({ input, output });
+  const script = scriptedChannel();
+  const rl = script ? undefined : createInterface({ input, output });
+  const ask = async (prompt: string, scriptedValue: string): Promise<string> => {
+    if (script) {
+      console.log(`${prompt}${scriptedValue}`);
+      return scriptedValue;
+    }
+    if (!rl) throw new Error('LOCAL_E2E_READLINE_NOT_AVAILABLE');
+    return rl.question(prompt);
+  };
+
   const config = loadRuntimeConfig();
   const pool = new Pool({ connectionString: config.postgresUrl, max: 4 });
   const repository = new PostgresChannelRepository(pool);
@@ -166,11 +183,12 @@ async function run(): Promise<void> {
   try {
     console.log('ENGINES · LOCAL MESSAGING CUSTOMER REGISTRATION');
     console.log('Real PostgreSQL + Temporal + RegisterNewCustomer. No provider credentials.');
+    console.log(script ? `Scripted proof mode: ${script}` : 'Human interactive mode.');
     console.log('');
     console.log('Choose channel:');
     console.log('1 Telegram');
     console.log('2 WhatsApp');
-    const channelChoice = (await rl.question('> ')).trim();
+    const channelChoice = (await ask('> ', script === 'TELEGRAM' ? '1' : script === 'WHATSAPP' ? '2' : '')).trim();
     const channel: LabChannel = channelChoice === '1' ? 'TELEGRAM' : channelChoice === '2' ? 'WHATSAPP' : (() => {
       throw new Error('LOCAL_E2E_CHANNEL_INVALID');
     })();
@@ -179,7 +197,7 @@ async function run(): Promise<void> {
     console.log(renderText(channel, 'CONSENT'));
     console.log('1 Sí, registrarme');
     console.log('2 Ahora no');
-    const consent = (await rl.question('> ')).trim();
+    const consent = (await ask('> ', script ? '1' : '')).trim();
 
     if (consent === '2') {
       const ignored = channel === 'TELEGRAM'
@@ -237,6 +255,7 @@ async function run(): Promise<void> {
           runId: live.runId,
           customerId: live.state.customerId,
           phonePrefilled: channel === 'WHATSAPP',
+          scripted: Boolean(script),
           agent: false,
           mcp: false,
         })}`);
@@ -251,6 +270,10 @@ async function run(): Promise<void> {
       }
 
       const intent = live.view.renderIntent;
+      if (channel === 'WHATSAPP' && intent === 'ASK_CUSTOMER_PHONE') {
+        throw new Error('LOCAL_E2E_WHATSAPP_PHONE_REPROMPT');
+      }
+
       console.log('');
       console.log(renderText(channel, intent));
 
@@ -258,7 +281,7 @@ async function run(): Promise<void> {
       if (channel === 'TELEGRAM' && intent === 'ASK_CUSTOMER_PHONE') {
         console.log(`1 Compartir teléfono simulado (${sharedTelegramPhone})`);
         console.log('2 Escribir teléfono');
-        const phoneChoice = (await rl.question('> ')).trim();
+        const phoneChoice = (await ask('> ', script ? '1' : '')).trim();
         if (phoneChoice === '1') {
           envelope = assertEnvelope(
             telegramAdapter.normalizeInbound(telegramContact(sharedTelegramPhone), {
@@ -268,7 +291,7 @@ async function run(): Promise<void> {
             'telegram-contact',
           );
         } else if (phoneChoice === '2') {
-          const value = await rl.question('Teléfono: ');
+          const value = await ask('Teléfono: ', script ? sharedTelegramPhone : '');
           envelope = assertEnvelope(
             telegramAdapter.normalizeInbound(telegramText(value), {
               businessSlug: BUSINESS_SLUG,
@@ -281,7 +304,12 @@ async function run(): Promise<void> {
           continue;
         }
       } else {
-        const value = await rl.question('> ');
+        const scriptedValue = intent === 'ASK_CUSTOMER_NAME'
+          ? `CI ${channel}`
+          : intent === 'ASK_CUSTOMER_EMAIL'
+            ? `ci.${channel.toLowerCase()}.${session}@example.com`
+            : '';
+        const value = await ask('> ', script ? scriptedValue : '');
         envelope = channel === 'TELEGRAM'
           ? assertEnvelope(
             telegramAdapter.normalizeInbound(telegramText(value), {
@@ -303,10 +331,11 @@ async function run(): Promise<void> {
       if (!applied.ok) {
         console.log(`ERROR: ${applied.code ?? 'CHANNEL_EVENT_REJECTED'}`);
         console.log('The same Temporal Workflow remains active; enter a new value.');
+        if (script) throw new Error(`LOCAL_E2E_SCRIPT_EVENT_REJECTED:${applied.code ?? 'unknown'}`);
       }
     }
   } finally {
-    rl.close();
+    rl?.close();
     await Promise.allSettled([customerPort.close(), pool.end()]);
   }
 }
