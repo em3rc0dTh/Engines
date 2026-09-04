@@ -8,7 +8,15 @@ export function renderWhatsAppRegistration(intent: 'CONSENT' | CustomerRegistrat
       { id: 'register_customer_no', title: 'Ahora no' },
     ],
   };
-  const text: Record<CustomerRegistrationRenderIntent, string> = {
+  if (intent === 'RESOLVE_CUSTOMER_DUPLICATE') return {
+    type: 'interactive',
+    body: 'Ya encontramos un cliente con datos coincidentes. ¿Qué deseas hacer?',
+    buttons: [
+      { id: 'resolve_customer_duplicate_existing', title: 'Usar existente' },
+      { id: 'resolve_customer_duplicate_new', title: 'Crear nuevo' },
+    ],
+  };
+  const text: Record<Exclude<CustomerRegistrationRenderIntent, 'RESOLVE_CUSTOMER_DUPLICATE'>, string> = {
     ASK_CUSTOMER_NAME: '¿Cuál es tu nombre?',
     ASK_CUSTOMER_PHONE: '¿Cuál es tu teléfono?',
     ASK_CUSTOMER_EMAIL: '¿Cuál es tu correo?',
