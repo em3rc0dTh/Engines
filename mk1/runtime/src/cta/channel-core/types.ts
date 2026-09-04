@@ -1,6 +1,9 @@
 export type ChannelKind = 'WEBCHAT' | 'TELEGRAM' | 'WHATSAPP';
 
 export type CanonicalChannelAction =
+  | 'START_CUSTOMER_REGISTRATION'
+  | 'PROVIDE_CUSTOMER_DATA'
+  | 'FINALIZE_CUSTOMER_REGISTRATION'
   | 'START_APPOINTMENT'
   | 'PROVIDE_CUSTOMER'
   | 'RESOLVE_CUSTOMER'
@@ -63,3 +66,12 @@ export type CanonicalChannelExecutionResponse = Readonly<{
   operationResult?: unknown;
   code?: string;
 }>;
+
+export type CustomerRegistrationRenderIntent =
+  | 'ASK_CUSTOMER_NAME'
+  | 'ASK_CUSTOMER_PHONE'
+  | 'ASK_CUSTOMER_EMAIL'
+  | 'FINALIZE_REGISTRATION'
+  | 'REGISTRATION_COMPLETE'
+  | 'REGISTRATION_FAILED'
+  | 'WAIT';
