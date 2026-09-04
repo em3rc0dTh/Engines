@@ -54,9 +54,18 @@ test('B2 Telegram duplicate callback maps only with duplicate render context', (
   }), /TELEGRAM_CONTEXT_REQUIRED/);
 });
 
-test('Telegram renderer exposes consent, shared-contact and duplicate-decision affordances', () => {
+test('Telegram renderer exposes consent, persistent shared-contact and duplicate-decision affordances', () => {
   assert.ok(renderTelegramRegistration('CONSENT').replyMarkup);
-  assert.ok(renderTelegramRegistration('ASK_CUSTOMER_PHONE').replyMarkup);
+
+  const phone = renderTelegramRegistration('ASK_CUSTOMER_PHONE');
+  assert.match(phone.text, /Compartir teléfono/);
+  assert.deepEqual(phone.replyMarkup, {
+    keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]],
+    is_persistent: true,
+    resize_keyboard: true,
+    input_field_placeholder: 'Comparte tu teléfono o escríbelo',
+  });
+
   assert.ok(renderTelegramRegistration('RESOLVE_CUSTOMER_DUPLICATE').replyMarkup);
   assert.deepEqual(renderTelegramRegistration('ASK_CUSTOMER_EMAIL').replyMarkup, { remove_keyboard: true });
 });
