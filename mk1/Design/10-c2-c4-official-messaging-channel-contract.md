@@ -3,9 +3,27 @@
 Date: 2026-09-04
 Status: DESIGN FROZEN ENOUGH FOR BUILD
 
+## Architecture invariant
+
+**Engines comes first. CTA is independent and replaceable.**
+
+Telegram and WhatsApp are not new Engines and are not new business architectures. They are only additional client transports into the same canonical CTA boundary already exercised through CLI, HTTP/Postman and WebChat.
+
+Normative reference: [`11-engine-first-cta-independence.md`](11-engine-first-cta-independence.md).
+
+```text
+CLI ───────────┐
+HTTP/API ──────┤
+WebChat ───────┤
+Telegram ──────┤── CTA adapters ── canonical CTA/channel contract ── ENGINES
+WhatsApp ──────┘
+```
+
+The transport may change. Engine business behavior must not.
+
 ## Scope
 
-This contract defines the provider boundaries for:
+This contract defines only provider/transport boundaries for:
 
 - C2 Telegram;
 - C4 WhatsApp.
@@ -31,42 +49,61 @@ CanonicalChannelEnvelope {
 }
 ```
 
-Telegram and WhatsApp must normalize into this contract before business execution.
+Telegram and WhatsApp normalize provider material into this contract before Engines business execution.
 
 ## Provider architecture
 
 ```text
-                         ┌──────────────────────┐
-Telegram Bot API ───────▶│ TelegramTransport    │
-                         └──────────┬───────────┘
-                                    ▼
-                             TelegramAdapter
-                                    │
-                                    │
-                                    ▼
-                           CanonicalChannelEnvelope
-                                    ▲
-                                    │
-                              WhatsAppAdapter
-                                    ▲
-                                    │
-                         ┌──────────┴───────────┐
-                         │ WhatsAppTransportPort │
-                         └───────┬────────┬─────┘
-                                 │        │
-                                 ▼        ▼
-                          Meta Cloud    Kapso
-                          API default   optional
-
-                                    ↓
-                         ChannelExecutionCore
-                                    ↓
-                    PostgreSQL durable channel ledger
-                                    ↓
-                                 Temporal
-                                    ↓
-                         same Workflow Library
+Telegram Bot API
+      ↓
+TelegramTransport
+      ↓
+TelegramAdapter
+      ↓
+CanonicalChannelEnvelope
+      │
+      │
+      ├──────────────────────────────┐
+      │                              │
+      ▼                              │
+ChannelExecutionCore                 │
+      ↓                              │
+PostgreSQL durable channel ledger    │
+      ↓                              │
+Temporal                             │
+      ↓                              │
+Engine Workflow Library              │
+                                     │
+WhatsApp official provider           │
+      ↓                              │
+WhatsAppTransportPort                │
+      ├── MetaCloudApiTransport      │
+      └── KapsoTransport (optional)  │
+      ↓                              │
+WhatsAppAdapter                      │
+      ↓                              │
+CanonicalChannelEnvelope ────────────┘
 ```
+
+Meta direct vs Kapso is a transport/infrastructure decision only. Neither choice is allowed to own Workflow or domain truth.
+
+## Transport-only responsibilities
+
+Telegram/WhatsApp code may own only:
+
+```text
+provider connection mechanics
+provider authentication / webhook verification
+provider event identity
+conversation identity
+sender identity
+provider retry / polling / acknowledgement mechanics
+payload normalization
+canonical input/action mapping
+outbound rendering
+```
+
+It may not own Customer, Services, Scheduler, Appointment or Temporal business policy.
 
 ## Trusted business scope
 
@@ -75,26 +112,24 @@ Telegram Bot API ───────▶│ TelegramTransport    │
 Examples:
 
 ```text
-Telegram bot token / deployment
+Telegram bot deployment
 → configured businessSlug
 
 WhatsApp phone_number_id / WABA deployment
 → configured businessSlug
 ```
 
-Inbound text, callback payloads, button replies or arbitrary provider metadata are not allowed to choose a different business scope.
+Inbound text, callback payloads, button replies or arbitrary provider metadata are not allowed to choose another business scope.
 
 ## Telegram normalization
 
 ### Conversation identity
 
-Initial C2 private-chat identity:
-
 ```text
 externalConversationId = telegram:<chat.id>
 ```
 
-Thread/topic support may extend the identity later without changing business logic.
+Thread/topic support may extend this later without changing the Engine.
 
 ### Inbound event identity
 
@@ -102,15 +137,13 @@ Thread/topic support may extend the identity later without changing business log
 externalMessageId = telegram:update:<update_id>
 ```
 
-This makes the Telegram transport replay boundary align with the durable C1B event ledger.
-
 ### Sender identity
 
 ```text
 externalSenderId = telegram:user:<from.id>
 ```
 
-### Supported inbound material for first build
+### First supported inbound material
 
 ```text
 message.text
@@ -121,9 +154,9 @@ Media is deferred.
 
 ### Long-polling state
 
-The Telegram runner must only advance its acknowledged polling offset after the update has been safely handed into Engines processing semantics.
+The Telegram runner advances its acknowledged polling offset only after an update has been safely handed into Engines processing semantics.
 
-A restarted bot must be able to resume without producing duplicate business effects. Duplicate delivery remains harmless because the durable inbound-event ledger is authoritative.
+A restarted bot may redeliver transport material, but duplicate business effects remain prevented by the durable C1B inbound-event ledger.
 
 ## WhatsApp normalization
 
@@ -140,30 +173,24 @@ Candidate implementations:
 
 ```text
 MetaCloudApiTransport   preferred/default
-KapsoTransport          optional
+KapsoTransport          optional official transport implementation
 ```
 
-The adapter above this port must not care which official transport implementation is active.
+`WhatsAppAdapter` must not care which official transport implementation is active.
 
 ### Conversation identity
-
-Initial one-to-one business conversation identity:
 
 ```text
 externalConversationId = whatsapp:<business-phone-identity>:<sender-wa-id>
 ```
 
-The concrete identity encoding may use normalized provider IDs, but must remain deterministic and business-scoped.
-
 ### Inbound event identity
-
-For inbound user messages:
 
 ```text
 externalMessageId = whatsapp:message:<provider-message-id>
 ```
 
-Delivery/read/status notifications are transport events, not canonical Appointment actions. They belong to a separate status/evidence handling path and must not accidentally re-enter the business-action dispatcher.
+Delivery/read/status notifications are transport events, not canonical Appointment actions. They must not re-enter the business-action dispatcher.
 
 ### Sender identity
 
@@ -185,33 +212,23 @@ Media remains later.
 
 WhatsApp inbound webhook handling must fail closed before canonical execution if authenticity/verification requirements are not satisfied.
 
-No unverified webhook payload is allowed to reach ChannelExecutionCore.
+No unverified webhook payload may reach ChannelExecutionCore.
 
-Provider-specific verification material must not leak into business logic.
+Provider verification material terminates at the transport boundary.
 
 ## Outbound rendering boundary
 
-Business/workflow state produces provider-independent render intent.
-
-Adapters render it into provider capabilities.
-
-Example:
+The Engine/Workflow produces provider-independent render intent. The transport renderer converts it to provider controls.
 
 ```text
-Workflow wants:
-SELECT_SERVICE choices
+Engine state: SELECT_SERVICE choices
 
-TelegramRenderer
-→ inline keyboard buttons
-
-WhatsAppRenderer
-→ supported interactive reply/list representation
-
-WebChatRenderer
-→ HTML controls
+WebChatRenderer   → HTML controls
+TelegramRenderer  → inline keyboard
+WhatsAppRenderer  → supported interactive reply/list
 ```
 
-The visible labels may differ by provider constraints, but selected canonical IDs/actions must be equivalent.
+Visible representation may differ, but canonical selected IDs/actions must remain equivalent.
 
 ## Canonical operation mapping
 
@@ -230,7 +247,7 @@ FINALIZE_APPOINTMENT
 
 No free-text semantic classifier is added.
 
-Transport text may only be accepted where the current deterministic Workflow step explicitly expects text material.
+Transport text is accepted only where the deterministic current Workflow step expects text material.
 
 ## Idempotency invariants
 
@@ -243,7 +260,7 @@ same externalMessageId + same normalized material
 same externalMessageId + different normalized material
 → CHANNEL_EVENT_IDENTITY_CONFLICT
 
-process restart
+transport process restart
 → recover conversation binding
 → same Temporal Workflow
 ```
@@ -262,13 +279,13 @@ webhook verify token
 Kapso API key
 ```
 
-Build fixtures use deterministic synthetic secrets/requests. Real transport proof uses environment variables or repository/environment secrets.
+Build fixtures use deterministic synthetic requests. Real transport proof uses environment variables or repository/environment secrets.
 
 ## Provider policy boundary
 
-WhatsApp transport policy constraints such as template eligibility, provider messaging restrictions and onboarding state belong to the WhatsApp transport/integration layer.
+WhatsApp transport restrictions such as template eligibility, provider messaging restrictions and onboarding state belong to the transport/integration edge.
 
-They do not change Services, Scheduler or Appointment domain truth.
+They do not change Customer, Services, Scheduler, Appointment or Temporal truth.
 
 ## Explicitly forbidden
 
@@ -277,32 +294,34 @@ They do not change Services, Scheduler or Appointment domain truth.
 - business writes from Telegram/WhatsApp adapters;
 - direct Customer/Services/Scheduler/Appointment repository access from provider code;
 - provider-specific Temporal Appointment Workflows;
-- Kapso Workflows/Agents/MCP as canonical orchestration in this phase;
+- Kapso Workflows/Agents/MCP as canonical orchestration;
 - Telegram-specific business phases;
-- WhatsApp-specific business phases.
+- WhatsApp-specific business phases;
+- provider SDK types leaking into domain contracts;
+- rebuilding Engine logic inside a channel branch.
 
 ## Certification boundary
 
 ### C2 Telegram automated gate may certify
 
 - Telegram fixture normalization;
-- long-poll update identity/offset semantics;
+- long-poll identity/offset semantics;
 - exact duplicate replay;
 - identity conflict rejection;
 - bot-process restart recovery against durable channel binding;
-- complete Appointment through ChannelExecutionCore using a deterministic Bot API harness;
+- complete Appointment through the existing Engine using a deterministic Bot API harness;
 - WebChat regression remains green.
 
 It does **not** certify a real Telegram bot until a real bot token/account is tested.
 
 ### C4 WhatsApp automated gate may certify
 
-- Meta-format webhook verification/normalization fixtures;
+- official provider-format webhook verification/normalization fixtures;
 - message/button/list reply mapping;
 - exact duplicate replay;
 - identity conflict rejection;
-- provider process restart recovery;
-- complete Appointment through ChannelExecutionCore using a deterministic WhatsApp transport harness;
+- transport-process restart recovery;
+- complete Appointment through the existing Engine using a deterministic WhatsApp harness;
 - WebChat/Telegram regressions remain green where applicable.
 
 It does **not** certify a real WhatsApp number or production Meta/Kapso account until physically tested.
