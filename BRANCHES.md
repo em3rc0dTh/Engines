@@ -58,7 +58,9 @@ main
          build/mk1-c2-c4-local-interactive-e2e
               ↓
          build/mk1-b2-customer-soft-duplicate-resolution
-              CURRENT — B2 CERTIFIED + C2/C4 HUMAN VERIFIED
+              ↓
+         build/mk1-c2-telegram-bot-api-official
+              CURRENT — DETERMINISTIC PASS / PHYSICAL TELEGRAM TEST NOW
 ```
 
 ## Canonical / meaningful branches
@@ -81,8 +83,9 @@ main
 | Durable Customer channel core | `build/mk1-customer-registration-channel-core` | STACKED PR #15; keep until stack consolidation |
 | Telegram RegisterNewCustomer transport | `build/mk1-c2-telegram-register-customer` | STACKED PR #16; keep until stack consolidation |
 | WhatsApp RegisterNewCustomer transport | `build/mk1-c4-whatsapp-register-customer` | STACKED PR #17; keep until stack consolidation |
-| Local real-Temporal Telegram/WhatsApp E2E | `build/mk1-c2-c4-local-interactive-e2e` | STACKED PR #18; automated certified milestone |
-| Customer soft-duplicate resolution + local human closure | `build/mk1-b2-customer-soft-duplicate-resolution` | ACTIVE / DRAFT PR #19 / CERTIFIED |
+| Local real-Temporal Telegram/WhatsApp E2E | `build/mk1-c2-c4-local-interactive-e2e` | STACKED PR #18; automated + human verified milestone |
+| Customer soft-duplicate resolution | `build/mk1-b2-customer-soft-duplicate-resolution` | STACKED DRAFT PR #19 / CERTIFIED |
+| Official Telegram Bot API physical gate | `build/mk1-c2-telegram-bot-api-official` | ACTIVE / DRAFT PR #20 / deterministic PASS / physical pending |
 
 ## Current messaging stack
 
@@ -98,41 +101,51 @@ PR #17 WhatsApp transport
 PR #18 Local interactive real-Temporal E2E
         ↓
 PR #19 B2 Customer soft-duplicate resolution
+        ↓
+PR #20 Telegram official Bot API physical transport
 ```
 
 Do not merge or delete an intermediate branch casually while the PRs are stacked. Consolidation/housekeeping happens only after the stack's intended merge strategy is explicitly chosen.
 
-## Current C2/C4 + B2 proof state
+## Current channel proof state
 
 ```text
 adapter harness human test                    ✅ 10 / 10 PASS
 local real-Temporal E2E automated              ✅ PASS
 local real-Temporal E2E human                  ✅ HUMAN VERIFIED
 B2 Customer soft-duplicate resolution          ✅ CERTIFIED
-B2 duplicate-decision UI                       ⏳ optional human observation
-real Telegram Bot API                          ⚪ NOT CERTIFIED
+C2P official Telegram runner                   ✅ BUILT / DETERMINISTIC PASS
+C2P real Telegram Bot API                      🧪 PHYSICAL TEST NOW
 real Meta Cloud API / Kapso                    ⚪ NOT CERTIFIED
 ```
 
-Automated local E2E authority:
+C2P deterministic authority:
 
 ```text
-Source     bfccd4a795400d2311201a880453b61b08d0b56a
-Run        33896424897
-Job        101100019937
-Artifact   9945929946
-SHA256     92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
+Source     a0a9b241aab5ffb4fc029179052cd4a80d764620
+Run        33906116526
+Job        101131331563
+Artifact   9949550064
+SHA256     6e8606c4ab6082691e8f5699b2d98635d2ad6b94f6dfddf52ba09158a1a1c9f2
 ```
 
-B2 authority:
+## Telegram provider rule
+
+C2P uses Telegram's official HTTP Bot API with `getUpdates` long polling. The provider is transport only.
 
 ```text
-Source     36afff68af3237bd6431fd643d7d969e5452a296
-Run        33899907141
-Job        101111281727
-Artifact   9947248334
-SHA256     2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a
+Telegram Bot API
+  ↓
+TelegramBotApiClient / long-poll runner
+  ↓
+TelegramAdapter
+  ↓
+canonical channel core
+  ↓
+Temporal / Customer Engine
 ```
+
+Only the BotFather token is required for Telegram provider authentication. No MTProto `api_id` / `api_hash`, public webhook, domain or paid hosting is required for this local physical gate.
 
 ## WhatsApp provider rule
 
@@ -160,7 +173,8 @@ reverse-engineered private clients
 ```text
 C2/C4 local human interactive E2E       ✅ CLOSED
 B2 Customer duplicate resolution        ✅ CERTIFIED
-real Telegram Bot API                    ← next channel gate
+C2P Telegram official transport         ✅ DETERMINISTIC PASS
+C2P real Telegram Bot API               ← PHYSICAL TEST NOW
 real WhatsApp provider                   ← later
 Services S8                              ← pending
 Scheduler runtime                        ← later
