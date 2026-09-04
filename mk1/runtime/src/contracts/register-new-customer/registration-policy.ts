@@ -8,6 +8,8 @@ import type {
 export type RequiredRegistrationField =
   | 'customer.type'
   | 'customer.name'
+  | 'customer.contact.phone'
+  | 'customer.contact.email'
   | 'customer.contact.phoneOrEmail'
   | 'customer.document'
   | 'customer.document.type'
@@ -47,6 +49,8 @@ export type RegistrationCompleteness = Readonly<{
 const SUPPORTED_REQUIRED_FIELDS: ReadonlySet<RequiredRegistrationField> = new Set([
   'customer.type',
   'customer.name',
+  'customer.contact.phone',
+  'customer.contact.email',
   'customer.contact.phoneOrEmail',
   'customer.document',
   'customer.document.type',
@@ -82,6 +86,12 @@ function hasPhoneOrEmail(customer: CustomerDraft): boolean {
   return hasEmail || hasPhone;
 }
 
+function hasPhone(customer: CustomerDraft): boolean {
+  return (customer.contact?.phones ?? []).some((phone) =>
+    nonEmpty(phone.normalized ?? phone.number),
+  );
+}
+
 function requirementSatisfied(
   requirement: RequiredRegistrationField,
   draft: RegisterNewCustomerDraft,
@@ -93,6 +103,10 @@ function requirementSatisfied(
       return nonEmpty(customer.type);
     case 'customer.name':
       return nonEmpty(customer.name);
+    case 'customer.contact.phone':
+      return hasPhone(customer);
+    case 'customer.contact.email':
+      return nonEmpty(customer.contact?.email);
     case 'customer.contact.phoneOrEmail':
       return hasPhoneOrEmail(customer);
     case 'customer.document':
@@ -194,4 +208,16 @@ export const GOLDEN_REGISTRATION_POLICY_V1 = {
   documentRequired: false,
   attachmentsRequired: false,
   normalizationProfile: 'mk0.customer-normalization.v1',
+} as const satisfies RegistrationPolicy;
+
+/** MK1 policy revision. V1 remains immutable for existing callers. */
+export const GOLDEN_REGISTRATION_POLICY_V2 = {
+  ...GOLDEN_REGISTRATION_POLICY_V1,
+  policyId: 'golden-registration-v2',
+  policyVersion: '2',
+  required: [
+    'customer.name',
+    'customer.contact.phone',
+    'customer.contact.email',
+  ],
 } as const satisfies RegistrationPolicy;
