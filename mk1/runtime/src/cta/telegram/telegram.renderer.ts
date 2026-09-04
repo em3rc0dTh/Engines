@@ -15,9 +15,15 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
       text: '¿Cuál es tu correo?',
       replyMarkup: { remove_keyboard: true },
     };
-    case 'ASK_CUSTOMER_PHONE': return { text: 'Necesito tu teléfono.', replyMarkup: {
-      keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]], one_time_keyboard: true, resize_keyboard: true,
-    } };
+    case 'ASK_CUSTOMER_PHONE': return {
+      text: 'Necesito tu teléfono.\n\nPulsa «Compartir teléfono» en el teclado de Telegram o escribe tu número.',
+      replyMarkup: {
+        keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]],
+        is_persistent: true,
+        resize_keyboard: true,
+        input_field_placeholder: 'Comparte tu teléfono o escríbelo',
+      },
+    };
     case 'RESOLVE_CUSTOMER_DUPLICATE': return {
       text: 'Ya encontramos un cliente con datos coincidentes. ¿Qué deseas hacer?',
       replyMarkup: {
