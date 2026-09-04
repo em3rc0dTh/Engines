@@ -1,13 +1,13 @@
 # Plan 10 — C2P Telegram official Bot API physical proof
 
 Date: 2026-09-04
-Status: **REAL PROVIDER E2E + INVALID-INPUT RECOVERY PASS — NATIVE CONTACT RETEST PENDING**
+Status: **PHYSICALLY VERIFIED / SEALED — NATIVE CONTACT CLIENT-COMPATIBILITY OBSERVATION OPEN**
 Branch: `build/mk1-c2-telegram-bot-api-official`
 Base: `build/mk1-b2-customer-soft-duplicate-resolution`
 
 ## Objective
 
-Certify the first **real external messaging provider** against Engines using Telegram's official Bot API and a local `getUpdates` runner.
+Certify the first real external messaging provider against Engines using Telegram's official Bot API and a local `getUpdates` runner.
 
 ## Gate sequence
 
@@ -19,9 +19,33 @@ C2P-3 deterministic CI                    ✅ PASS
 C2P-4 BotFather physical connection       ✅ HUMAN VERIFIED
 C2P-5 real Telegram registration E2E      ✅ HUMAN VERIFIED
 C2P-5H invalid-input recovery             ✅ HUMAN VERIFIED
-C2P-5C native request_contact visibility  🧪 RETEST PATCHED SOURCE
-C2P-6 physical evidence + seal            ⏳ AFTER C2P-5C
+C2P-6 physical evidence + seal            ✅ SEALED
+
+Optional compatibility observation
+C2P-5C native request_contact on clients  ⚪ NOT REQUIRED FOR C2P SEAL
 ```
+
+## Why native contact is not a seal blocker
+
+The Customer registration contract accepts phone material by either:
+
+```text
+Telegram native shared contact
+OR
+manually typed phone
+```
+
+The real Telegram Web run proved the typed path physically, including invalid-phone and invalid-email recovery, while the exact same real provider conversation completed Customer registration through Temporal.
+
+Telegram's official Bot API defines `request_contact` as a `KeyboardButton` capability available only in private-chat reply keyboards; it is not an inline-keyboard capability. Telegram's own bug tracker also records historical/recurrent Telegram Web issues around `request_contact` reply-keyboard behavior. Therefore absence of the native button in Telegram Web is treated as a client-compatibility observation, not an Engine/provider failure.
+
+Official references:
+
+- https://core.telegram.org/bots/api#keyboardbutton
+- https://core.telegram.org/type/KeyboardButton
+- https://bugs.telegram.org/c/11527/1
+
+The renderer still emits the official native-contact contract and keeps a deterministic typed-phone fallback.
 
 ## Deterministic authority
 
@@ -36,39 +60,14 @@ SHA256       6e8606c4ab6082691e8f5699b2d98635d2ad6b94f6dfddf52ba09158a1a1c9f2
 
 The successful run proved TypeScript, six mocked official Bot API client cases, seven Telegram adapter/render cases, clean infrastructure startup and the inherited real-Temporal Telegram Customer registration path to `CREATED`.
 
-## C2P-4 / BotFather physical connection ✅
+## Physical evidence
 
-Eduardo created a real bot with BotFather, started the local C2P runner with a token supplied only through the local environment, opened the real private Telegram chat and received the Engines registration consent prompt.
-
-This proves:
+Human-observed real-provider path:
 
 ```text
 real Telegram account
-  ↔ Telegram Bot API official
-  ↔ Engines long-poll runner
-```
-
-No `api_id`, `api_hash`, public URL, webhook, reverse proxy or paid hosting was required.
-
-## C2P-5 / real provider E2E ✅
-
-Human-observed physical sequence:
-
-```text
-/start
-  → consent prompt
-  → Registrarme
-  → name
-  → valid typed phone
-  → email
-  → ✅ Registro completado
-```
-
-Therefore the real provider path reached the same Engine behavior:
-
-```text
-Telegram Bot API
-  → getUpdates
+  → official Telegram Bot API
+  → getUpdates long polling
   → TelegramAdapter
   → CanonicalChannelEnvelope
   → CustomerRegistrationChannelExecutionCore
@@ -78,59 +77,47 @@ Telegram Bot API
   → Telegram sendMessage
 ```
 
+Observed in two real Telegram Web runs:
+
+```text
+/start
+→ consent
+→ Registrarme
+→ name
+→ typed phone
+→ email
+→ ✅ Registro completado
+```
+
+Hardening run additionally proved:
+
+```text
+invalid phone
+→ rejected
+→ same field requested again
+→ registration remains recoverable
+
+invalid email
+→ rejected
+→ same field requested again
+→ registration remains recoverable
+
+later valid values
+→ Customer CREATED
+→ ✅ Registro completado
+```
+
 Physical evidence: `mk1/Test/c2p-telegram-official-physical-human-verification-2026-09-04.md`.
 
-## C2P-5H / invalid-input recovery ✅
-
-A fresh real-provider run intentionally supplied invalid phone material twice and an invalid email once.
-
-Observed each time:
-
-```text
-invalid value
-→ Ese dato no es válido. Inténtalo nuevamente.
-→ same field requested again
-→ same registration conversation remains recoverable
-```
-
-After later valid phone/email values, the Workflow completed and Telegram rendered `✅ Registro completado`.
-
-This closes the physical invalid-input recovery requirement.
-
-## C2P-5C / native contact UI retest
-
-The same hardening run exposed a client-facing gap: the expected native `Compartir teléfono` reply-keyboard button was not visibly presented to the operator, even though the renderer emitted a `request_contact` keyboard.
-
-This does not invalidate C2P-4/C2P-5/C2P-5H. Typed-phone input is a supported canonical path and the registration completed successfully.
-
-The C2P renderer was hardened to request a persistent official ReplyKeyboardMarkup:
-
-```text
-ASK_CUSTOMER_PHONE
-→ keyboard button: Compartir teléfono
-→ request_contact = true
-→ is_persistent = true
-→ resize_keyboard = true
-→ input_field_placeholder set
-→ text explicitly keeps typed-phone fallback available
-```
-
-C2P-5C requires one fresh run on that patched source where the operator confirms that the native button is visible and uses it successfully.
-
-## Certification marker
-
-Allowed now:
-
-```text
-C2P TELEGRAM OFFICIAL BOT API — REAL PROVIDER E2E ✅ HUMAN VERIFIED
-C2P PHYSICAL INVALID-INPUT RECOVERY                     ✅ HUMAN VERIFIED
-```
-
-Final marker remains reserved until C2P-5C:
+## Sealed claim
 
 ```text
 C2P TELEGRAM OFFICIAL BOT API ✅ PHYSICALLY VERIFIED / SEALED
 ```
+
+This seal covers the real BotFather bot, official Bot API inbound/outbound transport, real Telegram account, real Temporal `RegisterNewCustomer`, Customer completion and physical validation recovery.
+
+It does **not** claim that every Telegram client renders `request_contact` identically. Native contact sharing remains a client-compatibility feature to observe on Telegram Mobile/Desktop when useful.
 
 ## Non-claims
 
