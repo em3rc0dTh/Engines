@@ -23,15 +23,29 @@ export class WhatsAppAdapter implements ChannelAdapter<VerifiedWhatsAppInbound> 
     };
     if (event.kind === 'INTERACTIVE') {
       if (event.interactiveId === 'register_customer_no') return undefined;
-      if (event.interactiveId !== 'register_customer_yes') throw new Error('CHANNEL_OPERATION_NOT_SUPPORTED');
-      return {
-        ...base,
-        action: 'START_CUSTOMER_REGISTRATION',
-        payload: {
-          consentAccepted: true,
-          draft: { customer: { contact: { phones: [{ number: event.senderPhone, isWhatsapp: true, primary: true }] } } },
-        },
-      };
+      if (event.interactiveId === 'register_customer_yes') {
+        return {
+          ...base,
+          action: 'START_CUSTOMER_REGISTRATION',
+          payload: {
+            consentAccepted: true,
+            draft: { customer: { contact: { phones: [{ number: event.senderPhone, isWhatsapp: true, primary: true }] } } },
+          },
+        };
+      }
+      if (event.interactiveId === 'resolve_customer_duplicate_existing' || event.interactiveId === 'resolve_customer_duplicate_new') {
+        if (route.registrationRenderIntent !== 'RESOLVE_CUSTOMER_DUPLICATE') {
+          throw new Error('WHATSAPP_CONTEXT_REQUIRED');
+        }
+        return {
+          ...base,
+          action: 'RESOLVE_CUSTOMER_DUPLICATE',
+          payload: {
+            decision: event.interactiveId === 'resolve_customer_duplicate_existing' ? 'USE_EXISTING' : 'CREATE_NEW',
+          },
+        };
+      }
+      throw new Error('CHANNEL_OPERATION_NOT_SUPPORTED');
     }
     const text = event.text?.trim() ?? '';
     const intent = route.registrationRenderIntent;
