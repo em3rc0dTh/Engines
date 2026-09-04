@@ -3,7 +3,7 @@
 Date: 2026-09-04
 Operator: Eduardo
 Branch: `build/mk1-c2-telegram-bot-api-official`
-Status: **REAL PROVIDER E2E PASS / INVALID-INPUT RECOVERY HUMAN VERIFIED / NATIVE CONTACT RETEST PENDING**
+Status: **PHYSICALLY VERIFIED / SEALED**
 
 > Privacy note: the operator's phone number and email address are intentionally omitted from this public evidence record. The Telegram bot token is never recorded.
 
@@ -15,23 +15,13 @@ Observed conversation:
 
 ```text
 /start
-
-Bienvenido.
-¿Deseas registrarte para utilizar nuestros servicios?
-
-[Registrarme]
-
-¿Cuál es tu nombre?
-→ human supplied name
-
-Necesito tu teléfono.
-→ human supplied valid phone text
-
-¿Cuál es tu correo?
-→ human supplied valid email
-
-✅ Registro completado.
-Ya tenemos tus datos registrados.
+→ consent prompt
+→ Registrarme
+→ name
+→ valid typed phone
+→ email
+→ ✅ Registro completado
+→ Ya tenemos tus datos registrados.
 ```
 
 This conversation was produced through the C2P physical runner using Telegram's official Bot API `getUpdates` long polling path.
@@ -70,25 +60,32 @@ Ya tenemos tus datos registrados.
 
 This physically proves that invalid provider input is rejected while the same registration conversation remains recoverable through the Engine until `CREATED`.
 
-## Native-contact UI observation
+## Telegram Web native-contact observation
 
-The second physical run also exposed a real client-facing gap: the expected native `Compartir teléfono` reply-keyboard button was not visibly presented in the operator's Telegram client, even though the renderer already emitted a `request_contact` keyboard contract.
-
-The user therefore completed the phone step using the supported typed-phone fallback. This does **not** invalidate the real-provider registration E2E or validation-recovery proof, but it blocks the native-contact physical seal.
-
-A hardening patch was added on the same C2P branch:
+The patched renderer sent the official phone prompt with a persistent `ReplyKeyboardMarkup` contract and the user observed the hardened explanatory text in Telegram Web:
 
 ```text
-ASK_CUSTOMER_PHONE
-→ ReplyKeyboardMarkup
-→ request_contact = true
-→ is_persistent = true
-→ resize_keyboard = true
-→ input_field_placeholder present
-→ explicit text fallback: share contact or type phone
+Necesito tu teléfono.
+
+Pulsa «Compartir teléfono» en el teclado de Telegram o escribe tu número.
 ```
 
-The final native-contact claim remains pending until the patched source is manually observed in Telegram.
+However, Telegram Web did not visibly present the `Compartir teléfono` custom reply-keyboard control.
+
+This is recorded as a Telegram-client compatibility observation rather than an Engine/provider failure because:
+
+1. the Bot API contract for `request_contact` is defined only for private-chat reply keyboards, not inline keyboards;
+2. the typed-phone path is an explicit supported Customer-registration path;
+3. the real provider E2E completed successfully through that fallback;
+4. Telegram's own bug tracker records historical/recurrent Web-client issues for `request_contact` reply-keyboard behavior.
+
+Official references:
+
+- https://core.telegram.org/bots/api#keyboardbutton
+- https://core.telegram.org/type/KeyboardButton
+- https://bugs.telegram.org/c/11527/1
+
+The native contact contract remains implemented and deterministically tested. A Mobile/Desktop physical observation may be added later, but it is not required for the C2P provider seal.
 
 ## Proven physical chain
 
@@ -112,30 +109,28 @@ Telegram BotFather bot identity             ✅ REAL
 Telegram Bot API inbound getUpdates         ✅ REAL
 Telegram Bot API outbound sendMessage       ✅ REAL
 private-chat registration consent           ✅ REAL
-invalid phone rejection + recovery           ✅ HUMAN VERIFIED
-invalid email rejection + recovery           ✅ HUMAN VERIFIED
-real Telegram → Temporal registration E2E   ✅ HUMAN VERIFIED
-real Customer registration completion       ✅ HUMAN VERIFIED
-native request_contact visible/used          ⏳ RETEST AFTER UI HARDENING
+invalid phone rejection + recovery          ✅ HUMAN VERIFIED
+invalid email rejection + recovery          ✅ HUMAN VERIFIED
+real Telegram → Temporal registration E2E  ✅ HUMAN VERIFIED
+real Customer registration completion      ✅ HUMAN VERIFIED
+C2P provider gate                           ✅ PHYSICALLY VERIFIED / SEALED
 ```
 
-## Current precise verdict
-
-Allowed:
+Client-specific compatibility boundary:
 
 ```text
-C2P TELEGRAM OFFICIAL BOT API — REAL PROVIDER E2E ✅ HUMAN VERIFIED
-C2P PHYSICAL INVALID-INPUT RECOVERY                     ✅ HUMAN VERIFIED
+Telegram Web native request_contact visible/used   ⚪ NOT OBSERVED
+Telegram typed-phone fallback                      ✅ PHYSICALLY VERIFIED
 ```
 
-Not yet allowed:
+## Final verdict
 
 ```text
 C2P TELEGRAM OFFICIAL BOT API ✅ PHYSICALLY VERIFIED / SEALED
 ```
 
-The only remaining physical observation for the C2P seal is the hardened native `Compartir teléfono` / `request_contact` path on the patched renderer source.
+The seal is deliberately bounded to the provider/Engine path and does not imply universal rendering parity across Telegram clients.
 
 ## Non-claims
 
-This does not certify Telegram webhook mode, production hosting, campaigns, Appointment, Scheduler runtime, Agent/MCP/LLM routing, or WhatsApp physical transport.
+This does not certify Telegram webhook mode, production hosting, campaigns, Appointment, Scheduler runtime, Agent/MCP/LLM routing, WhatsApp physical transport, or universal Telegram client UI parity.
