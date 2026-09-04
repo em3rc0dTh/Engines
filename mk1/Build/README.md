@@ -18,19 +18,15 @@ G1 Services
   S8                                  ⏭ PENDING
   G1 overall                          ❌ NOT YET FULLY CERTIFIED
 
-Customer / CTA channel proof
+Customer / CTA channels
   C0A Workflow-view projection        ✅ CERTIFIED
   C1A WebChat                         ✅ CERTIFIED + HUMAN VERIFIED
   C1B durable WebChat                 ✅ CERTIFIED + HUMAN RESTART VERIFIED
   B2 Customer soft-duplicate resolve  ✅ CERTIFIED
-  Telegram adapter                    ✅ LOCAL HARNESS PROVEN
-  WhatsApp adapter                    ✅ LOCAL HARNESS PROVEN
-  C2/C4 local real-Temporal E2E       ✅ AUTOMATED PASS
-  C2 Telegram local human E2E         ✅ HUMAN VERIFIED
-  C4 WhatsApp local human E2E         ✅ HUMAN VERIFIED
-  C2/C4 combined human gate           ✅ HUMAN VERIFIED
-  B2 duplicate-decision UI            ⏳ HUMAN OBSERVATION OPTIONAL
-  real provider proof                 ⚪ NOT CERTIFIED
+  C2/C4 local real-Temporal E2E       ✅ AUTOMATED + HUMAN VERIFIED
+  C2P Telegram official Bot API       ✅ PHYSICALLY VERIFIED / SEALED
+  C4P Meta WhatsApp Cloud API         ✅ DETERMINISTIC PASS
+  C4P real Meta provider              🧪 READY FOR PHYSICAL TEST
 ```
 
 ## Evidence ledger
@@ -51,103 +47,96 @@ Customer / CTA channel proof
 | C1B | `2008fce4f863fdabf8e8f323eee1d7cda05cb454` | `33647842017` | `100307008849` | `9853555059` | `efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf` | [`c1b-durable-channel-certification-2026-09-02.md`](evidence/c1b-durable-channel-certification-2026-09-02.md) |
 | C2/C4 local interactive E2E | `bfccd4a795400d2311201a880453b61b08d0b56a` | `33896424897` | `101100019937` | `9945929946` | `92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e` | [`c2-c4-local-interactive-e2e-certification-2026-09-04.md`](evidence/c2-c4-local-interactive-e2e-certification-2026-09-04.md) |
 | B2 Customer soft-duplicate resolution | `36afff68af3237bd6431fd643d7d969e5452a296` | `33899907141` | `101111281727` | `9947248334` | `2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a` | [`b2-customer-soft-duplicate-resolution-certification-2026-09-04.md`](evidence/b2-customer-soft-duplicate-resolution-certification-2026-09-04.md) |
+| C2P Telegram physical | `28dd5c9f2dd2352d3e11b83cc6602cea1b568760` | `33927626629` | `101199465863` | `9957384230` | `46bbd55f0b2c061ec9b7e61d55323dca0f5488d410120a3ac5b4510b90bdd79c` | [`c2p-telegram-official-bot-api-physical-seal-2026-09-04.md`](evidence/c2p-telegram-official-bot-api-physical-seal-2026-09-04.md) |
+| C4P Meta Cloud API deterministic | `72eb616153a8c4494f240ea825299e18d4aef156` | `33929572965` | `101205251200` | `9958063555` | `1bd75eaa752338cc9859bc0ee83190bf87afa00e994c562510209edf491b3ae2` | [`c4p-meta-whatsapp-cloud-api-deterministic-2026-09-04.md`](evidence/c4p-meta-whatsapp-cloud-api-deterministic-2026-09-04.md) |
 
-## B2 — Customer soft-duplicate resolution
+## Messaging consolidation
 
-The human C2/C4 test exposed a real Customer-domain state rather than a transport failure:
-
-```text
-WAITING_FOR_DUPLICATE_DECISION / RESOLVE_DUPLICATE
-```
-
-B2 adds one deterministic shared domain operation:
+The temporary PR stack #14–#20 has been merged, in order, into the stable MK1 messaging integration anchor:
 
 ```text
-RESOLVE_CUSTOMER_DUPLICATE
-  → USE_EXISTING
-  → CREATE_NEW
+build/mk1-customer-channels-integrated
 ```
 
-The provider does not decide duplicate truth. The core reads the live candidate set from Temporal; `USE_EXISTING` may resolve only to a current candidate and the current messaging slice fails closed when more than one candidate exists.
+Consolidation receipt:
 
-The successful full runtime probe emitted:
+[`messaging-stack-consolidation-2026-09-04.md`](evidence/messaging-stack-consolidation-2026-09-04.md)
+
+The merge strategy used merge commits so original runtime/certification source SHAs remain reachable. `main`, `developer`, `release/mk0-complete` and `mk0/runtime` were not moved.
+
+## C2P — Telegram official provider
+
+C2P is physically sealed. Real BotFather/Telegram traffic crossed the official Bot API into the same Customer channel core and real Temporal `RegisterNewCustomer`, then returned completion through Telegram. Human hardening also proved invalid phone/email recovery.
+
+Telegram Web's native `request_contact` rendering remains a client-compatibility observation only and does not reopen the provider seal.
+
+## C4P — Meta WhatsApp Cloud API
+
+C4P adds the direct official Meta provider below the existing `WhatsAppTransportPort`:
 
 ```text
-CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS
-CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS
-CUSTOMER_B2_USE_EXISTING_PASS
-CUSTOMER_B2_CREATE_NEW_PASS
-CUSTOMER_B2_SOFT_DUPLICATE_RESOLUTION_PASS
+Meta Cloud API
+→ official webhook challenge + POST HMAC verification
+→ Meta payload normalization
+→ WhatsAppAdapter
+→ CustomerRegistrationChannelExecutionCore
+→ PostgreSQL
+→ Temporal RegisterNewCustomer
+→ Graph API outbound message
 ```
 
-The clean cross-channel run also proved Telegram `CREATED` → WhatsApp same-email `SOFT_MATCH` → explicit `USE_EXISTING` → `ALREADY_EXISTS`, with the exact same Customer ID and no redundant WhatsApp phone prompt.
-
-## Human evidence
-
-The user's manual local test is recorded at [`../Test/c2-c4-local-interactive-human-verification-2026-09-04.md`](../Test/c2-c4-local-interactive-human-verification-2026-09-04.md).
-
-Current human truth:
+Deterministic CI proves:
 
 ```text
-Telegram normal local registration                ✅ PASS
-Telegram invalid phone → same Workflow recovery   ✅ PASS
-WhatsApp sender phone prefilled                    ✅ PASS
-WhatsApp phone not requested again                 ✅ PASS
-WhatsApp real Temporal registration → CREATED      ✅ PASS
-C2/C4 combined local interactive gate              ✅ HUMAN VERIFIED
+Meta Cloud API contract tests             7 / 7 PASS
+WhatsApp adapter regression               7 / 7 PASS
+invalid webhook signature                 rejected
+status-only webhook                       no CTA event
+Graph API text/buttons                    contract PASS
+real-Temporal local WhatsApp regression   Customer CREATED
+verified sender phone                     prefilled=true
+webhook runner health/challenge           PASS
+Agent                                     false
+MCP                                       false
 ```
 
-The final WhatsApp human run used unique Customer material, so the B2 duplicate-decision UI was not separately observed by the operator. B2 remains runtime-certified independently; that optional UI observation is not required to keep C2/C4 human closure valid.
+This is **not** yet physical Meta certification. The next proof requires a real Meta app/WABA/test-or-business phone context, public HTTPS callback and real WhatsApp conversation.
 
-## Failure provenance
+Physical runbook:
 
-Failures are retained rather than erased.
+[`../Test/c4p-meta-whatsapp-cloud-api-physical-runbook-2026-09-04.md`](../Test/c4p-meta-whatsapp-cloud-api-physical-runbook-2026-09-04.md)
 
-### C2/C4 interactive first attempt
+## Failure provenance retained
 
-```text
-Run       33896062496
-Job       101098866437
-Result    FAILURE
-Artifact  9945799079
-SHA256    208db06ce14ef9f9cada55db1b485117350fe2a3e2a2a61d63ac9038ab2fdc2e
-Stage     terminal harness before first canonical event
-Cause     piped stdin closed readline under non-TTY Compose execution
-```
-
-The runtime fix separated scripted CI mode from human readline mode. No Engine business rule was weakened.
-
-### B2 full-probe identity failure
-
-```text
-Source    38d32ac415fb3853f2e091d21ad49683f1761705
-Run       33899701530
-Job       101110615612
-Result    FAILURE
-Stage     full B2 domain golden probe
-Cause     probe reused one synthetic externalMessageId across multiple conversations
-```
-
-The durable channel ledger correctly detected the conflict. The probe identity was fixed; no domain invariant changed. Full B2 authority is source `36afff68...`, run `33899907141`.
-
-Historical S3/S4/S6/C1A/C1B failure/supersession provenance remains in their individual receipts.
+Historical failures remain in their individual receipts rather than being rewritten away, including the initial C2/C4 non-TTY readline failure and the B2 probe identity-conflict failure. Their fixes did not weaken Engine invariants.
 
 ## Current evidence boundary
 
 We may claim:
 
 ```text
-C2/C4 local interactive deterministic E2E ✅ AUTOMATED PASS
-C2/C4 local interactive deterministic E2E ✅ HUMAN VERIFIED
-B2 CUSTOMER SOFT-DUPLICATE RESOLUTION      ✅ CERTIFIED
+C2/C4 LOCAL INTERACTIVE E2E              ✅ AUTOMATED + HUMAN VERIFIED
+B2 CUSTOMER SOFT-DUPLICATE RESOLUTION    ✅ CERTIFIED
+C2P TELEGRAM OFFICIAL BOT API             ✅ PHYSICALLY VERIFIED / SEALED
+C4P META WHATSAPP CLOUD API TRANSPORT     ✅ BUILT / DETERMINISTIC PASS
 ```
 
-No current receipt certifies real Telegram Bot API, Meta Cloud API, Kapso, public webhooks, outbound campaigns, Scheduler runtime, Agent/MCP or production readiness.
+We may **not** yet claim:
+
+```text
+C4P META WHATSAPP CLOUD API               ❌ PHYSICALLY CERTIFIED
+production WhatsApp webhook hosting       ❌
+production token lifecycle                ❌
+WhatsApp campaigns/templates product      ❌
+Scheduler runtime                         ❌
+Agent / MCP                               ❌
+production readiness                      ❌
+```
 
 ## Current next work
 
 ```text
-Channel track   real Telegram Bot API proof
+Channel track   C4P Meta WhatsApp Cloud API physical proof ← NOW
 Services track  S8 final G1 closure pending
 Scheduler       runtime later
 Agent / MCP     last

@@ -173,6 +173,39 @@ services:
     command: ["npm", "run", "telegram:bot"]
     restart: "no"
 
+  whatsapp-cloud-api:
+    profiles: ["whatsapp"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-}
+      WHATSAPP_WEBHOOK_HOST: 0.0.0.0
+      WHATSAPP_WEBHOOK_PORT: "8790"
+      ENGINES_WHATSAPP_BUSINESS_SLUG: ${ENGINES_WHATSAPP_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8790:8790"
+    command: ["npm", "run", "whatsapp:cloud-api"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8790/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+    restart: "no"
+
 volumes:
   engines_mk0_postgres:
   engines_mk0_mongo:

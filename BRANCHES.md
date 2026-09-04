@@ -2,7 +2,7 @@
 
 ## Status
 
-**MESSAGING STACK CONSOLIDATED — CURRENT NARRATIVE SET**
+**MESSAGING STACK CONSOLIDATED — C4P WHATSAPP PHYSICAL GATE ACTIVE**
 
 Snapshot date: 2026-09-04.
 
@@ -49,6 +49,11 @@ main
           ├── B2 Customer soft-duplicate resolution
           └── C2P Telegram official Bot API physical seal
                 ✅ CONSOLIDATED INTEGRATION ANCHOR
+                │
+                └── build/mk1-c4p-whatsapp-cloud-api-official
+                      Meta Cloud API transport + webhook runner
+                      ✅ DETERMINISTIC PASS
+                      🧪 REAL PROVIDER TEST NEXT
 ```
 
 ## Consolidation result
@@ -90,8 +95,9 @@ Terminal consolidation merge for PR #20:
 | Services/Scheduler architecture | `design/mk1-services-scheduler-integration` | KEEP |
 | Messaging architecture | `design/mk1-telegram-whatsapp-official-channels` | KEEP AS DESIGN RECORD |
 | Customer messaging integrated anchor | `build/mk1-customer-channels-integrated` | KEEP / CURRENT BASE |
+| Meta WhatsApp Cloud API physical gate | `build/mk1-c4p-whatsapp-cloud-api-official` | ACTIVE / DRAFT PR #21 |
 
-Former stack branches #14–#20 are now **cleanup candidates only**, because their PRs are merged into the integrated anchor. They are not deleted automatically.
+Former stack branches #14–#20 are cleanup candidates only because their PRs are merged into the integration anchor. They are not deleted automatically.
 
 ## Current channel truth
 
@@ -102,7 +108,18 @@ C2/C4 local real-Temporal messaging E2E      ✅ AUTOMATED + HUMAN VERIFIED
 B2 Customer soft-duplicate resolution        ✅ CERTIFIED
 C2P Telegram official Bot API                ✅ PHYSICALLY VERIFIED / SEALED
 Telegram Web native request_contact UI       ⚪ CLIENT-COMPATIBILITY NOTE ONLY
-C4P real WhatsApp provider                   ⏭ NEXT
+C4P Meta WhatsApp Cloud API transport        ✅ BUILT / DETERMINISTIC PASS
+C4P real Meta WhatsApp provider              🧪 READY FOR PHYSICAL TEST
+```
+
+C4P deterministic authority:
+
+```text
+Source     72eb616153a8c4494f240ea825299e18d4aef156
+Run        33929572965
+Job        101205251200
+Artifact   9958063555
+SHA256     1bd75eaa752338cc9859bc0ee83190bf87afa00e994c562510209edf491b3ae2
 ```
 
 ## WhatsApp provider rule
@@ -111,7 +128,7 @@ Only an official WhatsApp Business Platform route is acceptable.
 
 ```text
 WhatsAppTransportPort
-  ├── Meta Cloud API      ← first physical provider target
+  ├── Meta Cloud API      ← ACTIVE physical target
   └── Kapso               ← optional later provider implementation
 ```
 
@@ -131,7 +148,8 @@ reverse-engineered private clients
 ```text
 C2P Telegram official Bot API                ✅ CLOSED / SEALED
 messaging stack consolidation                ✅ CLOSED
-C4P Meta WhatsApp Cloud API physical proof   ← NOW
+C4P Meta WhatsApp Cloud API deterministic    ✅ CLOSED
+C4P Meta WhatsApp physical provider          ← NOW / HUMAN TEST
 Services S8                                  ← pending
 Scheduler runtime                            ← later
 Agent / MCP                                  ← last
