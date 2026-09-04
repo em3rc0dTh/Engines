@@ -16,7 +16,7 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
       replyMarkup: { remove_keyboard: true },
     };
     case 'ASK_CUSTOMER_PHONE': return {
-      text: 'Necesito tu teléfono.\n\nPulsa «Compartir teléfono» en el teclado de Telegram o escribe tu número.',
+      text: 'Necesito tu teléfono.\n\nSi tu app muestra «Compartir teléfono», puedes usarlo. Si no, escribe tu número.',
       replyMarkup: {
         keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]],
         is_persistent: true,
