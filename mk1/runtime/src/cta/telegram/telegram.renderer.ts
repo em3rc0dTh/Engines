@@ -15,6 +15,15 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
     case 'ASK_CUSTOMER_PHONE': return { text: 'Necesito tu teléfono.', replyMarkup: {
       keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]], one_time_keyboard: true, resize_keyboard: true,
     } };
+    case 'RESOLVE_CUSTOMER_DUPLICATE': return {
+      text: 'Ya encontramos un cliente con datos coincidentes. ¿Qué deseas hacer?',
+      replyMarkup: {
+        inline_keyboard: [[
+          { text: 'Usar registro existente', callback_data: 'resolve_customer_duplicate_existing' },
+          { text: 'Crear registro nuevo', callback_data: 'resolve_customer_duplicate_new' },
+        ]],
+      },
+    };
     case 'REGISTRATION_COMPLETE': return { text: '✅ Registro completado.\n\nYa tenemos tus datos registrados.' };
     case 'REGISTRATION_FAILED': return { text: 'No pudimos completar el registro. Inténtalo nuevamente.' };
     case 'FINALIZE_REGISTRATION': return { text: 'Tus datos están completos. Confirma para finalizar.' };
