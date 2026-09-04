@@ -4,7 +4,7 @@
 
 **HOUSEKEEPING APPLIED BY USER — CURRENT NARRATIVE SET**
 
-Snapshot date: 2026-09-02.
+Snapshot date: 2026-09-04.
 
 No branch is deleted by this document. The user performs deletions after an explicit recommendation.
 
@@ -46,8 +46,14 @@ main
     ├── design/mk1-services-scheduler-integration
     │      Steps 3–4–5 architecture design
     │
-    └── build/mk1-s6-services-multibusiness
-           current Step-3 build gate
+    ├── build/mk1-s6-services-multibusiness
+    │      Services S6 certified
+    │
+    ├── build/mk1-s7-appointment-services-integration
+    │      Services S7 certified; Appointment consumes canonical Services
+    │
+    └── design/mk1-telegram-whatsapp-official-channels
+           CURRENT — official Telegram + WhatsApp channel architecture
 ```
 
 ## Canonical branches
@@ -63,25 +69,20 @@ main
 | WebChat C1A milestone | `build/mk1-c0-c1-webchat` | KEEP |
 | Durable channel C1B milestone | `build/mk1-c1b-durable-channel` | KEEP |
 | Steps 3–4–5 architecture design | `design/mk1-services-scheduler-integration` | KEEP |
-| Services S6 multi-business gate | `build/mk1-s6-services-multibusiness` | ACTIVE |
+| Services S6 multi-business gate | `build/mk1-s6-services-multibusiness` | KEEP UNTIL S8 HOUSEKEEPING |
+| Services S7 Appointment integration gate | `build/mk1-s7-appointment-services-integration` | KEEP / CERTIFIED MILESTONE |
+| Telegram + WhatsApp official channel design | `design/mk1-telegram-whatsapp-official-channels` | ACTIVE |
 
 ## Postman naming resolution
 
-The historical HTTP/Postman proof originally lived on:
-
-```text
-cert/mk0-core-golden-release
-5e36064936a4621191412d8676b957bc0998ad5e
-```
-
-A clean milestone alias now exists at the exact same commit:
+The clean historical Postman milestone is:
 
 ```text
 build/mk0-http-postman-proof
 5e36064936a4621191412d8676b957bc0998ad5e
 ```
 
-Therefore `cert/mk0-core-golden-release` is now a **DELETE CANDIDATE** after user review. No Postman implementation or certification history is lost by removing that old branch ref.
+The former `cert/mk0-core-golden-release` name is no longer required for the canonical narrative once the user removes it.
 
 ## Current construction sequence
 
@@ -91,31 +92,73 @@ CLI                historical milestone
 HTTP/Postman       historical milestone
 WebChat C1A        certified + human verified
 Durable C1B        certified + human restart/recovery verified
-Telegram C2        later transport proof; same durable core
-WhatsApp           later transport proof
+Telegram C2        official Bot API design ACTIVE
+Telegram C3        optional webhook parity later
+WhatsApp C4        official Business Platform design ACTIVE
 
 STEP 3 / SERVICES
 S0–S5              certified
-S6                  ACTIVE — multi-business generality
-S7                  next — Appointment consumes canonical Services
-S8                  final clean G1 closure
+S6                  certified — multi-business generality
+S7                  certified — Appointment consumes canonical Services
+S8                  pending — final clean G1 closure
 
 STEP 4 / SCHEDULER
-G2-S0               after Services closure — contracts + persistence
-G2-S1               resources + schedules
-G2-S2               availability
-G2-S3               atomic conflict/reservation proof
-...
+Design              prepared
+Runtime             not certified
 
 STEP 5 / INTEGRATION
-Design boundary only for now; no provider business logic is allowed to bypass Temporal/domain ownership.
+Design boundary only; no provider business logic may bypass Temporal/domain ownership.
+```
+
+## Current messaging branch decision
+
+```text
+design/mk1-telegram-whatsapp-official-channels
+```
+
+This branch begins from the documented S7 head so it records the current whole-platform truth while changing only the messaging-channel architecture.
+
+Build branches reserved next:
+
+```text
+build/mk1-c2-telegram
+build/mk1-c4-whatsapp-cloud-api
+```
+
+`C3` remains reserved for optional Telegram webhook parity.
+
+## WhatsApp provider rule
+
+The project only accepts an official WhatsApp Business Platform route.
+
+Default architectural target:
+
+```text
+Meta WhatsApp Cloud API
+```
+
+Optional provider implementation:
+
+```text
+Kapso
+```
+
+Kapso, if selected, must remain behind the same WhatsApp provider port and may not become the canonical business Workflow or persistence layer.
+
+Explicitly rejected:
+
+```text
+WhatsApp Web automation
+QR-session scraping
+browser emulation
+reverse-engineered private clients
 ```
 
 ## Future branch names already reserved conceptually
 
 ```text
 build/mk1-c2-telegram
-build/mk1-s7-appointment-services-integration
+build/mk1-c4-whatsapp-cloud-api
 build/mk1-s8-services-final-certification
 build/mk1-g2-s0-scheduler-contracts
 build/mk1-g2-s1-resource-schedules
