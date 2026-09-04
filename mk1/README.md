@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — G1 SERVICES S0–S6 CERTIFIED — WEBCHAT C1A+C1B CERTIFIED — S7 NEXT**
+**G0 CLOSED — SERVICES S0–S7 CERTIFIED — WEBCHAT C1A+C1B CERTIFIED + HUMAN VERIFIED — TELEGRAM/WHATSAPP OFFICIAL CHANNEL DESIGN ACTIVE**
 
 MK1 starts from the frozen MK0 architecture laboratory and must not weaken or silently reinterpret MK0 invariants. `mk0/runtime` remains untouched.
 
@@ -11,32 +11,33 @@ main / developer
 9c0fab032461e889f3d9d297b2d2b375288afda3
 ```
 
-`developer` is still the stable MK0 integration line; active MK1 work remains on explicit bounded branches.
+`developer` remains the stable MK0 integration line; bounded MK1 work stays on explicit branches.
+
+Current snapshot: [`STATUS-2026-09-04.md`](STATUS-2026-09-04.md).
+Branch policy: [`../BRANCHES.md`](../BRANCHES.md).
 
 ## Current architecture lines
 
 ```text
 STEP 1 / CTA CHANNELS
 CLI / HTTP-Postman historical milestones
-WebChat C1A + durable C1B certified
-Telegram design prepared, physical proof deferred
+WebChat C1A + durable C1B certified and human verified
+Telegram C2 official Bot API design active
+WhatsApp C4 official Business Platform design active
 
 STEP 3 / SERVICES
-S0–S6 certified
-S7 Appointment integration next
-S8 full clean G1 closure after S7
+S0–S7 certified
+S8 final clean G1 closure pending
 
 STEP 4 / SCHEDULER
-design frozen enough to begin after Services boundary is closed
+design prepared; runtime not certified
 
 STEP 5 / INTEGRATION
-boundary designed only; no provider runtime certified
+boundary designed only; provider runtime not certified
 
-AGENT / MCP
-intentionally absent from this phase
+AGENT / MCP / LLM ROUTING
+intentionally absent
 ```
-
-Branch policy and current narrative: [`../BRANCHES.md`](../BRANCHES.md).
 
 ## G0 — foundation ✅ CLOSED
 
@@ -48,12 +49,6 @@ Mongo semantic/execution audit         ✅ certified foundation
 AttachmentStore integrity boundary     ✅ certified foundation
 ```
 
-Foundation references:
-
-- [`Design/00-foundation-contract.md`](Design/00-foundation-contract.md)
-- [`Plan/00-core-126-completeness-audit.md`](Plan/00-core-126-completeness-audit.md)
-- [`Test/g0-core-126-audit.md`](Test/g0-core-126-audit.md)
-
 ## G1 — Services Engine
 
 ```text
@@ -64,79 +59,32 @@ S3 Eligibility + recommendation        ✅ CERTIFIED
 S4 Versioned management                ✅ CERTIFIED
 S5 Durable Workflow snapshots          ✅ CERTIFIED
 S6 Multi-business generality           ✅ CERTIFIED
-S7 Appointment integration             🔧 NEXT
-S8 Final clean G1 certification        ⏭ QUEUED
+S7 Appointment integration             ✅ CERTIFIED
+S8 Final clean G1 certification        ⏭ PENDING
 
 G1 SERVICES ENGINE                     ❌ NOT YET FULLY CERTIFIED
 ```
 
-### S5 authority
+### S7 authority
 
 ```text
-Source SHA       7568618062f4192b34caf6e916b58534f304ad3f
-Run              33539683548
-Job              99962550022
-Artifact         9813129778
-SHA256           22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708
-```
-
-S5 proves a running Temporal consumer retains the selected Service/Offering revision snapshot across catalog publication and Worker restart while a new Workflow sees the newer revision.
-
-### S6 authority
-
-```text
-Branch           build/mk1-s6-services-multibusiness
-Source SHA       3eed68b45036154bcf1776564f479cd02e30d0d4
-Run              33666790884
-Job              100370414068
+Branch           build/mk1-s7-appointment-services-integration
+Certified source 6fc8814830038b5600c4c6376cd9b4ed7ef34b7a
+Run              33668593216
+Job              100376325350
 Result           SUCCESS
-Artifact         9860927146
-SHA256           543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564
+Artifact         9861631780
+SHA256           e700cfcdc43e753cbc894abd30211e322097fd010d0ec86dcae01d7d3290dd6a
+Docs head         375431ba1a16694ce4cce7d30f9e5b37bc4e3108
 ```
 
-S6 proves the same Services implementation across materially different automotive and veterinary specimens. Both use the same Service code and Offering code inside independent business scopes, independent idempotency identities, isolated reads, isolated dependency references and deterministic eligibility.
+S7 proves Appointment consumes canonical Services reads, freezes revision-aware selected Service/Offering state, preserves a running selection across catalog N → N+1 publication, and lets a newly started Appointment see N+1.
 
-Direct marker:
+S7 did not redesign Scheduler.
 
-```text
-SERVICES_S6_MULTIBUSINESS_PASS
-```
+## Step 4 — Scheduler
 
-S6 also re-ran dynamic S4 management/rejection safety and the full inherited Appointment regression including exact replay and atomic same-slot conflict.
-
-References:
-
-- [`Design/01-services-engine-contract.md`](Design/01-services-engine-contract.md)
-- [`Design/09-services-engine-completion-contract.md`](Design/09-services-engine-completion-contract.md)
-- [`Plan/01-services-engine-gates.md`](Plan/01-services-engine-gates.md)
-- [`golden-dataset/services-engine-v0.json`](golden-dataset/services-engine-v0.json)
-- [`golden-dataset/services-s6-multibusiness-v0.json`](golden-dataset/services-s6-multibusiness-v0.json)
-- [`Test/g1-services-engine-s0-s6.md`](Test/g1-services-engine-s0-s6.md)
-- [`Build/evidence/s6-services-multibusiness-certification-2026-09-02.md`](Build/evidence/s6-services-multibusiness-certification-2026-09-02.md)
-
-## S7 — current Services gate
-
-S7 must make `RegisterNewAppointment` consume canonical Services reads and freeze a revision-aware Service/Offering snapshot in Workflow state while preserving the existing Appointment behavior.
-
-```text
-Customer
-  ↓
-Services catalog reads
-  ↓
-Service + Offering snapshot N
-  ↓
-Date / slot compatibility boundary
-  ↓
-explicit finalize
-  ↓
-atomic inherited booking
-```
-
-S7 must **not** redesign Scheduler. Availability/capacity/reservation authority remains a separate Step-4 responsibility.
-
-## Step 4 — Scheduler design
-
-The Services/Scheduler boundary is frozen in design:
+The Services/Scheduler boundary remains:
 
 ```text
 Services
@@ -155,37 +103,33 @@ Design references:
 - [`Design/06-scheduler-engine-contract.md`](Design/06-scheduler-engine-contract.md)
 - [`Plan/04-platform-steps-3-4-5-roadmap.md`](Plan/04-platform-steps-3-4-5-roadmap.md)
 
-No Scheduler build is certified yet.
+No Scheduler runtime is certified yet.
 
-## G3 — CTA multi-channel proof
+## G3 / Step 1 — CTA multi-channel proof
 
-Current phase explicitly excludes Agent/MCP/LLM routing.
+Current deterministic channel architecture:
 
 ```text
-CLI / WebChat / later Telegram / later WhatsApp
-              ↓
-         ChannelAdapter
-              ↓
-   CanonicalChannelEnvelope
-              ↓
-      ChannelExecutionCore
-              ↓
-      PostgreSQL correlation
-              ↓
-           Temporal
-              ↓
-     same Workflow Library
+Provider transport
+      ↓
+ChannelAdapter
+      ↓
+CanonicalChannelEnvelope
+      ↓
+ChannelExecutionCore
+      ↓
+PostgreSQL durable channel ledger
+      ↓
+Temporal
+      ↓
+same Workflow Library
 ```
 
 Provider differences terminate at adapter/renderer boundaries.
 
 ### C1A — visible WebChat ✅
 
-- minimal HTML/CSS/JS WebChat;
-- live Workflow inspector;
-- deterministic 12-step engineering view;
-- real Temporal `phase` and `nextAction` remain separately visible;
-- human post-fix verification complete.
+Minimal HTML/CSS/JS WebChat + live Workflow inspector + deterministic 12-step view. Human post-fix verification complete.
 
 ### C1B — durable WebChat ✅
 
@@ -197,11 +141,66 @@ Artifact         9853555059
 SHA256           efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
 ```
 
-C1B proves durable conversation/event correlation, replay/conflict semantics and physical WebChat process restart/recovery to the same Temporal Workflow. The user manually repeated the process-restart recovery successfully.
+C1B proves durable conversation/event correlation, replay/conflict semantics and physical WebChat process restart/recovery to the same Temporal Workflow. The user manually repeated restart/recovery successfully.
 
-### C2 — Telegram
+### C2 — Telegram 🔧 DESIGN ACTIVE
 
-Telegram adapter design exists at [`Design/08-c2-telegram-adapter-contract.md`](Design/08-c2-telegram-adapter-contract.md), but physical Bot API testing is intentionally deferred while Steps 3–4 advance.
+Target: official Telegram Bot API.
+
+Initial transport: `getUpdates` long polling; webhook parity remains optional C3.
+
+```text
+Telegram Bot API
+      ↓
+TelegramTransport
+      ↓
+TelegramAdapter
+      ↓
+CanonicalChannelEnvelope
+      ↓
+existing ChannelExecutionCore
+```
+
+Physical bot testing is intentionally deferred.
+
+### C4 — WhatsApp 🔧 DESIGN ACTIVE
+
+Official transport only.
+
+Default provider target:
+
+```text
+Meta WhatsApp Cloud API
+```
+
+Optional provider/operations layer:
+
+```text
+Kapso
+```
+
+Kapso must remain behind a provider seam; it must not become Engines business authority.
+
+```text
+WhatsAppTransportPort
+  ├── MetaCloudApiTransport      default
+  └── KapsoTransport             optional
+          ↓
+    WhatsAppAdapter
+          ↓
+CanonicalChannelEnvelope
+          ↓
+existing ChannelExecutionCore
+```
+
+Unofficial WhatsApp Web automation, QR-session scraping, browser emulation and reverse-engineered clients are explicitly rejected.
+
+References:
+
+- [`Brainstorming/06-telegram-whatsapp-official-channels.md`](Brainstorming/06-telegram-whatsapp-official-channels.md)
+- [`mining-site/quarries/quarry-04-official-messaging-channel-providers.md`](mining-site/quarries/quarry-04-official-messaging-channel-providers.md)
+- [`Design/10-c2-c4-official-messaging-channel-contract.md`](Design/10-c2-c4-official-messaging-channel-contract.md)
+- [`Plan/06-telegram-whatsapp-official-channel-gates.md`](Plan/06-telegram-whatsapp-official-channel-gates.md)
 
 ## Carry-forward invariants
 
@@ -217,19 +216,22 @@ mutable catalog head != selected Workflow snapshot
 same idempotency identity + different material != overwrite
 stale revision != silent last-write-wins
 Services != Scheduler
+unofficial WhatsApp transport != acceptable proof
 Agent/MCP != current phase
 ```
 
 ## Current sequence
 
 ```text
-G0 Foundation                      ✅ CLOSED
-G1 Services S0–S6                  ✅ CERTIFIED
-G1 S7 Appointment integration      🔧 CURRENT NEXT BUILD
-G1 S8 clean closure                ⏭
-G2 Scheduler                       ⏭ AFTER SERVICES BOUNDARY
-Telegram physical proof            ⏭ DEFERRED
-Agent / MCP                        ⏭ LAST
+G0 Foundation                         ✅ CLOSED
+C1A/C1B WebChat                       ✅ CERTIFIED + HUMAN VERIFIED
+G1 Services S0–S7                     ✅ CERTIFIED
+C2 Telegram official design           🔧 CURRENT
+C4 WhatsApp official design           🔧 CURRENT
+C2 automated build/proof              ⏭ NEXT
+C4 automated build/proof              ⏭ AFTER PROVIDER SEAM
+Physical Telegram/WhatsApp test       ⏭ DEFERRED
+G1 S8 clean closure                   ⏭ PENDING
+G2 Scheduler runtime                  ⏭ LATER
+Agent / MCP                           ⏭ LAST
 ```
-
-Build/evidence index: [`Build/README.md`](Build/README.md).
