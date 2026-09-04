@@ -3,7 +3,7 @@
 Date: 2026-09-04
 Branch: `build/mk1-c4p-whatsapp-cloud-api-official`
 Base: `build/mk1-customer-channels-integrated`
-Status: BUILD + DETERMINISTIC PROOF IN PROGRESS
+Status: **DETERMINISTIC PASS — PHYSICAL META TEST READY**
 
 ## Objective
 
@@ -15,16 +15,31 @@ Certify a real WhatsApp account/user path against the existing Customer registra
 C4P-0 repository consolidation                 ✅
 C4P-1 official-source/provider review          ✅
 C4P-2 Meta webhook + Graph API transport       ✅ BUILT
-C4P-3 deterministic CI                         🧪 RUNNING
-C4P-4 public HTTPS webhook setup               ⏳ EDUARDO
-C4P-5 Meta app/WABA/test-number connection     ⏳ EDUARDO
-C4P-6 real WhatsApp registration E2E           ⏳ EDUARDO
+C4P-3 deterministic CI                         ✅ PASS
+C4P-4 public HTTPS webhook setup               🧪 EDUARDO
+C4P-5 Meta app/WABA/test-number connection     🧪 EDUARDO
+C4P-6 real WhatsApp registration E2E           ⏳ AFTER C4P-4/5
 C4P-7 physical evidence + seal                 ⏳
 ```
 
+## Deterministic authority
+
+```text
+Source SHA   72eb616153a8c4494f240ea825299e18d4aef156
+Run          33929572965
+Job          101205251200
+Result       SUCCESS
+Artifact     9958063555
+SHA256       1bd75eaa752338cc9859bc0ee83190bf87afa00e994c562510209edf491b3ae2
+```
+
+The source-bound run proved TypeScript, seven Meta Cloud API contract tests, seven inherited WhatsApp adapter tests, clean Engines infrastructure, real-Temporal local WhatsApp registration to Customer `CREATED`, verified sender phone prefill, local webhook-runner health and webhook verification challenge.
+
+Receipt: `../Build/evidence/c4p-meta-whatsapp-cloud-api-deterministic-2026-09-04.md`.
+
 ## C4P-2 implementation
 
-Runtime now contains:
+Runtime contains:
 
 ```text
 whatsapp.cloud-api.ts
@@ -74,6 +89,14 @@ https://<temporary-host>/webhooks/whatsapp
 
 This is testing infrastructure only. Production hosting remains a later gate.
 
+## Meta setup boundary
+
+Meta's official Cloud API getting-started path requires a business portfolio, WhatsApp Business Account and phone-number context. A user access token from WhatsApp > Getting Started is sufficient for the bounded test while valid; durable system-user token management is a later operational concern.
+
+The physical setup needs the values Meta exposes for the app/test/business phone context, but only the runtime values listed above are passed to Engines.
+
+If Meta provides a test phone number in the Getting Started panel, use that first. A real production business-number registration is not required to prove the Engine/provider boundary if the official test assets support the real user conversation.
+
 ## Human physical sequence
 
 Target real observation:
@@ -95,9 +118,9 @@ real WhatsApp user
 
 Also verify `Ahora no` in a fresh conversation/context causes no Workflow/Customer creation if practical.
 
-## Deterministic proof requirements
+## Deterministic proof — CLOSED
 
-CI must prove without any Meta credential:
+CI has already proven without Meta credentials:
 
 ```text
 TypeScript PASS
@@ -115,13 +138,13 @@ webhook runner boots with deterministic dummy config
 Agent=false / MCP=false
 ```
 
-## Seal language
+## Current claim language
 
-Before physical test:
+Allowed now:
 
 ```text
-C4P Meta WhatsApp Cloud API runner ✅ BUILT / DETERMINISTIC ONLY
-real WhatsApp provider             ⚪ NOT CERTIFIED
+C4P Meta WhatsApp Cloud API transport ✅ BUILT / DETERMINISTIC PASS
+real WhatsApp provider                🧪 READY FOR PHYSICAL TEST
 ```
 
 After successful physical proof only:
