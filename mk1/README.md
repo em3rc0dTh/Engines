@@ -2,7 +2,7 @@
 
 ## Status
 
-**G0 CLOSED — SERVICES S0–S7 CERTIFIED — WEBCHAT C1A+C1B CERTIFIED + HUMAN VERIFIED — B2 CUSTOMER SOFT-DUPLICATE RESOLUTION CERTIFIED — C2 TELEGRAM LOCAL HUMAN VERIFIED**
+**G0 CLOSED — SERVICES S0–S7 CERTIFIED — WEBCHAT C1A+C1B CERTIFIED + HUMAN VERIFIED — B2 CUSTOMER SOFT-DUPLICATE RESOLUTION CERTIFIED — C2/C4 LOCAL INTERACTIVE E2E HUMAN VERIFIED**
 
 `mk0/runtime` remains frozen. `main` and `developer` are not feature branches; bounded MK1 work stays on explicit branches.
 
@@ -47,8 +47,9 @@ Telegram registration adapter              ✅ BUILT + LOCAL HARNESS PROVEN
 WhatsApp registration adapter              ✅ BUILT + LOCAL HARNESS PROVEN
 C2/C4 local real-Temporal E2E               ✅ AUTOMATED PASS
 C2 Telegram local human E2E                 ✅ HUMAN VERIFIED
-C4 WhatsApp sender-phone behavior           ✅ HUMAN VERIFIED
-C4 WhatsApp B2 completion                   🧪 HUMAN RETEST PENDING
+C4 WhatsApp local human E2E                 ✅ HUMAN VERIFIED
+C2/C4 combined local human gate             ✅ HUMAN VERIFIED
+B2 duplicate-decision UI                    ⏳ HUMAN OBSERVATION OPTIONAL
 Real Telegram Bot API                       ⚪ NOT CERTIFIED
 Real Meta Cloud API / Kapso                 ⚪ NOT CERTIFIED
 
@@ -124,7 +125,7 @@ Meta direct versus Kapso remains a transport-provider decision below `WhatsAppTr
 
 ## C2/C4 local interactive E2E authority
 
-Original local-interactive automated proof:
+Original automated proof:
 
 ```text
 Branch       build/mk1-c2-c4-local-interactive-e2e
@@ -136,22 +137,30 @@ Artifact     9945929946
 SHA256       92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
 ```
 
-That run proved both provider-shaped paths can reach real Temporal and create Customers when inputs are unique.
+Human verification is now also closed. The operator manually observed:
 
-Receipt: [`Build/evidence/c2-c4-local-interactive-e2e-certification-2026-09-04.md`](Build/evidence/c2-c4-local-interactive-e2e-certification-2026-09-04.md).
+```text
+Telegram normal registration                         ✅ PASS
+Telegram invalid phone rejected                      ✅ PASS
+same Telegram Workflow recovered                     ✅ PASS
+WhatsApp sender phone known at Workflow start        ✅ PASS
+WhatsApp did not request phone again                 ✅ PASS
+WhatsApp real Temporal registration → CREATED        ✅ PASS
+MESSAGING_LOCAL_E2E_PASS                              ✅ PASS
+```
+
+Human receipt: [`Test/c2-c4-local-interactive-human-verification-2026-09-04.md`](Test/c2-c4-local-interactive-human-verification-2026-09-04.md).
 
 ## B2 — Customer soft-duplicate resolution ✅
 
-The first human WhatsApp run correctly prefilled sender phone and requested only name + email, but the supplied email matched a Customer created in the earlier Telegram run. The canonical Customer policy therefore produced:
+The first human WhatsApp run exposed a legitimate canonical soft match:
 
 ```text
 WAITING_FOR_DUPLICATE_DECISION
 nextAction = RESOLVE_DUPLICATE
 ```
 
-That exposed a shared domain prerequisite which Plan 07 had already reserved: `RESOLVE_CUSTOMER_DUPLICATE`.
-
-B2 adds that operation without putting duplicate policy in either provider.
+B2 adds the shared deterministic `RESOLVE_CUSTOMER_DUPLICATE` operation without putting duplicate policy in either provider.
 
 Certified authority:
 
@@ -183,23 +192,7 @@ Receipt: [`Build/evidence/b2-customer-soft-duplicate-resolution-certification-20
 
 Golden expectations/results: [`golden-dataset/customer-b2-soft-duplicate-resolution-v0.json`](golden-dataset/customer-b2-soft-duplicate-resolution-v0.json).
 
-## Human verification truth
-
-Human evidence: [`Test/c2-c4-local-interactive-human-verification-2026-09-04.md`](Test/c2-c4-local-interactive-human-verification-2026-09-04.md).
-
-Already observed manually:
-
-```text
-Telegram normal registration                         ✅ PASS
-Telegram invalid phone rejected                      ✅ PASS
-same Telegram Workflow recovered                     ✅ PASS
-WhatsApp sender phone known at Workflow start        ✅ PASS
-WhatsApp did not request phone again                 ✅ PASS
-```
-
-The WhatsApp human run happened **before B2 existed** and therefore stopped at the discovered duplicate-resolution gap. One targeted retest on the B2 branch remains before the combined claim may become:
-
-> `C2/C4 local interactive deterministic E2E HUMAN VERIFIED`.
+The final human WhatsApp run followed the unique-input `CREATED` path rather than the duplicate-decision UI. Therefore the UI path itself remains optional human observation, but B2 runtime certification and C2/C4 human closure are both valid.
 
 ## Carry-forward invariants
 
@@ -221,10 +214,8 @@ Agent/MCP != current phase
 
 ```text
 B2 Customer soft-duplicate resolution         ✅ CERTIFIED
-C2 Telegram local human E2E                   ✅ VERIFIED
-C4 WhatsApp B2 human completion               🧪 NOW
-Combined C2/C4 human local E2E                ⏳ after retest
-Real Telegram Bot API                         ⏭ after local human closure
+C2/C4 local interactive E2E                   ✅ AUTOMATED + HUMAN VERIFIED
+Real Telegram Bot API                         ⏭ NEXT CHANNEL GATE
 Real WhatsApp provider                        ⏭ later
 Services S8                                   ⏭ pending
 Scheduler runtime                             ⏭ later
