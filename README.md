@@ -10,12 +10,14 @@ OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED
 
 MK1 — STAGE 2
 ACTIVE
-Services S0–S6 certified
-S7 Appointment→Services integration next
+Services S0–S7 certified; S8 final G1 closure pending
 WebChat C1A visible flow certified + human verified
 WebChat C1B durable channel certified + human restart verified
-Scheduler Step 4 designed, not yet built/certified
-Telegram adapter designed, physical proof deferred
+Customer B2 soft-duplicate resolution certified
+Telegram + WhatsApp local real-Temporal E2E automated + human verified
+Real Telegram Bot API not yet certified
+Real Meta Cloud API / Kapso not yet certified
+Scheduler Step 4 designed, runtime not yet certified
 Agent / MCP intentionally absent
 ```
 
@@ -25,17 +27,22 @@ MK0 remains the frozen evidence base. MK1 evolves from that foundation without r
 
 Repository branch policy is documented in [`BRANCHES.md`](BRANCHES.md).
 
-Meaningful current milestones include:
+Current messaging stack:
 
 ```text
-release/mk0-complete
-build/mk0-b3-cli-cta-adapter
-build/mk0-http-postman-proof
-build/mk1-s5-services-snapshots
-build/mk1-c0-c1-webchat
-build/mk1-c1b-durable-channel
-design/mk1-services-scheduler-integration
-build/mk1-s6-services-multibusiness
+design/mk1-telegram-whatsapp-official-channels
+        ↓
+build/mk1-customer-registration-policy-v2       PR #14
+        ↓
+build/mk1-customer-registration-channel-core     PR #15
+        ↓
+build/mk1-c2-telegram-register-customer          PR #16
+        ↓
+build/mk1-c4-whatsapp-register-customer          PR #17
+        ↓
+build/mk1-c2-c4-local-interactive-e2e            PR #18
+        ↓
+build/mk1-b2-customer-soft-duplicate-resolution  PR #19
 ```
 
 Every new bounded architecture gate gets a new branch. Intermediate/scratch branches are not permanent evidence authorities.
@@ -75,29 +82,86 @@ S3 Eligibility + recommendation            ✅ CERTIFIED
 S4 Versioned management mutations          ✅ CERTIFIED
 S5 Running-Workflow snapshots              ✅ CERTIFIED
 S6 Multi-business generality               ✅ CERTIFIED
-S7 Appointment integration                 🔧 NEXT
-S8 Final clean certification               ⏭ QUEUED
+S7 Appointment integration                 ✅ CERTIFIED
+S8 Final clean certification               ⏭ PENDING
 
 G1 SERVICES ENGINE                         ❌ NOT YET FULLY CERTIFIED
 ```
 
-S6 authority:
+S7 runtime authority:
 
 ```text
-Branch           build/mk1-s6-services-multibusiness
-Source SHA       3eed68b45036154bcf1776564f479cd02e30d0d4
-Run              33666790884
-Job              100370414068
-Result           SUCCESS
-Artifact         9860927146
-Artifact SHA256  543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564
+Branch           build/mk1-s7-appointment-services-integration
+Source SHA       6fc8814830038b5600c4c6376cd9b4ed7ef34b7a
+Run              33668593216
+Job              100376325350
+Artifact         9861631780
+Artifact SHA256  e700cfcdc43e753cbc894abd30211e322097fd010d0ec86dcae01d7d3290dd6a
 ```
 
-S6 proves the same Services implementation across materially different automotive and veterinary specimens with business-scoped reads, idempotency and dependency references, deterministic eligibility, and no fixture/vertical branching in implementation files.
-
-Receipt: [`mk1/Build/evidence/s6-services-multibusiness-certification-2026-09-02.md`](mk1/Build/evidence/s6-services-multibusiness-certification-2026-09-02.md).
+S7 proves Appointment consumes canonical Services reads and freezes revision-aware Service/Offering selection state. Scheduler authority remains separate.
 
 Canonical MK1 index: [`mk1/README.md`](mk1/README.md). Build/evidence index: [`mk1/Build/README.md`](mk1/Build/README.md).
+
+## CTA / Customer channel proof
+
+No Agent, MCP, LLM orchestration or semantic AI router is part of current channel execution.
+
+```text
+CLI / WebChat / Telegram / WhatsApp
+              ↓
+         ChannelAdapter
+              ↓
+   CanonicalChannelEnvelope
+              ↓
+      ChannelExecutionCore
+              ↓
+       ┌──────┴─────────┐
+       ▼                ▼
+PostgreSQL           Temporal
+binding/event        Workflow authority
+ledger                   │
+                         ▼
+                  same Workflow Library
+```
+
+Current channel status:
+
+```text
+C0A Workflow-view projection               ✅ CERTIFIED
+C1A workflow-visible HTML WebChat           ✅ CERTIFIED + HUMAN VERIFIED
+C1B durable correlation/event semantics     ✅ CERTIFIED + HUMAN RESTART VERIFIED
+Telegram local RegisterNewCustomer          ✅ AUTOMATED + HUMAN VERIFIED
+WhatsApp local RegisterNewCustomer          ✅ AUTOMATED + HUMAN VERIFIED
+C2/C4 combined local interactive E2E        ✅ HUMAN VERIFIED
+B2 Customer soft-duplicate resolution       ✅ CERTIFIED
+Real Telegram Bot API                       ⚪ NOT CERTIFIED
+Real Meta Cloud API / Kapso                 ⚪ NOT CERTIFIED
+```
+
+C2/C4 automated authority:
+
+```text
+Source SHA       bfccd4a795400d2311201a880453b61b08d0b56a
+Run              33896424897
+Job              101100019937
+Artifact         9945929946
+Artifact SHA256  92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
+```
+
+Human evidence proves Telegram normal registration, invalid-phone rejection with recovery on the same Workflow, WhatsApp verified sender-phone prefill with no redundant phone prompt, and real Temporal completion to `CREATED`.
+
+B2 authority:
+
+```text
+Source SHA       36afff68af3237bd6431fd643d7d969e5452a296
+Run              33899907141
+Job              101111281727
+Artifact         9947248334
+Artifact SHA256  2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a
+```
+
+B2 certifies deterministic `USE_EXISTING` / `CREATE_NEW`, invalid-candidate rejection, exact decision replay, and a real cross-channel Telegram→WhatsApp soft-match flow without moving duplicate policy into provider code.
 
 ## Step 4 — Scheduler boundary
 
@@ -128,54 +192,7 @@ Core invariant remains:
 availability shown != reservation persisted
 ```
 
-No Scheduler runtime is certified yet. Design authority lives in:
-
-- [`mk1/Design/05-services-scheduler-boundary.md`](mk1/Design/05-services-scheduler-boundary.md)
-- [`mk1/Design/06-scheduler-engine-contract.md`](mk1/Design/06-scheduler-engine-contract.md)
-- [`mk1/Plan/04-platform-steps-3-4-5-roadmap.md`](mk1/Plan/04-platform-steps-3-4-5-roadmap.md)
-
-## CTA / channel proof
-
-No Agent, MCP, LLM orchestration or semantic AI router is part of current channel execution.
-
-```text
-CLI / WebChat / later Telegram / later WhatsApp
-              ↓
-         ChannelAdapter
-              ↓
-   CanonicalChannelEnvelope
-              ↓
-      ChannelExecutionCore
-              ↓
-       ┌──────┴─────────┐
-       ▼                ▼
-PostgreSQL           Temporal
-binding/event        Workflow authority
-ledger                   │
-                         ▼
-                  same Workflow Library
-```
-
-Current channel status:
-
-```text
-C0A Workflow-view projection               ✅ CERTIFIED
-C1A workflow-visible HTML WebChat           ✅ CERTIFIED + HUMAN VERIFIED
-C1B durable correlation/event semantics     ✅ CERTIFIED + HUMAN RESTART VERIFIED
-C2 Telegram adapter design                  ✅ DESIGNED
-C2 Telegram physical proof                  ⏭ DEFERRED
-WhatsApp                                    ⏭ LATER
-```
-
-C1B authority:
-
-```text
-Source SHA       2008fce4f863fdabf8e8f323eee1d7cda05cb454
-Run              33647842017
-Job              100307008849
-Artifact         9853555059
-Artifact SHA256  efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
-```
+No Scheduler runtime is certified yet.
 
 ## Step 5 — Integration boundary
 
@@ -229,10 +246,10 @@ Brainstorming
 ## Current next work
 
 ```text
-CURRENT  Step 3 / S7 — Appointment consumes canonical Services snapshot
-NEXT     Step 3 / S8 — final clean Services certification
+CHANNEL  Real Telegram Bot API proof
+SERVICES S8 final clean G1 certification
 THEN     Step 4 / Scheduler build gates
-LATER    Telegram physical proof
+LATER    Real WhatsApp provider proof
 LAST     Agent / MCP / Intelligence layer
 ```
 
@@ -251,4 +268,4 @@ provider identity != business policy
 
 ## What is not yet claimed
 
-Engines does not yet certify full G1 Services closure, Scheduler, Telegram physical transport, WhatsApp, Integration Engine runtime, Agent/MCP, production deployment or production security hardening.
+Engines does not yet certify full G1 Services closure, Scheduler runtime, real Telegram Bot API transport, real Meta/Kapso transport, Integration Engine runtime, Agent/MCP, production deployment or production security hardening.
