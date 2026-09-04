@@ -41,7 +41,7 @@ function startEnvelope(
     channel,
     businessSlug: BUSINESS_SLUG,
     externalConversationId: `${channel.toLowerCase()}:${conversation}`,
-    externalMessageId: `${channel.toLowerCase()}:message:${message}`,
+    externalMessageId: `${channel.toLowerCase()}:message:${conversation}:${message}`,
     externalSenderId: `${channel.toLowerCase()}:sender:${conversation}`,
     action: 'START_CUSTOMER_REGISTRATION',
     payload: {
@@ -70,7 +70,7 @@ function duplicateDecisionEnvelope(
     channel,
     businessSlug: BUSINESS_SLUG,
     externalConversationId: `${channel.toLowerCase()}:${conversation}`,
-    externalMessageId: `${channel.toLowerCase()}:message:${message}`,
+    externalMessageId: `${channel.toLowerCase()}:message:${conversation}:${message}`,
     externalSenderId: `${channel.toLowerCase()}:sender:${conversation}`,
     action: 'RESOLVE_CUSTOMER_DUPLICATE',
     payload: { decision },
