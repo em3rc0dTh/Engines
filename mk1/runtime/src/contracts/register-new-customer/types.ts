@@ -47,12 +47,14 @@ export type RegisterNewCustomerDraft = Readonly<{
 }>;
 
 export type RegistrationCompletionMode = 'AUTO_WHEN_COMPLETE' | 'EXPLICIT_FINALIZE';
+export type RegistrationPolicyVersion = '1' | '2';
 
 export type RegistrationRequestMetadata = Readonly<{
   idempotencyKey: string;
   correlationId?: string;
   channel?: string;
   completionMode?: RegistrationCompletionMode;
+  registrationPolicyVersion?: RegistrationPolicyVersion;
 }>;
 
 export type RegisterNewCustomerStartEnvelope = Readonly<{
