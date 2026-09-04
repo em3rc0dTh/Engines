@@ -27,8 +27,9 @@ Customer / CTA channel proof
   WhatsApp adapter                    ✅ LOCAL HARNESS PROVEN
   C2/C4 local real-Temporal E2E       ✅ AUTOMATED PASS
   C2 Telegram local human E2E         ✅ HUMAN VERIFIED
-  C4 WhatsApp phone prefill           ✅ HUMAN VERIFIED
-  C4 WhatsApp B2 completion           🧪 HUMAN RETEST PENDING
+  C4 WhatsApp local human E2E         ✅ HUMAN VERIFIED
+  C2/C4 combined human gate           ✅ HUMAN VERIFIED
+  B2 duplicate-decision UI            ⏳ HUMAN OBSERVATION OPTIONAL
   real provider proof                 ⚪ NOT CERTIFIED
 ```
 
@@ -92,10 +93,11 @@ Telegram normal local registration                ✅ PASS
 Telegram invalid phone → same Workflow recovery   ✅ PASS
 WhatsApp sender phone prefilled                    ✅ PASS
 WhatsApp phone not requested again                 ✅ PASS
-WhatsApp B2 duplicate decision completion          ⏳ RETEST PENDING
+WhatsApp real Temporal registration → CREATED      ✅ PASS
+C2/C4 combined local interactive gate              ✅ HUMAN VERIFIED
 ```
 
-Therefore the combined `C2/C4 local interactive E2E HUMAN VERIFIED` claim remains intentionally open until that final WhatsApp B2 retest.
+The final WhatsApp human run used unique Customer material, so the B2 duplicate-decision UI was not separately observed by the operator. B2 remains runtime-certified independently; that optional UI observation is not required to keep C2/C4 human closure valid.
 
 ## Failure provenance
 
@@ -135,15 +137,9 @@ Historical S3/S4/S6/C1A/C1B failure/supersession provenance remains in their ind
 We may claim:
 
 ```text
-C2/C4 local interactive deterministic E2E AUTOMATED PASS
-B2 CUSTOMER SOFT-DUPLICATE RESOLUTION ✅ CERTIFIED
-C2 Telegram local interactive E2E ✅ HUMAN VERIFIED
-```
-
-We may not yet claim:
-
-```text
+C2/C4 local interactive deterministic E2E ✅ AUTOMATED PASS
 C2/C4 local interactive deterministic E2E ✅ HUMAN VERIFIED
+B2 CUSTOMER SOFT-DUPLICATE RESOLUTION      ✅ CERTIFIED
 ```
 
 No current receipt certifies real Telegram Bot API, Meta Cloud API, Kapso, public webhooks, outbound campaigns, Scheduler runtime, Agent/MCP or production readiness.
@@ -151,8 +147,7 @@ No current receipt certifies real Telegram Bot API, Meta Cloud API, Kapso, publi
 ## Current next work
 
 ```text
-Channel track   Eduardo WhatsApp B2 human retest
-Then            real Telegram Bot API proof
+Channel track   real Telegram Bot API proof
 Services track  S8 final G1 closure pending
 Scheduler       runtime later
 Agent / MCP     last
