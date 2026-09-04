@@ -2,11 +2,12 @@ import type { CanonicalChannelEnvelope, ChannelKind } from './types.js';
 
 export type TrustedChannelRoute = Readonly<{
   businessSlug: string;
+  registrationRenderIntent?: import('./types.js').CustomerRegistrationRenderIntent;
 }>;
 
 export interface ChannelAdapter<RawInbound = unknown> {
   readonly channel: ChannelKind;
-  normalizeInbound(raw: RawInbound, route: TrustedChannelRoute): CanonicalChannelEnvelope;
+  normalizeInbound(raw: RawInbound, route: TrustedChannelRoute): CanonicalChannelEnvelope | undefined;
 }
 
 export class ChannelAdapterRegistry {
