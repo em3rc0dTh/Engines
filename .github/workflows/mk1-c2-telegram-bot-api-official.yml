@@ -1,0 +1,85 @@
+name: MK1 C2 Telegram Official Bot API Transport
+
+on:
+  push:
+    branches:
+      - build/mk1-c2-telegram-bot-api-official
+  pull_request:
+    paths:
+      - 'mk1/runtime/src/cta/telegram/**'
+      - 'mk1/runtime/src/cta/channel-core/**'
+      - 'mk1/runtime/package.json'
+      - 'mk1/runtime/docker-compose.yml'
+      - '.github/workflows/mk1-c2-telegram-bot-api-official.yml'
+
+jobs:
+  c2-telegram-official-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install
+        working-directory: mk1/runtime
+        run: npm ci
+
+      - name: TypeScript
+        working-directory: mk1/runtime
+        run: npm run check
+
+      - name: Telegram Bot API deterministic client tests
+        working-directory: mk1/runtime
+        run: npm run test:telegram:bot-api | tee /tmp/c2p-bot-api-tests.log
+
+      - name: Telegram adapter regression
+        working-directory: mk1/runtime
+        run: npx tsx --test src/cta/telegram/telegram.adapter.test.ts | tee /tmp/c2p-adapter-tests.log
+
+      - name: Start clean Engines infrastructure
+        working-directory: mk1/runtime
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo temporal migrate worker
+          docker compose build messaging-lab
+          docker compose ps
+
+      - name: Existing real-Temporal Telegram regression
+        working-directory: mk1/runtime
+        run: |
+          set -o pipefail
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_MESSAGING_LAB_SCRIPT=TELEGRAM \
+            messaging-lab \
+            | tee /tmp/c2p-telegram-local-e2e.log
+          grep -F 'MESSAGING_LOCAL_E2E_PASS' /tmp/c2p-telegram-local-e2e.log
+          grep -F '"channel":"TELEGRAM"' /tmp/c2p-telegram-local-e2e.log
+          grep -F '"agent":false' /tmp/c2p-telegram-local-e2e.log
+          grep -F '"mcp":false' /tmp/c2p-telegram-local-e2e.log
+
+      - name: Capture deterministic evidence
+        if: always()
+        working-directory: mk1/runtime
+        run: |
+          mkdir -p /tmp/c2p-evidence
+          cp /tmp/c2p-bot-api-tests.log /tmp/c2p-evidence/ 2>/dev/null || true
+          cp /tmp/c2p-adapter-tests.log /tmp/c2p-evidence/ 2>/dev/null || true
+          cp /tmp/c2p-telegram-local-e2e.log /tmp/c2p-evidence/ 2>/dev/null || true
+          docker compose ps > /tmp/c2p-evidence/compose-ps.txt 2>&1 || true
+          docker compose logs worker > /tmp/c2p-evidence/worker.log 2>&1 || true
+          printf '%s\n' "${GITHUB_SHA}" > /tmp/c2p-evidence/git-sha.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-c2-telegram-official-${{ github.run_id }}
+          path: /tmp/c2p-evidence
+
+      - name: Cleanup
+        if: always()
+        working-directory: mk1/runtime
+        run: docker compose down -v --remove-orphans || true
