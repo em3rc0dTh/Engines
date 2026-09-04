@@ -56,7 +56,9 @@ main
          build/mk1-c4-whatsapp-register-customer
               ↓
          build/mk1-c2-c4-local-interactive-e2e
-              CURRENT — automated local real-Temporal E2E PASS
+              ↓
+         build/mk1-b2-customer-soft-duplicate-resolution
+              CURRENT — B2 CERTIFIED + C2/C4 HUMAN VERIFIED
 ```
 
 ## Canonical / meaningful branches
@@ -79,7 +81,8 @@ main
 | Durable Customer channel core | `build/mk1-customer-registration-channel-core` | STACKED PR #15; keep until stack consolidation |
 | Telegram RegisterNewCustomer transport | `build/mk1-c2-telegram-register-customer` | STACKED PR #16; keep until stack consolidation |
 | WhatsApp RegisterNewCustomer transport | `build/mk1-c4-whatsapp-register-customer` | STACKED PR #17; keep until stack consolidation |
-| Local real-Temporal Telegram/WhatsApp E2E | `build/mk1-c2-c4-local-interactive-e2e` | ACTIVE / PR #18 |
+| Local real-Temporal Telegram/WhatsApp E2E | `build/mk1-c2-c4-local-interactive-e2e` | STACKED PR #18; automated certified milestone |
+| Customer soft-duplicate resolution + local human closure | `build/mk1-b2-customer-soft-duplicate-resolution` | ACTIVE / DRAFT PR #19 / CERTIFIED |
 
 ## Current messaging stack
 
@@ -93,16 +96,20 @@ PR #16 Telegram transport
 PR #17 WhatsApp transport
         ↓
 PR #18 Local interactive real-Temporal E2E
+        ↓
+PR #19 B2 Customer soft-duplicate resolution
 ```
 
 Do not merge or delete an intermediate branch casually while the PRs are stacked. Consolidation/housekeeping happens only after the stack's intended merge strategy is explicitly chosen.
 
-## Current C2/C4 proof state
+## Current C2/C4 + B2 proof state
 
 ```text
 adapter harness human test                    ✅ 10 / 10 PASS
 local real-Temporal E2E automated              ✅ PASS
-local real-Temporal E2E human                  🧪 READY FOR TEST
+local real-Temporal E2E human                  ✅ HUMAN VERIFIED
+B2 Customer soft-duplicate resolution          ✅ CERTIFIED
+B2 duplicate-decision UI                       ⏳ optional human observation
 real Telegram Bot API                          ⚪ NOT CERTIFIED
 real Meta Cloud API / Kapso                    ⚪ NOT CERTIFIED
 ```
@@ -115,6 +122,16 @@ Run        33896424897
 Job        101100019937
 Artifact   9945929946
 SHA256     92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
+```
+
+B2 authority:
+
+```text
+Source     36afff68af3237bd6431fd643d7d969e5452a296
+Run        33899907141
+Job        101111281727
+Artifact   9947248334
+SHA256     2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a
 ```
 
 ## WhatsApp provider rule
@@ -141,8 +158,9 @@ reverse-engineered private clients
 ## Current construction sequence
 
 ```text
-C2/C4 local human interactive E2E       ← NOW
-real Telegram Bot API                    ← after local human proof
+C2/C4 local human interactive E2E       ✅ CLOSED
+B2 Customer duplicate resolution        ✅ CERTIFIED
+real Telegram Bot API                    ← next channel gate
 real WhatsApp provider                   ← later
 Services S8                              ← pending
 Scheduler runtime                        ← later
