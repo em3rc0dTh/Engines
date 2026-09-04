@@ -135,6 +135,25 @@ services:
       retries: 30
       start_period: 2s
 
+  messaging-lab:
+    profiles: ["manual"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      ENGINES_MESSAGING_LAB_BUSINESS_SLUG: golden-business
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["npm", "run", "lab:messaging-registration"]
+
 volumes:
   engines_mk0_postgres:
   engines_mk0_mongo:
