@@ -11,7 +11,10 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
       ]],
     } };
     case 'ASK_CUSTOMER_NAME': return { text: '¿Cuál es tu nombre?' };
-    case 'ASK_CUSTOMER_EMAIL': return { text: '¿Cuál es tu correo?' };
+    case 'ASK_CUSTOMER_EMAIL': return {
+      text: '¿Cuál es tu correo?',
+      replyMarkup: { remove_keyboard: true },
+    };
     case 'ASK_CUSTOMER_PHONE': return { text: 'Necesito tu teléfono.', replyMarkup: {
       keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]], one_time_keyboard: true, resize_keyboard: true,
     } };
@@ -24,8 +27,14 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
         ]],
       },
     };
-    case 'REGISTRATION_COMPLETE': return { text: '✅ Registro completado.\n\nYa tenemos tus datos registrados.' };
-    case 'REGISTRATION_FAILED': return { text: 'No pudimos completar el registro. Inténtalo nuevamente.' };
+    case 'REGISTRATION_COMPLETE': return {
+      text: '✅ Registro completado.\n\nYa tenemos tus datos registrados.',
+      replyMarkup: { remove_keyboard: true },
+    };
+    case 'REGISTRATION_FAILED': return {
+      text: 'No pudimos completar el registro. Inténtalo nuevamente.',
+      replyMarkup: { remove_keyboard: true },
+    };
     case 'FINALIZE_REGISTRATION': return { text: 'Tus datos están completos. Confirma para finalizar.' };
     case 'WAIT': return { text: 'Un momento, estamos procesando tu registro.' };
   }

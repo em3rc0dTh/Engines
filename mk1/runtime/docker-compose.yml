@@ -154,6 +154,25 @@ services:
     tty: true
     command: ["npm", "run", "lab:messaging-registration"]
 
+  telegram-bot:
+    profiles: ["telegram"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ENGINES_TELEGRAM_BUSINESS_SLUG: ${ENGINES_TELEGRAM_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["npm", "run", "telegram:bot"]
+    restart: "no"
+
 volumes:
   engines_mk0_postgres:
   engines_mk0_mongo:

@@ -1,0 +1,59 @@
+{
+  "artifact": "c2p-telegram-official-bot-api",
+  "version": "0.1.0",
+  "date": "2026-09-04",
+  "status": "pre-physical-expectation",
+  "authority": "mk1/Plan/10-c2p-telegram-official-bot-api-physical.md",
+  "invariants": [
+    "Telegram is transport only; Engines remains business authority",
+    "businessSlug comes from trusted deployment configuration",
+    "no Workflow starts before affirmative consent",
+    "update_id remains the provider event identity",
+    "next question comes from live Temporal registration state",
+    "Telegram chat/user ids are not treated as phone numbers",
+    "Bot token is environment-only and never logged",
+    "Agent and MCP remain absent"
+  ],
+  "fixtures": [
+    {
+      "id": "C2P-01",
+      "name": "authenticated bot identity",
+      "expected": { "method": "getMe", "ok": true }
+    },
+    {
+      "id": "C2P-02",
+      "name": "official long polling",
+      "expected": { "method": "getUpdates", "allowedUpdates": ["message", "callback_query"], "webhookActive": false }
+    },
+    {
+      "id": "C2P-03",
+      "name": "first contact consent boundary",
+      "expected": { "workflowBeforeConsent": false, "affirmativeStartsWorkflow": true, "negativeStartsWorkflow": false }
+    },
+    {
+      "id": "C2P-04",
+      "name": "native contact phone",
+      "expected": { "requestContact": true, "phoneFromChatId": false, "phoneFromUserId": false }
+    },
+    {
+      "id": "C2P-05",
+      "name": "provider event replay",
+      "expected": { "identity": "telegram:update:<update_id>", "sameMaterialReplay": true, "differentMaterialConflict": true }
+    },
+    {
+      "id": "C2P-06",
+      "name": "private chat only for registration proof",
+      "expected": { "groupRegistration": false }
+    },
+    {
+      "id": "C2P-07",
+      "name": "physical customer creation",
+      "expected": { "temporal": "COMPLETED", "customerOutcome": "CREATED", "completionMessage": true }
+    },
+    {
+      "id": "C2P-08",
+      "name": "invalid input recovery",
+      "expected": { "sameWorkflowRemainsActive": true, "secondWorkflowStarted": false }
+    }
+  ]
+}

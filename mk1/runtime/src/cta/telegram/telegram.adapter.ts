@@ -29,13 +29,14 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
     const message = record(update.message) ?? record(callback?.message);
     const chat = record(message?.chat);
     const sender = record(callback?.from) ?? record(message?.from);
+    const senderId = id(sender?.id, 'from.id');
     const base = {
       version: 'v1' as const,
       channel: this.channel,
       businessSlug: route.businessSlug,
       externalConversationId: `telegram:${id(chat?.id, 'chat.id')}`,
       externalMessageId: `telegram:update:${updateId}`,
-      externalSenderId: `telegram:user:${id(sender?.id, 'from.id')}`,
+      externalSenderId: `telegram:user:${senderId}`,
     };
 
     if (callback) {
@@ -59,6 +60,9 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
 
     const contact = record(message?.contact);
     if (contact) {
+      if (contact.user_id !== undefined && id(contact.user_id, 'contact.user_id') !== senderId) {
+        throw new Error('TELEGRAM_CONTACT_SENDER_MISMATCH');
+      }
       return {
         ...base,
         action: 'PROVIDE_CUSTOMER_DATA',
