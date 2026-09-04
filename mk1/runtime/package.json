@@ -29,6 +29,7 @@
     "lab:logs": "docker compose logs -f worker cta channel-core",
     "lab:console": "tsx src/lab-console/launcher.ts",
     "lab:appointment": "tsx src/lab-console/appointment-launcher.ts",
+    "lab:messaging-registration": "tsx src/cta/simulator/customer-registration-interactive.ts",
     "webchat:server:c1a": "tsx src/cta/webchat/server.ts",
     "webchat:server": "tsx src/cta/webchat/server-c1b.ts",
     "channel:server": "tsx src/cta/channel-core/server.ts",

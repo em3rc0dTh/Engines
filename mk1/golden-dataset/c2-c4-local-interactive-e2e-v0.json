@@ -1,0 +1,18 @@
+{
+  "artifact": "c2-c4-local-interactive-e2e-v0",
+  "version": "0.1.0",
+  "cases": [
+    {"id":"LOCAL-E2E-001","expectation":"Consent NO exits before START_CUSTOMER_REGISTRATION"},
+    {"id":"LOCAL-E2E-002","expectation":"Telegram consent YES starts RegisterNewCustomer through TelegramAdapter"},
+    {"id":"LOCAL-E2E-003","expectation":"Telegram does not infer phone from chat/user identity"},
+    {"id":"LOCAL-E2E-004","expectation":"Telegram shared contact satisfies customer.contact.phone through canonical update"},
+    {"id":"LOCAL-E2E-005","expectation":"WhatsApp fixture crosses HMAC verification before WhatsAppAdapter"},
+    {"id":"LOCAL-E2E-006","expectation":"WhatsApp verified sender phone is present at Workflow start and is not re-requested"},
+    {"id":"LOCAL-E2E-007","expectation":"Next visible question is derived from live Temporal missingFields/renderIntent"},
+    {"id":"LOCAL-E2E-008","expectation":"Invalid contact input is rejected and same Workflow can continue"},
+    {"id":"LOCAL-E2E-009","expectation":"Successful Telegram run reaches real Customer CREATED"},
+    {"id":"LOCAL-E2E-010","expectation":"Successful WhatsApp run reaches real Customer CREATED"},
+    {"id":"LOCAL-E2E-011","expectation":"Terminal proof prints real workflowId and customerId"},
+    {"id":"LOCAL-E2E-012","expectation":"No Agent, MCP, provider credentials, Appointment or Scheduler are introduced"}
+  ]
+}

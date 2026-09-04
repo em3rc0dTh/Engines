@@ -4,33 +4,30 @@
 
 This index answers:
 
-> **What source was actually executed, what evidence was produced, and what bounded claim did that evidence certify?**
+> **What source was actually executed, what evidence was produced, and what bounded claim does that evidence support?**
 
-Design intent belongs in `Brainstorming`, `mining-site`, `Design`, `Plan`, and `golden-dataset`. Documentation commits after a successful run never replace the executed runtime SHA.
+Documentation commits after a successful run never replace the executed runtime source SHA.
 
 ## Current status
 
 ```text
-G0 Foundation audit                  ✅ CLOSED
+G0 Foundation                         ✅ CLOSED
 
-G1 Services Engine
-  S0 Runtime promotion               ✅ CERTIFIED
-  S1 Contracts + persistence         ✅ CERTIFIED
-  S2 Deterministic read engine       ✅ CERTIFIED
-  S3 Eligibility + recommendation    ✅ CERTIFIED
-  S4 Versioned management            ✅ CERTIFIED
-  S5 Running-Workflow snapshots      ✅ CERTIFIED
-  S6 Multi-business generality       ✅ CERTIFIED
-  S7 Appointment integration         🔧 NEXT
-  S8 Final clean certification       ⏭ QUEUED
+G1 Services
+  S0–S7                               ✅ CERTIFIED
+  S8                                  ⏭ PENDING
+  G1 overall                          ❌ NOT YET FULLY CERTIFIED
 
-G1 SERVICES ENGINE                   ❌ NOT YET FULLY CERTIFIED
-
-G3 CTA channel proof
-  C0A Workflow-view projection       ✅ CERTIFIED
-  C1A Workflow-visible WebChat       ✅ CERTIFIED + HUMAN VERIFIED POST-FIX
-  C1B Durable WebChat semantics      ✅ CERTIFIED + HUMAN RESTART VERIFIED
-  C2 Telegram                        ⏭ DEFERRED TRANSPORT PROOF
+CTA / channel proof
+  C0A Workflow-view projection        ✅ CERTIFIED
+  C1A WebChat                         ✅ CERTIFIED + HUMAN VERIFIED
+  C1B durable WebChat                 ✅ CERTIFIED + HUMAN RESTART VERIFIED
+  Customer policy/core                ✅ BUILT / REGRESSION PROVEN
+  Telegram adapter                    ✅ LOCAL HARNESS PROVEN
+  WhatsApp adapter                    ✅ LOCAL HARNESS PROVEN
+  C2/C4 local real-Temporal E2E       ✅ AUTOMATED PASS
+  C2/C4 local human interactive E2E   🧪 READY FOR EDUARDO TEST
+  real provider proof                 ⚪ NOT CERTIFIED
 ```
 
 ## Evidence ledger
@@ -45,141 +42,91 @@ G3 CTA channel proof
 | S4 | `f3e54b853af5f01fb2e9ed7d032f784e3cffb81e` | `33538554471` | `99959020329` | `9812703293` | `275dd054247a89f0f4f8fe6c9244685d06cdd72117408c5282acbf6139b67a9c` | [`s4-services-management-certification-2026-09-01.md`](evidence/s4-services-management-certification-2026-09-01.md) |
 | S5 | `7568618062f4192b34caf6e916b58534f304ad3f` | `33539683548` | `99962550022` | `9813129778` | `22f823b50babf13691c12d6c5783619568d2198d1123f2fa7c9c22fcf218a708` | [`s5-services-snapshot-certification-2026-09-01.md`](evidence/s5-services-snapshot-certification-2026-09-01.md) |
 | S6 | `3eed68b45036154bcf1776564f479cd02e30d0d4` | `33666790884` | `100370414068` | `9860927146` | `543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564` | [`s6-services-multibusiness-certification-2026-09-02.md`](evidence/s6-services-multibusiness-certification-2026-09-02.md) |
+| S7 | `6fc8814830038b5600c4c6376cd9b4ed7ef34b7a` | `33668593216` | `100376325350` | `9861631780` | `e700cfcdc43e753cbc894abd30211e322097fd010d0ec86dcae01d7d3290dd6a` | [`s7-appointment-services-integration-certification-2026-09-02.md`](evidence/s7-appointment-services-integration-certification-2026-09-02.md) |
 | C1A | `860629e9ada498e225ae803a9fe6f077949ec320` | `33542468975` | `99971830150` | `9814172765` | `a12fa1b0283524948d5fa0d253953c5588ba2692a5cc0bbee93ded65265656f3` | [`c1a-webchat-workflow-visibility-certification-2026-09-01.md`](evidence/c1a-webchat-workflow-visibility-certification-2026-09-01.md) |
 | C1A UI hardening | `ed207f8c82ae9138f92fd505209c30c4eeba243b` | `33560864234` | `100032737031` | `9821207955` | `4f7fc1ddea852a9501f20078d0df8ecc84dc3c645e8b1362424c6d6f11ae37ff` | [`../Test/c1a-webchat-human-verification-2026-09-01.md`](../Test/c1a-webchat-human-verification-2026-09-01.md) |
 | C1B | `2008fce4f863fdabf8e8f323eee1d7cda05cb454` | `33647842017` | `100307008849` | `9853555059` | `efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf` | [`c1b-durable-channel-certification-2026-09-02.md`](evidence/c1b-durable-channel-certification-2026-09-02.md) |
+| C2/C4 local interactive E2E | `bfccd4a795400d2311201a880453b61b08d0b56a` | `33896424897` | `101100019937` | `9945929946` | `92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e` | [`c2-c4-local-interactive-e2e-certification-2026-09-04.md`](evidence/c2-c4-local-interactive-e2e-certification-2026-09-04.md) |
 
-## S6 — multi-business generality
+## C2/C4 local interactive E2E
 
-S6 uses two materially different synthetic businesses through the same Services contracts, Temporal management Workflow and persistence/read/eligibility implementation.
-
-Direct marker:
+The direct-source run proved two provider-shaped inputs can drive the same real Engine path:
 
 ```text
-SERVICES_S6_MULTIBUSINESS_PASS {
-  "businesses":["s6-golden-auto","s6-golden-vet"],
-  "sharedServiceCode":"primary-service",
-  "sharedOfferingCode":"standard",
-  "businessScopedReads":true,
-  "businessScopedIdempotency":true,
-  "crossBusinessDependencyRejected":true,
-  "deterministicEligibility":true,
-  "autoDurationMinutes":30,
-  "vetDurationMinutes":45,
-  "workflowAuditCount":6
-}
+Telegram-shaped input ─┐
+                       ├→ canonical Customer channel core → PostgreSQL → Temporal → RegisterNewCustomer
+WhatsApp-shaped input ─┘
 ```
 
-The same run also emitted `SERVICES_S6_NO_VERTICAL_FIXTURE_BRANCHING_PASS`, re-ran dynamic S4 management/rejection proofs, and completed the inherited Appointment E2E including atomic slot-conflict and idempotency replay regression.
+Telegram result:
 
-S6 therefore certifies **Services generality/isolation**, not S7 Appointment consumption of canonical Services snapshots.
+```text
+initial missing     name + phone + email
+phone source        Telegram shared-contact-shaped event
+terminal            COMPLETED / CREATED
+Customer ID         present
+```
 
-Verification ledger: [`../Test/g1-services-engine-s0-s6.md`](../Test/g1-services-engine-s0-s6.md).
+WhatsApp result:
 
-## Channel evidence boundary
+```text
+initial known       phone from HMAC-verified synthetic sender
+initial missing     name + email
+phone re-prompt     absent
+terminal            COMPLETED / CREATED
+Customer ID         present
+```
 
-C1A proved a minimal browser surface can drive the explicit Appointment Workflow while exposing real Temporal state and a deterministic 12-step engineering view. A post-human timing fix removed duplicate Step 08/11 prompts and was human verified.
+Regression counts in the same successful run:
 
-C1B added durable PostgreSQL conversation/event correlation, exact replay, material-conflict rejection and physical WebChat process restart/recovery to the same Workflow. It did not add Agent/MCP or channel-specific business policy.
+```text
+Customer V1/V2            26 / 26
+C1B channel                5 / 5
+Telegram/WhatsApp adapter 10 / 10
+```
 
-## Failure / supersession provenance
+The adapter-only human harness had already passed 10/10 on runtime source `5e09b9fb6d30c5f9a7612df061c428cbcfd91b8a`; that is separate from the current real-Temporal interactive gate.
+
+## Failure provenance
 
 Failures are retained rather than erased.
 
-### S3
+### C2/C4 interactive first attempt
 
 ```text
-Run      33531803288
-Result   FAILURE
-Cause    strict TypeScript exactOptionalPropertyTypes test-fixture mismatch
-```
-
-### S4
-
-Run `33538120900` was green before dependency-reference hardening. The final S4 authority is `33538554471`.
-
-### S6
-
-```text
-Run       33666702773
-Job       100370123359
-Source    1cf6c133c33eaabfd9539fffcf8b4568e6dc8d34
+Run       33896062496
+Job       101098866437
 Result    FAILURE
-Stage     static anti-vertical implementation guard, before Compose/runtime
-Cause     guard scanned an existing unit-test fixture string and false-positively matched `golden-auto`
-Artifact  9860853124
-SHA-256   a9e04c9e69742fddf9d8fc567546c90adc7ce629f58801ea112c17411479dc41
+Artifact  9945799079
+SHA256    208db06ce14ef9f9cada55db1b485117350fe2a3e2a2a61d63ac9038ab2fdc2e
+Stage     terminal harness before first canonical event
+Cause     piped stdin closed readline under non-TTY Compose execution
 ```
 
-The guard was narrowed to implementation `.ts` files excluding `*.test.ts`. No Services runtime/business invariant changed. Run `33666790884` is the sole S6 certification authority.
+The runtime fix separated scripted CI mode from human readline mode. No Engine business rule was weakened.
 
-### C1A
+Historical S3/S4/S6/C1A/C1B failure/supersession provenance remains in their individual receipts.
 
-```text
-Run      33542360241
-Result   FAILURE
-Stage    typecheck before runtime
-Cause    RequestInit/BodyInit strict TypeScript incompatibility
-```
+## Current evidence boundary
 
-### C1B
+We may claim:
 
-```text
-Run       33647731151
-Source    9cedded6ca7ebd3e0d5ddd12468a358784573089
-Result    FAILURE
-Stage     strict TypeScript typecheck before runtime
-Cause     exactOptionalPropertyTypes replay-response fallback mismatch
-Artifact  9853467649
-SHA-256   b663d43180b259ea1bd565b57f025884599dd63dbb9337401e37f1f32e91120e
-```
+> **C2/C4 local interactive deterministic E2E AUTOMATED PASS.**
 
-## Receipt meaning
+We may not yet claim:
 
-```text
-S0  executable MK1 baseline
-S1  Services contracts/persistence
-S2  deterministic Services reads
-S3  deterministic eligibility/recommendation
-S4  versioned/idempotent Services management
-S5  revision-stable Workflow snapshots across catalog change + Worker restart
-S6  same Services implementation proven across materially different businesses
-C1A HTML WebChat drives/exposes real durable Appointment flow
-C1B WebChat correlation/event semantics survive replay/conflict/process restart
-```
+> **C2/C4 local interactive deterministic E2E HUMAN VERIFIED.**
 
-No individual receipt expands into a broader production-readiness claim.
+That requires the user's manual Telegram and WhatsApp runs.
 
-## Evidence rule
-
-Every next gate records at minimum:
-
-```text
-executed source SHA
-branch
-run ID
-job ID
-result
-artifact ID
-artifact SHA-256
-executed probes
-regression scope
-failure provenance
-explicit non-claims
-human-readable verdict
-```
+No current receipt certifies real Telegram Bot API, Meta Cloud API, Kapso, public webhooks, outbound campaigns, Scheduler runtime, Agent/MCP or production readiness.
 
 ## Current next work
 
 ```text
-Services track  S7 Appointment → canonical Services integration
-Scheduler track design frozen; build waits for the intended Services boundary
-Channel track   Telegram design exists; physical transport proof deferred
+Channel track   Eduardo manual Telegram + WhatsApp local interactive E2E
+Then            real Telegram Bot API proof
+Services track  S8 final G1 closure pending
+Scheduler       runtime later
+Agent / MCP     last
 ```
-
-Cross-references:
-
-- Services plan: [`../Plan/01-services-engine-gates.md`](../Plan/01-services-engine-gates.md)
-- Services S6 verification: [`../Test/g1-services-engine-s0-s6.md`](../Test/g1-services-engine-s0-s6.md)
-- Platform 3–4–5 roadmap: [`../Plan/04-platform-steps-3-4-5-roadmap.md`](../Plan/04-platform-steps-3-4-5-roadmap.md)
-- Multi-channel plan: [`../Plan/02-cta-multichannel-poc-gates.md`](../Plan/02-cta-multichannel-poc-gates.md)
