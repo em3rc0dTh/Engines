@@ -44,27 +44,32 @@ jobs:
         run: |
           docker compose down -v --remove-orphans || true
           docker compose up --build -d postgres mongo temporal migrate worker
+          docker compose build messaging-lab
           docker compose ps
 
-      - name: Telegram interactive smoke
+      - name: Telegram scripted interactive smoke
         shell: bash
         run: |
           set -o pipefail
-          printf '1\n1\nCI Telegram\n1\nci.telegram@example.com\n' \
-            | docker compose run --rm -T messaging-lab \
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_MESSAGING_LAB_SCRIPT=TELEGRAM \
+            messaging-lab \
             | tee /tmp/c2-telegram-interactive.log
           grep -F 'MESSAGING_LOCAL_E2E_PASS' /tmp/c2-telegram-interactive.log
           grep -F '"channel":"TELEGRAM"' /tmp/c2-telegram-interactive.log
+          grep -F 'customer.contact.phone' /tmp/c2-telegram-interactive.log
 
-      - name: WhatsApp interactive smoke
+      - name: WhatsApp scripted interactive smoke
         shell: bash
         run: |
           set -o pipefail
-          printf '2\n1\nCI WhatsApp\nci.whatsapp@example.com\n' \
-            | docker compose run --rm -T messaging-lab \
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_MESSAGING_LAB_SCRIPT=WHATSAPP \
+            messaging-lab \
             | tee /tmp/c4-whatsapp-interactive.log
           grep -F 'MESSAGING_LOCAL_E2E_PASS' /tmp/c4-whatsapp-interactive.log
           grep -F '"channel":"WHATSAPP"' /tmp/c4-whatsapp-interactive.log
+          grep -F 'phonePrefilled":true' /tmp/c4-whatsapp-interactive.log
           if grep -F '¿Cuál es tu teléfono?' /tmp/c4-whatsapp-interactive.log; then
             echo 'WhatsApp incorrectly requested a phone already supplied by verified transport.' >&2
             exit 1
