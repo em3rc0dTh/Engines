@@ -41,6 +41,13 @@ function scriptedChannel(): LabChannel | undefined {
   throw new Error(`LOCAL_E2E_SCRIPT_CHANNEL_INVALID:${raw}`);
 }
 
+function scriptedDuplicateChoice(): '1' | '2' {
+  const raw = process.env.ENGINES_MESSAGING_LAB_DUPLICATE_DECISION?.trim().toUpperCase();
+  if (!raw || raw === 'USE_EXISTING') return '1';
+  if (raw === 'CREATE_NEW') return '2';
+  throw new Error(`LOCAL_E2E_SCRIPT_DUPLICATE_DECISION_INVALID:${raw}`);
+}
+
 function randomDigits(count: number): string {
   let value = '';
   for (let index = 0; index < count; index += 1) value += Math.floor(Math.random() * 10).toString();
@@ -63,6 +70,9 @@ function printState(live: LiveRegistration): void {
   console.log(`Temporal: ${live.state.workflowStatus} / ${live.state.phase} / next=${live.state.nextAction}`);
   console.log(`knownFields   = ${live.view.knownFields.length > 0 ? live.view.knownFields.join(', ') : '(none)'}`);
   console.log(`missingFields = ${live.view.missingFields.length > 0 ? live.view.missingFields.join(', ') : '(none)'}`);
+  if (live.state.possibleDuplicate) {
+    console.log(`softMatchCandidates = ${live.state.possibleDuplicate.candidateCustomerIds.length}`);
+  }
 }
 
 async function queryUntilActionable(
@@ -80,15 +90,11 @@ async function queryUntilActionable(
       const view = projectCustomerRegistration(state);
       const description = await handle.describe();
 
-      if (state.nextAction === 'RESOLVE_DUPLICATE') {
-        throw new Error('LOCAL_E2E_DUPLICATE_REQUIRES_UNIQUE_INPUT');
-      }
       if (view.renderIntent !== 'WAIT' || state.workflowStatus !== 'RUNNING') {
         return { state, view, runId: description.runId };
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message === 'LOCAL_E2E_DUPLICATE_REQUIRES_UNIQUE_INPUT') throw error;
+    } catch {
+      // Workflow/query may not be visible immediately after start/update.
     }
     await delay(STATE_POLL_MS);
   }
@@ -106,6 +112,7 @@ function assertEnvelope(
 
 async function run(): Promise<void> {
   const script = scriptedChannel();
+  const scriptedEmail = process.env.ENGINES_MESSAGING_LAB_EMAIL?.trim();
   const rl = script ? undefined : createInterface({ input, output });
   const ask = async (prompt: string, scriptedValue: string): Promise<string> => {
     if (script) {
@@ -248,12 +255,14 @@ async function run(): Promise<void> {
         console.log(`Workflow ID: ${workflowId}`);
         console.log(`Run ID: ${live.runId}`);
         console.log(`Customer ID: ${live.state.customerId ?? '(missing)'}`);
+        console.log(`Outcome: ${live.state.phase}`);
         if (!live.state.customerId) throw new Error('LOCAL_E2E_CUSTOMER_ID_MISSING');
         console.log(`MESSAGING_LOCAL_E2E_PASS ${JSON.stringify({
           channel,
           workflowId,
           runId: live.runId,
           customerId: live.state.customerId,
+          outcome: live.state.phase,
           phonePrefilled: channel === 'WHATSAPP',
           scripted: Boolean(script),
           agent: false,
@@ -278,7 +287,33 @@ async function run(): Promise<void> {
       console.log(renderText(channel, intent));
 
       let envelope: CanonicalChannelEnvelope;
-      if (channel === 'TELEGRAM' && intent === 'ASK_CUSTOMER_PHONE') {
+      if (intent === 'RESOLVE_CUSTOMER_DUPLICATE') {
+        console.log('1 Usar el registro existente');
+        console.log('2 Crear un registro nuevo');
+        const duplicateChoice = (await ask('> ', script ? scriptedDuplicateChoice() : '')).trim();
+        if (duplicateChoice !== '1' && duplicateChoice !== '2') {
+          console.log('Opción inválida.');
+          continue;
+        }
+        const callbackId = duplicateChoice === '1'
+          ? 'resolve_customer_duplicate_existing'
+          : 'resolve_customer_duplicate_new';
+        envelope = channel === 'TELEGRAM'
+          ? assertEnvelope(
+            telegramAdapter.normalizeInbound(telegramCallback(callbackId), {
+              businessSlug: BUSINESS_SLUG,
+              registrationRenderIntent: intent,
+            }),
+            'telegram-duplicate-decision',
+          )
+          : assertEnvelope(
+            whatsappAdapter.normalizeInbound(
+              verifiedWhatsApp('INTERACTIVE', { interactiveId: callbackId }),
+              { businessSlug: BUSINESS_SLUG, registrationRenderIntent: intent },
+            ),
+            'whatsapp-duplicate-decision',
+          );
+      } else if (channel === 'TELEGRAM' && intent === 'ASK_CUSTOMER_PHONE') {
         console.log(`1 Compartir teléfono simulado (${sharedTelegramPhone})`);
         console.log('2 Escribir teléfono');
         const phoneChoice = (await ask('> ', script ? '1' : '')).trim();
@@ -307,7 +342,7 @@ async function run(): Promise<void> {
         const scriptedValue = intent === 'ASK_CUSTOMER_NAME'
           ? `CI ${channel}`
           : intent === 'ASK_CUSTOMER_EMAIL'
-            ? `ci.${channel.toLowerCase()}.${session}@example.com`
+            ? scriptedEmail || `ci.${channel.toLowerCase()}.${session}@example.com`
             : '';
         const value = await ask('> ', script ? scriptedValue : '');
         envelope = channel === 'TELEGRAM'
