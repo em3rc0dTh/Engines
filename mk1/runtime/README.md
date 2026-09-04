@@ -9,15 +9,20 @@ Inherited MK0 runtime                 ✅ certified baseline
 RegisterNewCustomer                   ✅ regression protected
 AttachmentStore/B7                    ✅ regression protected
 RegisterNewAppointment                ✅ regression protected
-Services S1–S6                        ✅ certified
+Services S1–S7                        ✅ certified
+Services S8                           ⏭ final G1 closure pending
 WebChat C0A workflow view             ✅ certified
 WebChat C1A visible E2E flow          ✅ certified + human verified
 WebChat C1B durable channel           ✅ certified + human restart verified
-Services S7                           🔧 next Services gate
-Telegram C2 runtime                   ❌ physical proof deferred
-Scheduler Engine                      ❌ not certified
-Agent / MCP                           ❌ intentionally absent
-Production deployment                 ❌ not certified
+Telegram local registration          ✅ automated + human verified
+WhatsApp local registration          ✅ automated + human verified
+C2/C4 local interactive E2E          ✅ human verified
+B2 soft-duplicate resolution         ✅ certified
+Real Telegram Bot API                ❌ not certified
+Real Meta Cloud API / Kapso          ❌ not certified
+Scheduler Engine                     ❌ not certified
+Agent / MCP                          ❌ intentionally absent
+Production deployment                ❌ not certified
 ```
 
 Canonical status: [`../README.md`](../README.md)
@@ -106,11 +111,11 @@ PostgreSQL + MongoDB
     CTA    Channel Core
 ```
 
-Current migrations include inherited Customer/Appointment data plus Services management and durable channel correlation. PostgreSQL remains canonical business truth; Mongo remains semantic/execution audit.
+PostgreSQL remains canonical business truth and durable channel-event authority. Mongo remains semantic/execution audit.
 
 ## Services runtime
 
-### Canonical responsibilities
+Canonical Services responsibilities:
 
 ```text
 Service
@@ -126,8 +131,6 @@ immutable Service/Offering snapshots for Workflow consumers
 
 Services does **not** own concrete resources, staff calendars, slot capacity, holds, reservations or conflicts. Those belong to Scheduler.
 
-### Services commands
-
 Versioned management executes through Temporal:
 
 ```text
@@ -139,26 +142,6 @@ UpdateOffering
 SetOfferingStatus
 ```
 
-Flow:
-
-```text
-caller
-  ↓
-servicesManagementWorkflow
-  ↓
-command validation
-  ↓
-reference preflight Activity
-  ↓
-PostgreSQL mutation Activity
-  ↓
-service_mutation_commands + catalog truth
-  ↓
-Mongo services_mutation_audit
-  ↓
-terminal outcome
-```
-
 Reads remain deterministic and business-scoped:
 
 ```text
@@ -168,92 +151,39 @@ ListOfferings
 GetOffering
 ```
 
-### Services S6 — certified multi-business generality
+### S7 — Appointment consumes canonical Services
 
-Run locally inside a healthy Compose laboratory:
-
-```bash
-docker compose exec -T worker npm run probe:services:s6
-```
-
-Certification authority:
+S7 authority:
 
 ```text
-Source SHA       3eed68b45036154bcf1776564f479cd02e30d0d4
-Run              33666790884
-Job              100370414068
-Artifact         9860927146
-SHA256           543feab917c80dfd3a9cecbff7db15170d82cc66a621b837616d73a798b57564
+Source SHA       6fc8814830038b5600c4c6376cd9b4ed7ef34b7a
+Run              33668593216
+Job              100376325350
+Artifact         9861631780
+SHA256           e700cfcdc43e753cbc894abd30211e322097fd010d0ec86dcae01d7d3290dd6a
 ```
 
-Expected marker:
+S7 proves:
 
 ```text
-SERVICES_S6_MULTIBUSINESS_PASS
+Appointment Service list        canonical Services read path
+Appointment Offering list       canonical Services read path
+active Appointment snapshot N   remains N after N+1 publication
+new Appointment                 sees N+1
+inherited Appointment E2E       remains green
+Scheduler semantics             not moved into Services
 ```
 
-The probe creates materially different automotive and veterinary Service/Offering data through the same Temporal Workflow and proves:
+Receipt: [`../Build/evidence/s7-appointment-services-integration-certification-2026-09-02.md`](../Build/evidence/s7-appointment-services-integration-certification-2026-09-02.md)
 
-```text
-same Service code across businesses       PASS
-same Offering code across businesses      PASS
-business-scoped reads                     PASS
-business-scoped idempotency               PASS
-exact replay                              PASS
-cross-business dependency rejection       PASS
-no partial invalid Offering               PASS
-deterministic eligibility                 PASS
-Mongo audit coverage                      PASS
-```
-
-The CI also emits:
-
-```text
-SERVICES_S6_NO_VERTICAL_FIXTURE_BRANCHING_PASS
-```
-
-which ensures S6 fixture business identities are absent from runtime implementation TypeScript files.
-
-S6 receipt: [`../Build/evidence/s6-services-multibusiness-certification-2026-09-02.md`](../Build/evidence/s6-services-multibusiness-certification-2026-09-02.md)
-
-S6 verification: [`../Test/g1-services-engine-s0-s6.md`](../Test/g1-services-engine-s0-s6.md)
-
-## Current Appointment boundary
-
-At S6, the inherited Appointment E2E still passes, including:
-
-```text
-existing/new Customer resolution
-Service/Product selection
-human date normalization
-slot loading
-explicit finalization
-exact Workflow replay
-atomic same-slot race
-```
-
-But this is still compatibility/regression evidence. S7 is responsible for making Appointment consume the canonical Services read/snapshot contract directly.
-
-S7 target:
-
-```text
-RegisterNewAppointment
-  ↓
-canonical Services reads
-  ↓
-selected revision-aware Service/Offering snapshot
-  ↓
-existing date/slot/finalize compatibility path
-```
-
-Scheduler is not implemented inside S7.
+S8 remains the final clean accumulated G1 certification gate.
 
 ## Durable channel runtime
 
-C1B path:
+Canonical path:
 
 ```text
-WebChatAdapter
+ChannelAdapter
       ↓
 CanonicalChannelEnvelope
       ↓
@@ -265,10 +195,10 @@ PostgreSQL
       ↓
 Temporal
       ↓
-RegisterNewAppointment
+same Workflow Library
 ```
 
-Certified semantics:
+Certified C1B semantics:
 
 ```text
 same event identity + same material       exact replay
@@ -286,23 +216,92 @@ Artifact         9853555059
 SHA256           efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf
 ```
 
-WebChat manual start:
+## Telegram / WhatsApp local messaging laboratory
+
+Human interactive command:
 
 ```bash
-npm run webchat:server
+docker compose run --rm --no-deps messaging-lab
 ```
 
-Open:
+The laboratory uses real PostgreSQL + Temporal + `RegisterNewCustomer` without provider credentials.
+
+### Telegram local behavior
 
 ```text
-http://127.0.0.1:8790/webchat/
+initial knownFields   (none)
+initial missingFields name + phone + email
+phone source          shared-contact-shaped event or typed phone
+invalid phone         CHANNEL_EVENT_INVALID
+recovery              same Temporal Workflow remains active
+terminal              CREATED
 ```
 
-The inspector remains:
+The user manually verified both normal completion and invalid-phone recovery.
+
+### WhatsApp local behavior
 
 ```text
-/webchat/workflow.html?workflowId=<workflowId>
+verified sender phone supplied at Workflow start
+knownFields   = customer.contact.phone
+missingFields = customer.name, customer.contact.email
+phone re-prompt absent
+terminal      CREATED for unique Customer material
 ```
+
+The user manually verified the real Temporal path through `CREATED` and `MESSAGING_LOCAL_E2E_PASS`.
+
+C2/C4 automated authority:
+
+```text
+Source SHA       bfccd4a795400d2311201a880453b61b08d0b56a
+Run              33896424897
+Job              101100019937
+Artifact         9945929946
+SHA256           92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
+```
+
+Human receipt:
+[`../Test/c2-c4-local-interactive-human-verification-2026-09-04.md`](../Test/c2-c4-local-interactive-human-verification-2026-09-04.md)
+
+## B2 — Customer soft-duplicate resolution
+
+A soft match now projects a deterministic shared action:
+
+```text
+WAITING_FOR_DUPLICATE_DECISION
+nextAction = RESOLVE_DUPLICATE
+        ↓
+RESOLVE_CUSTOMER_DUPLICATE
+  ├── USE_EXISTING
+  └── CREATE_NEW
+```
+
+The channel does not decide duplicate truth. Candidate membership remains Temporal/Customer authority.
+
+B2 authority:
+
+```text
+Source SHA       36afff68af3237bd6431fd643d7d969e5452a296
+Run              33899907141
+Job              101111281727
+Artifact         9947248334
+SHA256           2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a
+```
+
+Expected direct probe markers:
+
+```text
+CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS
+CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS
+CUSTOMER_B2_USE_EXISTING_PASS
+CUSTOMER_B2_CREATE_NEW_PASS
+CUSTOMER_B2_SOFT_DUPLICATE_RESOLUTION_PASS
+```
+
+Receipt: [`../Build/evidence/b2-customer-soft-duplicate-resolution-certification-2026-09-04.md`](../Build/evidence/b2-customer-soft-duplicate-resolution-certification-2026-09-04.md)
+
+The final human WhatsApp run used unique material and therefore did not separately show the duplicate-decision UI. That optional UI observation is not required for the certified B2 runtime claim or the closed C2/C4 local human gate.
 
 ## Scheduler / Integration / Agent boundaries
 
@@ -328,14 +327,15 @@ Services != Scheduler
 availability shown != reservation persisted
 browser/process memory != durable channel authority
 provider-specific code != business policy
+local provider-shaped proof != external-provider certification
 ```
 
-## Current next branch
-
-After S6 documentation closure, the next bounded build branch is:
+## Current next gates
 
 ```text
-build/mk1-s7-appointment-services-integration
+Channel   real Telegram Bot API proof
+Services  S8 final clean G1 certification
+Then      Scheduler runtime build gates
+Later     real WhatsApp provider proof
+Last      Agent / MCP
 ```
-
-Its job is canonical Appointment→Services consumption, not Scheduler implementation.
