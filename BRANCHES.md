@@ -6,11 +6,11 @@
 
 Snapshot date: 2026-09-04.
 
-No branch is deleted by this document. The user performs deletions after an explicit recommendation.
+No branch is deleted by this document. The user performs deletions only after an explicit recommendation.
 
 ## Branch rule
 
-Every new bounded architecture step/gate gets its own branch. Branch names must identify both the generation/part and the bounded work.
+Every new bounded architecture step/gate gets its own branch.
 
 ```text
 release/<milestone>
@@ -19,7 +19,7 @@ build/<mk>-<gate>-<bounded-scope>
 audit/<bounded-scope>
 ```
 
-Do not retain permanent `copy`, `scratch`, or generic `feat` branches once the same history is represented by a canonical milestone. Historical proof lives in commits, CI runs, artifacts and evidence receipts; a branch does not need to exist forever only to preserve history.
+Historical proof lives in commits, CI runs, artifacts and evidence receipts. Permanent `copy`, `scratch` or generic feature branches are not part of the intended narrative.
 
 ## Current narrative map
 
@@ -35,115 +35,99 @@ main
 │
 └── MK1
     ├── build/mk1-s5-services-snapshots
-    │      S0–S5 Services terminal certified milestone
+    ├── build/mk1-s6-services-multibusiness
+    ├── build/mk1-s7-appointment-services-integration
     │
     ├── build/mk1-c0-c1-webchat
-    │      C0A workflow projection + C1A visible WebChat
-    │
     ├── build/mk1-c1b-durable-channel
-    │      durable channel binding/event semantics
     │
     ├── design/mk1-services-scheduler-integration
-    │      Steps 3–4–5 architecture design
     │
-    ├── build/mk1-s6-services-multibusiness
-    │      Services S6 certified
+    ├── design/mk1-telegram-whatsapp-official-channels
+    │       engine-first + official-provider channel design
     │
-    ├── build/mk1-s7-appointment-services-integration
-    │      Services S7 certified; Appointment consumes canonical Services
-    │
-    └── design/mk1-telegram-whatsapp-official-channels
-           CURRENT — official Telegram + WhatsApp channel architecture
+    └── messaging Customer-registration stack
+         build/mk1-customer-registration-policy-v2
+              ↓
+         build/mk1-customer-registration-channel-core
+              ↓
+         build/mk1-c2-telegram-register-customer
+              ↓
+         build/mk1-c4-whatsapp-register-customer
+              ↓
+         build/mk1-c2-c4-local-interactive-e2e
+              CURRENT — automated local real-Temporal E2E PASS
 ```
 
-## Canonical branches
+## Canonical / meaningful branches
 
 | Meaning | Branch | Policy |
 |---|---|---|
 | Stable integrated base | `main` | KEEP |
-| Integration/staging line | `developer` | KEEP; never use as a feature branch |
+| Integration/staging line | `developer` | KEEP; never use as feature branch |
 | Frozen complete MK0 | `release/mk0-complete` | KEEP |
-| Historical CLI surface | `build/mk0-b3-cli-cta-adapter` | KEEP |
-| Historical HTTP/Postman surface | `build/mk0-http-postman-proof` | KEEP |
+| Historical CLI CTA surface | `build/mk0-b3-cli-cta-adapter` | KEEP |
+| Historical HTTP/Postman CTA surface | `build/mk0-http-postman-proof` | KEEP |
 | Services S0–S5 terminal milestone | `build/mk1-s5-services-snapshots` | KEEP |
-| WebChat C1A milestone | `build/mk1-c0-c1-webchat` | KEEP |
-| Durable channel C1B milestone | `build/mk1-c1b-durable-channel` | KEEP |
-| Steps 3–4–5 architecture design | `design/mk1-services-scheduler-integration` | KEEP |
 | Services S6 multi-business gate | `build/mk1-s6-services-multibusiness` | KEEP UNTIL S8 HOUSEKEEPING |
-| Services S7 Appointment integration gate | `build/mk1-s7-appointment-services-integration` | KEEP / CERTIFIED MILESTONE |
-| Telegram + WhatsApp official channel design | `design/mk1-telegram-whatsapp-official-channels` | ACTIVE |
+| Services S7 Appointment integration | `build/mk1-s7-appointment-services-integration` | KEEP / CERTIFIED MILESTONE |
+| WebChat C1A | `build/mk1-c0-c1-webchat` | KEEP |
+| Durable WebChat/channel C1B | `build/mk1-c1b-durable-channel` | KEEP |
+| Steps 3–4–5 architecture | `design/mk1-services-scheduler-integration` | KEEP |
+| Telegram/WhatsApp engine-first design | `design/mk1-telegram-whatsapp-official-channels` | KEEP WHILE CHANNEL BUILD ACTIVE |
+| Customer policy V2 | `build/mk1-customer-registration-policy-v2` | STACKED PR #14; keep until stack consolidation |
+| Durable Customer channel core | `build/mk1-customer-registration-channel-core` | STACKED PR #15; keep until stack consolidation |
+| Telegram RegisterNewCustomer transport | `build/mk1-c2-telegram-register-customer` | STACKED PR #16; keep until stack consolidation |
+| WhatsApp RegisterNewCustomer transport | `build/mk1-c4-whatsapp-register-customer` | STACKED PR #17; keep until stack consolidation |
+| Local real-Temporal Telegram/WhatsApp E2E | `build/mk1-c2-c4-local-interactive-e2e` | ACTIVE / PR #18 |
 
-## Postman naming resolution
-
-The clean historical Postman milestone is:
-
-```text
-build/mk0-http-postman-proof
-5e36064936a4621191412d8676b957bc0998ad5e
-```
-
-The former `cert/mk0-core-golden-release` name is no longer required for the canonical narrative once the user removes it.
-
-## Current construction sequence
+## Current messaging stack
 
 ```text
-STEP 1 / CTA CHANNELS
-CLI                historical milestone
-HTTP/Postman       historical milestone
-WebChat C1A        certified + human verified
-Durable C1B        certified + human restart/recovery verified
-Telegram C2        official Bot API design ACTIVE
-Telegram C3        optional webhook parity later
-WhatsApp C4        official Business Platform design ACTIVE
-
-STEP 3 / SERVICES
-S0–S5              certified
-S6                  certified — multi-business generality
-S7                  certified — Appointment consumes canonical Services
-S8                  pending — final clean G1 closure
-
-STEP 4 / SCHEDULER
-Design              prepared
-Runtime             not certified
-
-STEP 5 / INTEGRATION
-Design boundary only; no provider business logic may bypass Temporal/domain ownership.
+PR #14 Customer Registration Policy V2
+        ↓
+PR #15 Customer Registration Channel Core
+        ↓
+PR #16 Telegram transport
+        ↓
+PR #17 WhatsApp transport
+        ↓
+PR #18 Local interactive real-Temporal E2E
 ```
 
-## Current messaging branch decision
+Do not merge or delete an intermediate branch casually while the PRs are stacked. Consolidation/housekeeping happens only after the stack's intended merge strategy is explicitly chosen.
+
+## Current C2/C4 proof state
 
 ```text
-design/mk1-telegram-whatsapp-official-channels
+adapter harness human test                    ✅ 10 / 10 PASS
+local real-Temporal E2E automated              ✅ PASS
+local real-Temporal E2E human                  🧪 READY FOR TEST
+real Telegram Bot API                          ⚪ NOT CERTIFIED
+real Meta Cloud API / Kapso                    ⚪ NOT CERTIFIED
 ```
 
-This branch begins from the documented S7 head so it records the current whole-platform truth while changing only the messaging-channel architecture.
-
-Build branches reserved next:
+Automated local E2E authority:
 
 ```text
-build/mk1-c2-telegram
-build/mk1-c4-whatsapp-cloud-api
+Source     bfccd4a795400d2311201a880453b61b08d0b56a
+Run        33896424897
+Job        101100019937
+Artifact   9945929946
+SHA256     92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e
 ```
-
-`C3` remains reserved for optional Telegram webhook parity.
 
 ## WhatsApp provider rule
 
-The project only accepts an official WhatsApp Business Platform route.
-
-Default architectural target:
+Only an official WhatsApp Business Platform route is acceptable.
 
 ```text
-Meta WhatsApp Cloud API
+WhatsAppTransportPort
+  ├── Meta Cloud API
+  └── Kapso (optional provider implementation)
 ```
 
-Optional provider implementation:
-
-```text
-Kapso
-```
-
-Kapso, if selected, must remain behind the same WhatsApp provider port and may not become the canonical business Workflow or persistence layer.
+Kapso/Meta remain transport implementations and may not replace Temporal, Customer/Services/Scheduler ownership or persistence authority.
 
 Explicitly rejected:
 
@@ -154,23 +138,23 @@ browser emulation
 reverse-engineered private clients
 ```
 
-## Future branch names already reserved conceptually
+## Current construction sequence
 
 ```text
-build/mk1-c2-telegram
-build/mk1-c4-whatsapp-cloud-api
-build/mk1-s8-services-final-certification
-build/mk1-g2-s0-scheduler-contracts
-build/mk1-g2-s1-resource-schedules
-...
+C2/C4 local human interactive E2E       ← NOW
+real Telegram Bot API                    ← after local human proof
+real WhatsApp provider                   ← later
+Services S8                              ← pending
+Scheduler runtime                        ← later
+Agent / MCP                              ← last
 ```
 
-## Cleanup rule for future gates
+## Cleanup rule
 
 When a bounded gate closes:
 
 1. commit and index its evidence;
-2. keep the terminal branch only when it is a meaningful architecture/version/surface milestone;
-3. mark intermediate branches as deletion candidates after ancestry and open-PR checks;
+2. keep terminal branches that represent meaningful architecture/version/surface milestones;
+3. verify ancestry, PR state and evidence before marking intermediates as deletion candidates;
 4. never delete branches automatically;
-5. tell the user exactly which branch refs may be removed before they remove them.
+5. tell the user exactly which refs may be removed before any deletion.
