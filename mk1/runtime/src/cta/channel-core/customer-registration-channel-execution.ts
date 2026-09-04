@@ -6,6 +6,7 @@ import {
   finalizeRegistrationUpdate,
   getRegistrationStateQuery,
   provideCustomerDataUpdate,
+  resolveCustomerDuplicateUpdate,
 } from '../../orchestration/temporal/workflows/register-new-customer.workflow.js';
 import {
   ChannelBindingConflictError,
@@ -19,6 +20,13 @@ import type { CanonicalChannelEnvelope, CanonicalChannelExecutionResponse } from
 type JsonRecord = Record<string, unknown>;
 function record(value: unknown): JsonRecord | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+function issueMessage(updateResult: unknown): string | undefined {
+  const result = record(updateResult);
+  if (result?.ok !== false || !Array.isArray(result.issues)) return undefined;
+  const first = record(result.issues[0]);
+  return typeof first?.message === 'string' ? first.message : 'Workflow Update rejected';
 }
 
 export class CustomerRegistrationChannelExecutionCore {
@@ -105,9 +113,34 @@ export class CustomerRegistrationChannelExecutionCore {
       updateResult = await handle.executeUpdate(finalizeRegistrationUpdate, {
         args: [{ inputId: channelOperationInputId(envelope) }],
       });
+    } else if (envelope.action === 'RESOLVE_CUSTOMER_DUPLICATE') {
+      const state = await handle.query(getRegistrationStateQuery);
+      if (state.nextAction !== 'RESOLVE_DUPLICATE' || state.possibleDuplicate?.classification !== 'SOFT_MATCH') {
+        throw new Error('CUSTOMER_DUPLICATE_RESOLUTION_NOT_AVAILABLE');
+      }
+      const decision = envelope.payload.decision;
+      if (decision !== 'USE_EXISTING' && decision !== 'CREATE_NEW') {
+        throw new Error('CHANNEL_EVENT_INVALID:duplicate decision');
+      }
+      if (decision === 'USE_EXISTING' && state.possibleDuplicate.candidateCustomerIds.length !== 1) {
+        throw new Error('CUSTOMER_DUPLICATE_SELECTION_REQUIRED');
+      }
+      updateResult = await handle.executeUpdate(resolveCustomerDuplicateUpdate, {
+        args: [{
+          inputId: channelOperationInputId(envelope),
+          decision,
+          ...(decision === 'USE_EXISTING'
+            ? { customerId: state.possibleDuplicate.candidateCustomerIds[0] }
+            : {}),
+        }],
+      });
     } else {
       throw new Error('CHANNEL_OPERATION_NOT_SUPPORTED');
     }
+
+    const rejectedMessage = issueMessage(updateResult);
+    if (rejectedMessage) throw new Error(`CHANNEL_EVENT_INVALID:${rejectedMessage}`);
+
     const state = await handle.query(getRegistrationStateQuery);
     const description = await handle.describe();
     const bindingStatus = state.workflowStatus === 'COMPLETED' ? 'COMPLETED'
