@@ -37,6 +37,7 @@ export function adaptRegisterNewCustomerCtaInput(
       correlationId: input.correlationId,
       channel: context.channel,
       completionMode: input.completionMode,
+      registrationPolicyVersion: input.registrationPolicyVersion,
     },
     schemaVersion: REGISTER_NEW_CUSTOMER_SCHEMA_VERSION,
   };
