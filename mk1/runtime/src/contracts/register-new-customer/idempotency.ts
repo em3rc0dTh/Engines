@@ -11,6 +11,7 @@ export type InitialStartFingerprintMaterial = Readonly<{
   operation: RegisterNewCustomerStartEnvelope['operation'];
   businessSlug: string;
   schemaVersion: RegisterNewCustomerStartEnvelope['schemaVersion'];
+  registrationPolicyVersion: string;
   draft: ReturnType<typeof normalizeRegistrationDraft>;
 }>;
 
@@ -67,6 +68,7 @@ export function buildInitialStartFingerprintMaterial(
     operation: start.operation,
     businessSlug: start.businessSlug,
     schemaVersion: start.schemaVersion,
+    registrationPolicyVersion: start.request.registrationPolicyVersion ?? '1',
     draft: normalizeInitialFingerprintDraft(start.draft),
   };
 }

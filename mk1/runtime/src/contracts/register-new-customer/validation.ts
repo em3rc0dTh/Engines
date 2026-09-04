@@ -10,6 +10,7 @@ import {
   type RegisterNewCustomerDraft,
   type RegisterNewCustomerStartEnvelope,
   type RegistrationCompletionMode,
+  type RegistrationPolicyVersion,
 } from './types.js';
 
 type ContactValidationMode = 'DURABLE_V1' | 'INGRESS_V2';
@@ -79,6 +80,10 @@ function countryCodeLooksValid(value: string): boolean {
 
 function completionModeIsValid(value: unknown): value is RegistrationCompletionMode {
   return value === 'AUTO_WHEN_COMPLETE' || value === 'EXPLICIT_FINALIZE';
+}
+
+function registrationPolicyVersionIsValid(value: unknown): value is RegistrationPolicyVersion {
+  return value === '1' || value === '2';
 }
 
 function validateCustomerDraftShape(
@@ -352,6 +357,16 @@ export function validateRegisterNewCustomerStart(
         message: 'request.completionMode must be AUTO_WHEN_COMPLETE or EXPLICIT_FINALIZE',
       });
     }
+    if (
+      input.request.registrationPolicyVersion !== undefined &&
+      !registrationPolicyVersionIsValid(input.request.registrationPolicyVersion)
+    ) {
+      issues.push({
+        code: 'INVALID_ENVELOPE',
+        path: 'request.registrationPolicyVersion',
+        message: 'request.registrationPolicyVersion must be 1 or 2',
+      });
+    }
   }
 
   issues.push(...validateDraftShape(input.draft));
@@ -365,6 +380,9 @@ export function validateRegisterNewCustomerStart(
   const completionMode = completionModeIsValid(request.completionMode)
     ? request.completionMode
     : undefined;
+  const registrationPolicyVersion = registrationPolicyVersionIsValid(request.registrationPolicyVersion)
+    ? request.registrationPolicyVersion
+    : undefined;
 
   const value: RegisterNewCustomerStartEnvelope = {
     operation: REGISTER_NEW_CUSTOMER_OPERATION,
@@ -375,6 +393,7 @@ export function validateRegisterNewCustomerStart(
       ...(correlationId ? { correlationId } : {}),
       ...(channel ? { channel } : {}),
       ...(completionMode ? { completionMode } : {}),
+      ...(registrationPolicyVersion ? { registrationPolicyVersion } : {}),
     },
     schemaVersion: REGISTER_NEW_CUSTOMER_SCHEMA_VERSION,
   };

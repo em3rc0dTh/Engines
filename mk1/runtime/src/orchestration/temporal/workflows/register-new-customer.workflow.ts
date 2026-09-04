@@ -9,6 +9,7 @@ import {
 } from '@temporalio/workflow';
 import {
   GOLDEN_REGISTRATION_POLICY_V1,
+  GOLDEN_REGISTRATION_POLICY_V2,
   evaluateRegistrationCompleteness,
   mergeCustomerDraft,
   normalizeRegistrationDraft,
@@ -89,9 +90,9 @@ export const finalizeRegistrationUpdate = defineUpdate<
   [FinalizeRegistrationInput]
 >('FinalizeRegistration');
 
-function resolveMk0Policy(businessSlug: string) {
+function resolveRegistrationPolicy(businessSlug: string, version: '1' | '2' = '1') {
   return businessSlug === GOLDEN_REGISTRATION_POLICY_V1.businessSlug
-    ? GOLDEN_REGISTRATION_POLICY_V1
+    ? version === '2' ? GOLDEN_REGISTRATION_POLICY_V2 : GOLDEN_REGISTRATION_POLICY_V1
     : undefined;
 }
 
@@ -103,7 +104,7 @@ export async function registerNewCustomerWorkflow(
   start: RegisterNewCustomerStartEnvelope,
 ): Promise<RegistrationResult> {
   const info = workflowInfo();
-  const policy = resolveMk0Policy(start.businessSlug);
+  const policy = resolveRegistrationPolicy(start.businessSlug, start.request.registrationPolicyVersion);
   const initialStartFingerprint = serializeInitialStartFingerprintMaterial(start);
   const explicitFinalize = start.request.completionMode === 'EXPLICIT_FINALIZE';
 
