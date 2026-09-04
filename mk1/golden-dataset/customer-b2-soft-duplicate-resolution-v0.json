@@ -1,0 +1,73 @@
+{
+  "artifact": "customer-b2-soft-duplicate-resolution",
+  "version": "0.1.0",
+  "date": "2026-09-04",
+  "status": "pre-build-expectation",
+  "authority": "mk1/Plan/09-b2-customer-soft-duplicate-resolution.md",
+  "invariants": [
+    "Temporal remains duplicate-decision orchestration truth",
+    "PostgreSQL remains Customer business truth",
+    "provider adapters do not own duplicate policy",
+    "same accepted duplicate-decision inputId is idempotent",
+    "USE_EXISTING may only select a Customer from the Workflow candidate set",
+    "CREATE_NEW does not bypass hard-unique enforcement",
+    "B2 does not merge new contact material into an existing Customer"
+  ],
+  "fixtures": [
+    {
+      "id": "B2-01",
+      "name": "single soft match use existing",
+      "expected": {
+        "preDecisionPhase": "WAITING_FOR_DUPLICATE_DECISION",
+        "preDecisionNextAction": "RESOLVE_DUPLICATE",
+        "decision": "USE_EXISTING",
+        "terminalPhase": "ALREADY_EXISTS",
+        "created": false,
+        "secondCustomerCreated": false
+      }
+    },
+    {
+      "id": "B2-02",
+      "name": "soft match explicitly create new",
+      "expected": {
+        "preDecisionPhase": "WAITING_FOR_DUPLICATE_DECISION",
+        "decision": "CREATE_NEW",
+        "terminalPhase": "CREATED",
+        "created": true,
+        "hardUniqueStillAuthoritative": true
+      }
+    },
+    {
+      "id": "B2-03",
+      "name": "duplicate decision replay",
+      "expected": {
+        "sameInputId": true,
+        "duplicateInput": true,
+        "secondBusinessEffect": false
+      }
+    },
+    {
+      "id": "B2-04",
+      "name": "invalid existing candidate",
+      "expected": {
+        "decision": "USE_EXISTING",
+        "candidateMembershipRequired": true,
+        "accepted": false,
+        "phaseRemains": "WAITING_FOR_DUPLICATE_DECISION"
+      }
+    },
+    {
+      "id": "B2-05",
+      "name": "cross-channel local messaging resolution",
+      "expected": {
+        "telegramPhonePrefilled": false,
+        "whatsappPhonePrefilled": true,
+        "whatsappPhoneReprompt": false,
+        "softMatchPresentedForResolution": true,
+        "sameWorkflowCompletesAfterDecision": true,
+        "agent": false,
+        "mcp": false
+      }
+    }
+  ]
+}
