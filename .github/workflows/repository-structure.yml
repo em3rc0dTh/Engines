@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'ENGINE FIRST' docs/REPOSITORY-ARCHITECTURE.md
-          grep -q 'one repository per integration' README.md
+          grep -q 'one integration repo' README.md
           grep -q 'mk0/runtime' docs/MK-LIFECYCLE.md
           grep -q 'ResourceReservation' data-model/README.md
           grep -q 'OperationalObservationInput' data-model/README.md
