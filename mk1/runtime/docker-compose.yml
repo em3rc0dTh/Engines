@@ -173,6 +173,38 @@ services:
     command: ["npm", "run", "telegram:bot"]
     restart: "no"
 
+  whatsapp-kapso:
+    profiles: ["kapso"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      KAPSO_API_KEY: ${KAPSO_API_KEY:-}
+      KAPSO_WEBHOOK_SECRET: ${KAPSO_WEBHOOK_SECRET:-}
+      KAPSO_PHONE_NUMBER_ID: ${KAPSO_PHONE_NUMBER_ID:-}
+      KAPSO_GRAPH_API_VERSION: ${KAPSO_GRAPH_API_VERSION:-v24.0}
+      KAPSO_WEBHOOK_HOST: 0.0.0.0
+      KAPSO_WEBHOOK_PORT: "8791"
+      ENGINES_WHATSAPP_BUSINESS_SLUG: ${ENGINES_WHATSAPP_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8791:8791"
+    command: ["npm", "run", "whatsapp:kapso"]
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8791/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
 volumes:
   engines_mk0_postgres:
   engines_mk0_mongo:
