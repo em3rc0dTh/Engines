@@ -67,7 +67,7 @@ jobs:
         env:
           KAPSO_API_KEY: ci-kapso-api-key
           KAPSO_WEBHOOK_SECRET: ci-kapso-webhook-secret
-          KAPSO_PHONE_NUMBER_ID: '597907523413541'
+          KAPSO_PHONE_NUMBER_ID: '123456789012345'
           KAPSO_GRAPH_API_VERSION: v24.0
         run: |
           docker compose --profile kapso up --build -d whatsapp-kapso
