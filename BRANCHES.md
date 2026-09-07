@@ -2,9 +2,9 @@
 
 ## Status
 
-**MESSAGING STACK CONSOLIDATED — CURRENT NARRATIVE SET**
+**MESSAGING STACK CONSOLIDATED — TELEGRAM SEALED — KAPSO SANDBOX PHYSICALLY VERIFIED**
 
-Snapshot date: 2026-09-04.
+Snapshot date: 2026-09-07.
 
 No branch is deleted by this document. Historical proof remains in commits, merged PRs, CI runs, artifacts and evidence receipts.
 
@@ -49,6 +49,13 @@ main
           ├── B2 Customer soft-duplicate resolution
           └── C2P Telegram official Bot API physical seal
                 ✅ CONSOLIDATED INTEGRATION ANCHOR
+                │
+                ├── build/mk1-c4p-whatsapp-cloud-api-official
+                │     Meta direct transport ✅ deterministic; physical open
+                │
+                └── build/mk1-c4p-kapso-official
+                      Kapso transport ✅ deterministic
+                      Kapso Sandbox   ✅ physically verified
 ```
 
 ## Consolidation result
@@ -90,8 +97,10 @@ Terminal consolidation merge for PR #20:
 | Services/Scheduler architecture | `design/mk1-services-scheduler-integration` | KEEP |
 | Messaging architecture | `design/mk1-telegram-whatsapp-official-channels` | KEEP AS DESIGN RECORD |
 | Customer messaging integrated anchor | `build/mk1-customer-channels-integrated` | KEEP / CURRENT BASE |
+| Direct Meta Cloud API provider | `build/mk1-c4p-whatsapp-cloud-api-official` | KEEP / ALTERNATE PROVIDER; PHYSICAL OPEN |
+| Kapso official WhatsApp provider | `build/mk1-c4p-kapso-official` | KEEP / PHYSICALLY VERIFIED MILESTONE |
 
-Former stack branches #14–#20 are now **cleanup candidates only**, because their PRs are merged into the integrated anchor. They are not deleted automatically.
+Former stack branches #14–#20 are cleanup candidates only because their PRs are merged into the integrated anchor. They are not deleted automatically.
 
 ## Current channel truth
 
@@ -102,17 +111,19 @@ C2/C4 local real-Temporal messaging E2E      ✅ AUTOMATED + HUMAN VERIFIED
 B2 Customer soft-duplicate resolution        ✅ CERTIFIED
 C2P Telegram official Bot API                ✅ PHYSICALLY VERIFIED / SEALED
 Telegram Web native request_contact UI       ⚪ CLIENT-COMPATIBILITY NOTE ONLY
-C4P real WhatsApp provider                   ⏭ NEXT
+C4P Meta Cloud API transport                 ✅ DETERMINISTIC PASS / PHYSICAL OPEN
+C4P Kapso transport                          ✅ DETERMINISTIC PASS
+C4P Kapso Sandbox real WhatsApp E2E          ✅ PHYSICALLY VERIFIED
 ```
 
 ## WhatsApp provider rule
 
-Only an official WhatsApp Business Platform route is acceptable.
+Only official WhatsApp Business Platform routes are acceptable.
 
 ```text
 WhatsAppTransportPort
-  ├── Meta Cloud API      ← first physical provider target
-  └── Kapso               ← optional later provider implementation
+  ├── Meta Cloud API      ← direct official transport, deterministic proof complete
+  └── Kapso               ← official BSP transport, Sandbox physically verified
 ```
 
 Provider code may handle webhook verification, provider identity, payload normalization and outbound rendering. It may not own Customer, Services, Scheduler, Temporal business logic or canonical persistence.
@@ -126,15 +137,26 @@ browser emulation
 reverse-engineered private clients
 ```
 
+## C4P physical evidence boundary
+
+Kapso Sandbox now proves one real WhatsApp provider path end-to-end through the same Engine. The observed physical run included interactive registration consent, Customer name/email capture, verified sender-phone prefill with no redundant phone prompt, and terminal registration completion returned to WhatsApp.
+
+Certification receipt:
+
+`mk1/Build/evidence/c4p-kapso-sandbox-physical-certification-2026-09-07.md`
+
+This does **not** certify a Kapso dedicated production number or the direct Meta Cloud API physical route.
+
 ## Current construction sequence
 
 ```text
 C2P Telegram official Bot API                ✅ CLOSED / SEALED
 messaging stack consolidation                ✅ CLOSED
-C4P Meta WhatsApp Cloud API physical proof   ← NOW
-Services S8                                  ← pending
-Scheduler runtime                            ← later
-Agent / MCP                                  ← last
+C4P Kapso Sandbox real WhatsApp provider      ✅ CLOSED / PHYSICALLY VERIFIED
+C4P direct Meta Cloud API physical proof      ⚪ OPTIONAL ALTERNATE PROVIDER PATH
+Services S8                                   ← NEXT PENDING PLATFORM GATE
+Scheduler runtime                             ← later
+Agent / MCP                                   ← last
 ```
 
 ## Cleanup rule
