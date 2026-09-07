@@ -1,0 +1,94 @@
+name: repository-structure
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'BRANCHES.md'
+      - 'docs/**'
+      - 'integrations/**'
+      - 'data-model/**'
+      - 'mk0/**'
+      - 'mk1/**'
+      - '.github/workflows/repository-structure.yml'
+  push:
+    branches:
+      - docs/repository-integration-layout-20260907
+    paths:
+      - 'README.md'
+      - 'BRANCHES.md'
+      - 'docs/**'
+      - 'integrations/**'
+      - 'data-model/**'
+      - 'mk0/**'
+      - 'mk1/**'
+      - '.github/workflows/repository-structure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate cross-version indexes
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f BRANCHES.md
+          test -f docs/README.md
+          test -f docs/REPOSITORY-ARCHITECTURE.md
+          test -f docs/BOOTSTRAP.md
+          test -f docs/MK-LIFECYCLE.md
+          test -f data-model/README.md
+          test -f data-model/V3-V4-EVOLUTION.md
+          test -f mk0/README.md
+          test -f mk0/Architecture/README.md
+          test -f mk1/README.md
+          test -f mk1/Brainstorming/README.md
+          test -f mk1/Architecture/README.md
+          test -f mk1/Design/README.md
+          test -f mk1/Plan/README.md
+          test -f mk1/Build/README.md
+          test -f mk1/Build/evidence/README.md
+          test -f mk1/Test/README.md
+          test -f mk1/mining-site/README.md
+          test -f mk1/mining-site/quarries/README.md
+          test -f mk1/golden-dataset/README.md
+
+      - name: Validate integration registry
+        run: |
+          set -euo pipefail
+          test -f integrations/README.md
+          test -f integrations/manifest.json
+          test -f integrations/_template/README.md
+          test -f integrations/_template/Brainstorming/README.md
+          test -f integrations/_template/Architecture/README.md
+          test -f integrations/_template/Design/README.md
+          test -f integrations/_template/Plan/README.md
+          test -f integrations/_template/Build/README.md
+          test -f integrations/_template/Build/evidence/README.md
+          test -f integrations/_template/Test/README.md
+          test -f integrations/_template/mining-site/README.md
+          test -f integrations/_template/mining-site/quarries/README.md
+          test -f integrations/_template/golden-dataset/README.md
+          test -f integrations/cli/README.md
+          test -f integrations/http-api/README.md
+          test -f integrations/webchat/README.md
+          test -f integrations/telegram/README.md
+          test -f integrations/whatsapp-kapso/README.md
+          test -f integrations/whatsapp-meta-cloud-api/README.md
+          jq -e '.policy == "one-repository-per-external-integration"' integrations/manifest.json >/dev/null
+          jq -e '.integrations | length >= 6' integrations/manifest.json >/dev/null
+
+      - name: Validate core architecture language
+        run: |
+          set -euo pipefail
+          grep -q 'ENGINE FIRST' docs/REPOSITORY-ARCHITECTURE.md
+          grep -q 'one repository per integration' README.md
+          grep -q 'mk0/runtime' docs/MK-LIFECYCLE.md
+          grep -q 'ResourceReservation' data-model/README.md
+          grep -q 'OperationalObservationInput' data-model/README.md
