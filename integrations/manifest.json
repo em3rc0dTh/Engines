@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "snapshotDate": "2026-09-07",
+  "coreRepository": "em3rc0dTh/Engines",
+  "policy": "one-repository-per-external-integration",
+  "integrations": [
+    {
+      "id": "cli",
+      "targetRepository": "Engines-Integration-CLI",
+      "kind": "native-lab-surface",
+      "mk": "mk0",
+      "sourceRef": "main",
+      "status": "certified-laboratory"
+    },
+    {
+      "id": "http-api",
+      "targetRepository": "Engines-Integration-HTTP-API",
+      "kind": "native-api-surface",
+      "mk": "mk0",
+      "sourceRef": "main",
+      "status": "certified-laboratory"
+    },
+    {
+      "id": "webchat",
+      "targetRepository": "Engines-Integration-WebChat",
+      "kind": "channel",
+      "mk": "mk1",
+      "sourceRef": "build/mk1-customer-channels-integrated",
+      "status": "certified-human-verified"
+    },
+    {
+      "id": "telegram",
+      "targetRepository": "Engines-Integration-Telegram",
+      "kind": "external-provider",
+      "provider": "Telegram Bot API",
+      "mk": "mk1",
+      "sourceRef": "build/mk1-customer-channels-integrated",
+      "historicalProviderRef": "build/mk1-c2-telegram-bot-api-official",
+      "status": "physically-verified-sealed"
+    },
+    {
+      "id": "whatsapp-kapso",
+      "targetRepository": "Engines-Integration-WhatsApp-Kapso",
+      "kind": "external-provider",
+      "provider": "Kapso",
+      "mk": "mk1",
+      "sourceRef": "build/mk1-customer-channels-integrated",
+      "historicalProviderRef": "build/mk1-c4p-kapso-official",
+      "status": "sandbox-physically-verified"
+    },
+    {
+      "id": "whatsapp-meta-cloud-api",
+      "targetRepository": "Engines-Integration-WhatsApp-Meta",
+      "kind": "external-provider",
+      "provider": "Meta Cloud API",
+      "mk": "mk1",
+      "sourceRef": "build/mk1-c4p-whatsapp-cloud-api-official",
+      "status": "deterministic-pass-physical-pending"
+    }
+  ]
+}
