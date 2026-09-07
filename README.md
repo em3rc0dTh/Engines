@@ -1,235 +1,192 @@
 # Engines
 
-`Engines` is a reusable operational orchestration architecture built around durable workflows rather than channel-specific business logic.
+`Engines` is the provider-neutral operational orchestration core for VertikALL. Business truth and durable workflow state live in the Engine; CLI, HTTP, WebChat, Telegram, WhatsApp and future providers are replaceable ingress/egress surfaces.
 
-## Current milestone
+## Repository role
 
-**MK0 — OBJECTIVE COMPLETE / LOCAL LABORATORY CERTIFIED**
+This repository is the **core / integration registry / canonical documentation hub**.
 
-MK0 proved that the same orchestration spine can support more than one business workflow without moving authority into the CTA/channel layer.
-
-```text
-MK0 foundation / RegisterNewCustomer       ✅ CERTIFIED
-Golden Customer dataset                   ✅ 18 / 18 PASS
-WSL2 + Docker Compose laboratory           ✅ PHYSICALLY PROVEN
-Postman Customer collection                ✅ 37 / 37 PASS
-Observability + Lab Console                ✅ CERTIFIED
-Second specimen / RegisterNewAppointment   ✅ CERTIFIED
-Customer Child Workflow reuse              ✅ PROVEN
-Service / Product catalog reads            ✅ PROVEN
-Date / slot conversation                    ✅ PROVEN
-Atomic appointment slot conflict            ✅ PROVEN
-Production deployment                       ❌ NOT CERTIFIED
-Public/internet exposure                    ❌ NOT CERTIFIED
-```
-
-The primary MK0 closure index is [`mk0/README.md`](mk0/README.md). Certification receipts are indexed in [`mk0/Build/evidence/README.md`](mk0/Build/evidence/README.md).
-
-## Proven architecture
+The target repository policy is:
 
 ```text
-CHANNELS / LAB CLIENTS
-CLI · Postman-compatible HTTP · Lab Consoles
-                ↓
-          CTA ADAPTER
- transport parsing / canonicalization
-                ↓
-       TEMPORAL / ENGINES
- durable Workflow Executions
- Query / Update / Child Workflow
- retry / replay / recovery
-                ↓
-          ACTIVITIES / PORTS
-       ┌────────┼──────────┐
-       ↓        ↓          ↓
- PostgreSQL   MongoDB   AttachmentStore
- business    semantic    binary/document
- truth       audit       truth
+Engines                                  core + shared contracts + canonical docs
+Engines-Integration-WebChat              one integration repo
+Engines-Integration-Telegram             one integration repo
+Engines-Integration-WhatsApp-Kapso       one integration repo
+Engines-Integration-WhatsApp-Meta        one integration repo
+Engines-Integration-<provider>           one repo for each future external integration
 ```
 
-Authority remains separated:
+Until those repositories are split physically, the current certified implementations remain on their bounded historical/build branches. `integrations/` in `main` is the registry that explains status, source branch, evidence, boundaries and how to boot each integration without mixing provider policy into the Engine.
 
-- **Temporal** — durable orchestration and Event History.
-- **PostgreSQL** — canonical transactional/business truth.
-- **MongoDB** — application execution/audit context; not shadow business truth.
+## Version truth
+
+```text
+MK0  ✅ CLOSED / frozen certified laboratory
+MK1  🔧 ACTIVE / staged on explicit branches
+MK2  ⚪ future
+```
+
+`main` retains the certified MK0 runtime and the cross-version registry/documentation. Active MK1 runtime work is not faked by moving `main`; it remains on explicit branches until a bounded promotion gate is approved.
+
+Canonical lifecycle:
+
+```text
+Brainstorming
+→ Mining Site / Quarries
+→ Architecture
+→ Design
+→ Plan
+→ Golden expectations
+→ Build
+→ Test / Evidence
+→ Certification
+```
+
+Every integration repository must preserve the same discipline. See [`docs/MK-LIFECYCLE.md`](docs/MK-LIFECYCLE.md) and [`integrations/_template/README.md`](integrations/_template/README.md).
+
+## Current architecture
+
+```text
+                         ENGINES
+              provider-neutral business core
+
+CLI / HTTP / WebChat / Telegram / WhatsApp / future providers
+                         ↓
+               replaceable CTA boundary
+                         ↓
+                ChannelExecutionCore
+                         ↓
+              durable channel/event ledger
+                         ↓
+                      Temporal
+                         ↓
+        Customer / Services / Scheduler / persistence
+```
+
+Authority boundaries:
+
+- **Temporal** — durable orchestration, Workflow state and Event History.
+- **PostgreSQL** — canonical transactional/business truth and durable channel-event identity.
+- **MongoDB** — execution/audit context where applicable; not shadow business truth.
 - **AttachmentStore** — binary/document integrity and lifecycle.
-- **CTA/channel** — replaceable transport boundary; not business authority.
+- **Provider adapter/transport** — authentication, provider identity, payload normalization, rendering, transport retry/ack semantics only.
+- **Customer / Services / Scheduler** — provider-agnostic domain rules.
 
-## Specimen 01 — `RegisterNewCustomer`
+Invariant:
 
-The first specimen proved:
+> **Engines comes first. CTA is a replaceable ingress boundary. CLI, API, WebChat, Telegram and WhatsApp are only different ways for a client to connect to the same Engine.**
 
-- legal intent-only starts;
-- durable multi-round Customer input;
-- pragmatic contact validation at the CTA boundary;
-- explicit finalization for interactive laboratory sessions;
-- business-scoped idempotency and exact completed-session replay;
-- hard/soft duplicate semantics;
-- PostgreSQL Customer persistence;
-- mandatory MongoDB audit before terminal success;
-- Worker/CTA process-loss recovery;
-- AttachmentStore stage/resolve/commit with SHA-256 integrity;
-- stable multiple-phone ordering while fingerprinting remains order-independent;
-- read-only unified execution trace and Lab Console.
-
-The Customer Golden Dataset contains 18 certified cases.
-
-## Specimen 02 — `RegisterNewAppointment`
-
-The second specimen proves reuse of the Engines spine rather than a one-off Customer application.
+## Current platform status
 
 ```text
-RegisterNewAppointment
-        ↓
-resolve existing Customer
-        │
-        └─ new Customer → Child Workflow: RegisterNewCustomer
-        ↓
-load Services from PostgreSQL
-        ↓
-select Service
-        ↓
-load Products from PostgreSQL
-        ↓
-select Product
-        ↓
-normalize/select date
-        ↓
-load available slots through Activity
-        ↓
-select slot
-        ↓
-READY_TO_FINALIZE
-        ↓
-finish
-        ↓
-atomic PostgreSQL booking
-        ↓
-Mongo appointment audit
-        ↓
-CREATED
+FOUNDATION
+MK0 orchestration laboratory                     ✅ CERTIFIED / FROZEN
+
+MK1 CUSTOMER + CTA
+WebChat C1A                                      ✅ CERTIFIED + HUMAN VERIFIED
+WebChat C1B durable restart/replay               ✅ CERTIFIED + HUMAN VERIFIED
+Customer Registration Policy V2                  ✅ PROVEN
+Durable ChannelExecutionCore                     ✅ PROVEN
+Customer soft-duplicate resolution B2            ✅ CERTIFIED
+Telegram local real-Temporal E2E                 ✅ AUTOMATED + HUMAN
+WhatsApp local real-Temporal E2E                 ✅ AUTOMATED + HUMAN
+Telegram official Bot API                        ✅ PHYSICALLY VERIFIED / SEALED
+WhatsApp through Kapso Sandbox                   ✅ PHYSICALLY VERIFIED
+Meta WhatsApp Cloud API                          ✅ DETERMINISTIC PASS / PHYSICAL PENDING
+
+MK1 SERVICES
+S0–S7                                            ✅ CERTIFIED
+S8 final G1 closure                              ⏭ PENDING
+
+SCHEDULER
+Architecture                                     ✅ DESIGNED
+Runtime                                          ⚪ NOT CERTIFIED
+
+AGENT / MCP / LLM ROUTING                        ❌ INTENTIONALLY LAST
 ```
 
-The clean Compose certification proved:
-
-- new Customer creation through the existing Child Workflow;
-- Car Wash Service and three Product fixtures loaded from PostgreSQL;
-- `ayer` / `yesterday` past-date rejection;
-- English/Spanish weekday normalization (`Friday` / `viernes`);
-- deterministic 30-minute laboratory slots;
-- no Appointment before explicit `finish`;
-- persisted Appointment creation;
-- exact idempotency replay;
-- two Workflows selecting the same slot while only one may persist it;
-- losing slot-race Workflow returns to durable slot selection with refreshed availability.
-
-The 30-minute slot size and the simplified `default` resource are **MK0 laboratory fixtures**, not a claim that the future Scheduler Engine is complete.
+The physically verified Kapso slice is merged into the consolidated customer-channel integration anchor. The direct Meta Cloud API implementation remains a separate bounded provider branch because its physical delivery gate has not been closed.
 
 ## Repository map
 
 ```text
 .
 ├── README.md
-├── .github/workflows/          # current active certification workflows only
+├── BRANCHES.md
+├── docs/
+│   ├── REPOSITORY-ARCHITECTURE.md
+│   ├── BOOTSTRAP.md
+│   └── MK-LIFECYCLE.md
+├── data-model/
+│   ├── README.md
+│   └── V3-V4-EVOLUTION.md
+├── integrations/
+│   ├── README.md
+│   ├── _template/
+│   ├── cli/
+│   ├── http-api/
+│   ├── webchat/
+│   ├── telegram/
+│   ├── whatsapp-kapso/
+│   └── whatsapp-meta-cloud-api/
 └── mk0/
-    ├── README.md               # canonical MK0 closure/index
-    ├── Brainstorming/          # problem framing
-    ├── Design/                 # architecture + specimen contracts
-    ├── Plan/                   # gates, decisions, closure ledger
-    ├── Build/                  # build history + evidence + archived historical CI
-    ├── Test/                   # test contracts / specimen certification notes
-    ├── mining-site/
-    │   └── quarries/           # extracted evidence packages
-    ├── golden-dataset/         # Golden / expectation manifests + synthetic fixtures
-    └── runtime/                # executable TypeScript/Temporal local laboratory
+    ├── README.md
+    ├── Brainstorming/
+    ├── Design/
+    ├── Plan/
+    ├── Build/
+    ├── Test/
+    ├── mining-site/quarries/
+    ├── golden-dataset/
+    └── runtime/
 ```
 
-The canonical documentation progression remains:
+Active MK1 branches contain the matching `mk1/` structure with `Brainstorming`, `Design`, `Plan`, `Build`, `Test`, `mining-site/quarries`, `golden-dataset` and `runtime`. The integration registry points to those branches until MK1 is promoted as a complete milestone.
 
-```text
-Brainstorming
-→ Mining Site / Quarries
-→ Design
-→ Plan
-→ Golden expectations
-→ Build
-→ Test / Evidence
-```
+## Quick start
 
-## Current active CI
-
-Historical B0–B6 stage workflows and the obsolete attachment-free core workflow are preserved under [`mk0/Build/ci-archive/`](mk0/Build/ci-archive/) rather than running on every new PR.
-
-Current active workflows focus on the latest laboratory surface:
-
-- B7/AttachmentStore regression;
-- B7 clean Compose certification;
-- Lab Console / trace certification;
-- `RegisterNewAppointment` certification;
-- MK0 release/closure certification.
-
-Historical GitHub Actions runs and their receipts remain part of the evidence chain.
-
-## Local laboratory
-
-```text
-Host             Windows + WSL2
-Runtime          Linux / Node / TypeScript
-Deployment       Docker Compose
-CTA              http://127.0.0.1:8787
-Temporal gRPC    localhost:7233
-Temporal UI      http://localhost:8233
-PostgreSQL       private Compose network
-MongoDB          private Compose network
-AttachmentStore shared Docker filesystem volume
-Cloud dependency none
-```
-
-From `mk0/runtime`:
+For the stable MK0 laboratory:
 
 ```bash
+git clone https://github.com/em3rc0dTh/Engines.git
+cd Engines/mk0/runtime
 npm ci
 npm run check
 docker compose up --build -d
 curl -fsS http://127.0.0.1:8787/health
 ```
 
-Interactive Customer laboratory:
+For MK1 and provider-specific boot commands, use [`docs/BOOTSTRAP.md`](docs/BOOTSTRAP.md). Secrets are always environment-only and must never be committed.
 
-```bash
-npm run lab:console
-```
+## Data model direction
 
-Interactive Appointment laboratory:
+The repository tracks the operational data-model evolution separately from runtime certification. The supplied v3 baseline formalizes WorkTeams, schedule rules/overrides, 15-minute micro-slots and `ResourceReservation`; the supplied v4 companion adds the Operational Input Layer, granular provenance, `WorkOrderRequirement`, dimensional validation/outcome state and non-linear corrective cycles while retaining v3 as the cumulative base.
 
-```bash
-npm run lab:appointment
-```
+See [`data-model/README.md`](data-model/README.md). The English v4 companion explicitly states that the Spanish v4 document remains canonical; this repository does not silently promote the English companion above that source.
 
 ## Evidence discipline
-
-MK0 preserves these rules:
 
 ```text
 UNKNOWN != PASS
 documented != verified
-CI green != product-ready unless the gate proves the product claim
-observed != supported
+CI green != external-provider physical certification
+runtime source SHA != later documentation SHA
+provider-specific code != business policy
+availability shown != reservation persisted
+execution completed != outcome accepted
 ```
 
-A runtime claim must point to an identified source revision and receipt. Documentation-only heads must not be presented as if the runtime was executed against them.
+Every bounded claim must point to identified source, CI/human evidence and a clear non-claim boundary.
 
-## What MK0 does not claim
+## What Engines does not currently claim
 
-MK0 does **not** certify:
+- production deployment/readiness;
+- production webhook hosting or secret lifecycle;
+- direct Meta WhatsApp physical certification;
+- completed Scheduler runtime;
+- warehouse/inventory/procurement semantics from the v4 data-model seam;
+- Agent/MCP/LLM routing;
+- automatic creation of separate GitHub repositories for integration extraction.
 
-- production deployment;
-- public exposure/security hardening;
-- every channel;
-- a finished Scheduler Engine;
-- final ResourceReservation/WorkTeam capacity semantics;
-- Agent/Hermes;
-- a complete Services or Integration Engine;
-- the final Engines product/control-room UI.
-
-> MK0 answered the architecture question: **Engines can durably orchestrate and compose multiple business workflows while keeping channels replaceable and persistence authorities explicit.**
+The integration folders in `main` are the canonical organization and extraction map; physical repo splitting is a separate repository-administration step.
