@@ -24,12 +24,15 @@ export class WhatsAppAdapter implements ChannelAdapter<VerifiedWhatsAppInbound> 
     if (event.kind === 'INTERACTIVE') {
       if (event.interactiveId === 'register_customer_no') return undefined;
       if (event.interactiveId === 'register_customer_yes') {
+        const draft = event.senderPhone
+          ? { customer: { contact: { phones: [{ number: event.senderPhone, isWhatsapp: true, primary: true }] } } }
+          : undefined;
         return {
           ...base,
           action: 'START_CUSTOMER_REGISTRATION',
           payload: {
             consentAccepted: true,
-            draft: { customer: { contact: { phones: [{ number: event.senderPhone, isWhatsapp: true, primary: true }] } } },
+            ...(draft ? { draft } : {}),
           },
         };
       }
