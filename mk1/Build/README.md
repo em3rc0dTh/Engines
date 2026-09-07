@@ -18,19 +18,16 @@ G1 Services
   S8                                  ⏭ PENDING
   G1 overall                          ❌ NOT YET FULLY CERTIFIED
 
-Customer / CTA channel proof
+Customer / CTA channels
   C0A Workflow-view projection        ✅ CERTIFIED
   C1A WebChat                         ✅ CERTIFIED + HUMAN VERIFIED
   C1B durable WebChat                 ✅ CERTIFIED + HUMAN RESTART VERIFIED
   B2 Customer soft-duplicate resolve  ✅ CERTIFIED
-  Telegram adapter                    ✅ LOCAL HARNESS PROVEN
-  WhatsApp adapter                    ✅ LOCAL HARNESS PROVEN
-  C2/C4 local real-Temporal E2E       ✅ AUTOMATED PASS
-  C2 Telegram local human E2E         ✅ HUMAN VERIFIED
-  C4 WhatsApp local human E2E         ✅ HUMAN VERIFIED
-  C2/C4 combined human gate           ✅ HUMAN VERIFIED
-  B2 duplicate-decision UI            ⏳ HUMAN OBSERVATION OPTIONAL
-  real provider proof                 ⚪ NOT CERTIFIED
+  C2/C4 local real-Temporal E2E       ✅ AUTOMATED + HUMAN VERIFIED
+  C2P Telegram official Bot API       ✅ PHYSICALLY VERIFIED / SEALED
+  C4P Meta Cloud API transport        ✅ DETERMINISTIC PASS / PHYSICAL OPEN
+  C4P Kapso transport                 ✅ DETERMINISTIC PASS
+  C4P Kapso Sandbox                   ✅ PHYSICALLY VERIFIED
 ```
 
 ## Evidence ledger
@@ -51,104 +48,104 @@ Customer / CTA channel proof
 | C1B | `2008fce4f863fdabf8e8f323eee1d7cda05cb454` | `33647842017` | `100307008849` | `9853555059` | `efa65255fdc4c8569f55cefd38202145d2feb5a275d1c897f4b58dbb10a023bf` | [`c1b-durable-channel-certification-2026-09-02.md`](evidence/c1b-durable-channel-certification-2026-09-02.md) |
 | C2/C4 local interactive E2E | `bfccd4a795400d2311201a880453b61b08d0b56a` | `33896424897` | `101100019937` | `9945929946` | `92b883ba035987274fbd7cc84f33b574118239eb19fa13990c4ec32a72e59c1e` | [`c2-c4-local-interactive-e2e-certification-2026-09-04.md`](evidence/c2-c4-local-interactive-e2e-certification-2026-09-04.md) |
 | B2 Customer soft-duplicate resolution | `36afff68af3237bd6431fd643d7d969e5452a296` | `33899907141` | `101111281727` | `9947248334` | `2c02680d9e268957924303ab1113d71f0d872319b611a6ede3faca0a01ed678a` | [`b2-customer-soft-duplicate-resolution-certification-2026-09-04.md`](evidence/b2-customer-soft-duplicate-resolution-certification-2026-09-04.md) |
+| C2P Telegram physical | `28dd5c9f2dd2352d3e11b83cc6602cea1b568760` | `33927626629` | `101199465863` | `9957384230` | `46bbd55f0b2c061ec9b7e61d55323dca0f5488d410120a3ac5b4510b90bdd79c` | [`c2p-telegram-official-bot-api-physical-seal-2026-09-04.md`](evidence/c2p-telegram-official-bot-api-physical-seal-2026-09-04.md) |
+| C4P Meta Cloud API deterministic | `72eb616153a8c4494f240ea825299e18d4aef156` | `33929572965` | `101205251200` | `9958063555` | `1bd75eaa752338cc9859bc0ee83190bf87afa00e994c562510209edf491b3ae2` | [`c4p-meta-whatsapp-cloud-api-deterministic-2026-09-04.md`](evidence/c4p-meta-whatsapp-cloud-api-deterministic-2026-09-04.md) |
+| C4P Kapso deterministic | `8662a06c5787add829df36bea7e3f8ec5f1ecdf4` | `34141751510` | `101805053784` | `10026183649` | `d27d49d6e78a02b911992ffea35ab9551f8a04be95b8ef006ccf35a74e5a4c1f` | [`c4p-kapso-official-deterministic-2026-09-07.md`](evidence/c4p-kapso-official-deterministic-2026-09-07.md) |
+| C4P Kapso Sandbox physical | human observation + deterministic authority above | — | — | — | — | [`c4p-kapso-sandbox-physical-certification-2026-09-07.md`](evidence/c4p-kapso-sandbox-physical-certification-2026-09-07.md) |
 
-## B2 — Customer soft-duplicate resolution
+## Messaging consolidation
 
-The human C2/C4 test exposed a real Customer-domain state rather than a transport failure:
-
-```text
-WAITING_FOR_DUPLICATE_DECISION / RESOLVE_DUPLICATE
-```
-
-B2 adds one deterministic shared domain operation:
+The temporary PR stack #14–#20 was merged, in order, into the stable MK1 messaging integration anchor:
 
 ```text
-RESOLVE_CUSTOMER_DUPLICATE
-  → USE_EXISTING
-  → CREATE_NEW
+build/mk1-customer-channels-integrated
 ```
 
-The provider does not decide duplicate truth. The core reads the live candidate set from Temporal; `USE_EXISTING` may resolve only to a current candidate and the current messaging slice fails closed when more than one candidate exists.
+The merge strategy used merge commits so original runtime/certification source SHAs remain reachable. `main`, `developer`, `release/mk0-complete` and `mk0/runtime` were not moved.
 
-The successful full runtime probe emitted:
+## C2P — Telegram official provider
+
+C2P is physically sealed. Real BotFather/Telegram traffic crossed the official Bot API into the same Customer channel core and real Temporal `RegisterNewCustomer`, then returned completion through Telegram. Telegram Web's native `request_contact` rendering remains only a client-compatibility note.
+
+## C4P — WhatsApp providers
+
+### Direct Meta Cloud API
+
+The direct Meta transport is deterministic-pass only. It implements Meta webhook verification, payload normalization and Graph API outbound messaging below `WhatsAppTransportPort`, but its physical provider route is not sealed.
+
+### Kapso
+
+Kapso is now both deterministic-pass and physically verified in Sandbox.
+
+The human physical run observed:
 
 ```text
-CUSTOMER_B2_INVALID_CANDIDATE_REJECTED_PASS
-CUSTOMER_B2_DUPLICATE_DECISION_REPLAY_PASS
-CUSTOMER_B2_USE_EXISTING_PASS
-CUSTOMER_B2_CREATE_NEW_PASS
-CUSTOMER_B2_SOFT_DUPLICATE_RESOLUTION_PASS
+real WhatsApp initial message
+→ consent UI delivered by Engines
+→ interactive consent
+→ Customer name capture
+→ verified sender phone prefilled / no phone reprompt
+→ Customer email capture
+→ terminal registration completion returned to WhatsApp
 ```
 
-The clean cross-channel run also proved Telegram `CREATED` → WhatsApp same-email `SOFT_MATCH` → explicit `USE_EXISTING` → `ALREADY_EXISTS`, with the exact same Customer ID and no redundant WhatsApp phone prompt.
+The screenshot supplied by the operator contained personal contact material and is intentionally not committed. Human behavior is recorded at [`../Test/c4p-kapso-sandbox-human-verification-2026-09-07.md`](../Test/c4p-kapso-sandbox-human-verification-2026-09-07.md).
 
-## Human evidence
-
-The user's manual local test is recorded at [`../Test/c2-c4-local-interactive-human-verification-2026-09-04.md`](../Test/c2-c4-local-interactive-human-verification-2026-09-04.md).
-
-Current human truth:
+This proves one real WhatsApp provider path without giving Kapso ownership of Customer, Temporal or persistence logic:
 
 ```text
-Telegram normal local registration                ✅ PASS
-Telegram invalid phone → same Workflow recovery   ✅ PASS
-WhatsApp sender phone prefilled                    ✅ PASS
-WhatsApp phone not requested again                 ✅ PASS
-WhatsApp real Temporal registration → CREATED      ✅ PASS
-C2/C4 combined local interactive gate              ✅ HUMAN VERIFIED
+WhatsApp
+→ Kapso Sandbox
+→ signed v2 webhook
+→ OfficialKapsoTransport
+→ WhatsAppAdapter
+→ CustomerRegistrationChannelExecutionCore
+→ PostgreSQL
+→ Temporal RegisterNewCustomer
+→ Customer
+→ Kapso outbound API
+→ WhatsApp
 ```
 
-The final WhatsApp human run used unique Customer material, so the B2 duplicate-decision UI was not separately observed by the operator. B2 remains runtime-certified independently; that optional UI observation is not required to keep C2/C4 human closure valid.
+No Kapso Workflow, Kapso Agent, Agent, MCP or LLM routing was used.
 
-## Failure provenance
+## Failure provenance retained
 
-Failures are retained rather than erased.
+Historical failures remain in their individual receipts rather than being rewritten away, including the initial C2/C4 non-TTY readline failure and the B2 probe identity-conflict failure. Their fixes did not weaken Engine invariants.
 
-### C2/C4 interactive first attempt
-
-```text
-Run       33896062496
-Job       101098866437
-Result    FAILURE
-Artifact  9945799079
-SHA256    208db06ce14ef9f9cada55db1b485117350fe2a3e2a2a61d63ac9038ab2fdc2e
-Stage     terminal harness before first canonical event
-Cause     piped stdin closed readline under non-TTY Compose execution
-```
-
-The runtime fix separated scripted CI mode from human readline mode. No Engine business rule was weakened.
-
-### B2 full-probe identity failure
-
-```text
-Source    38d32ac415fb3853f2e091d21ad49683f1761705
-Run       33899701530
-Job       101110615612
-Result    FAILURE
-Stage     full B2 domain golden probe
-Cause     probe reused one synthetic externalMessageId across multiple conversations
-```
-
-The durable channel ledger correctly detected the conflict. The probe identity was fixed; no domain invariant changed. Full B2 authority is source `36afff68...`, run `33899907141`.
-
-Historical S3/S4/S6/C1A/C1B failure/supersession provenance remains in their individual receipts.
+The Kapso physical run itself completed the normal path. Invalid-input recovery was not separately re-observed on Kapso, so no new provider-specific physical claim is made for that behavior.
 
 ## Current evidence boundary
 
 We may claim:
 
 ```text
-C2/C4 local interactive deterministic E2E ✅ AUTOMATED PASS
-C2/C4 local interactive deterministic E2E ✅ HUMAN VERIFIED
-B2 CUSTOMER SOFT-DUPLICATE RESOLUTION      ✅ CERTIFIED
+C2/C4 LOCAL INTERACTIVE E2E              ✅ AUTOMATED + HUMAN VERIFIED
+B2 CUSTOMER SOFT-DUPLICATE RESOLUTION    ✅ CERTIFIED
+C2P TELEGRAM OFFICIAL BOT API             ✅ PHYSICALLY VERIFIED / SEALED
+C4P META CLOUD API TRANSPORT              ✅ BUILT / DETERMINISTIC PASS
+C4P KAPSO TRANSPORT                       ✅ BUILT / DETERMINISTIC PASS
+C4P KAPSO SANDBOX                         ✅ PHYSICALLY VERIFIED
 ```
 
-No current receipt certifies real Telegram Bot API, Meta Cloud API, Kapso, public webhooks, outbound campaigns, Scheduler runtime, Agent/MCP or production readiness.
+We may **not** claim:
+
+```text
+C4P direct Meta Cloud API                  ❌ PHYSICALLY CERTIFIED
+Kapso dedicated production number          ❌
+production WhatsApp webhook hosting        ❌
+production token/secret lifecycle          ❌
+WhatsApp campaigns/templates product       ❌
+Scheduler runtime                          ❌
+Agent / MCP                                ❌
+production readiness                       ❌
+```
 
 ## Current next work
 
 ```text
-Channel track   real Telegram Bot API proof
-Services track  S8 final G1 closure pending
+Channel track   real WhatsApp provider via Kapso Sandbox ✅ CLOSED
+Services track  S8 final G1 closure                         ← NEXT
 Scheduler       runtime later
 Agent / MCP     last
 ```

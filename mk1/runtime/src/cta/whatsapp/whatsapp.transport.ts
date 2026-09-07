@@ -6,7 +6,7 @@ export type VerifiedWhatsAppInbound = Readonly<{
   conversationId: string;
   messageId: string;
   senderId: string;
-  senderPhone: string;
+  senderPhone?: string;
   kind: 'TEXT' | 'INTERACTIVE';
   text?: string;
   interactiveId?: string;
@@ -29,14 +29,22 @@ export function verifyHmacSha256(body: string, signature: string | undefined, se
 }
 
 type ProviderPayload = Readonly<{
-  conversationId: string; messageId: string; senderId: string; senderPhone: string;
-  kind: 'TEXT' | 'INTERACTIVE'; text?: string; interactiveId?: string;
+  conversationId: string;
+  messageId: string;
+  senderId: string;
+  senderPhone?: string;
+  kind: 'TEXT' | 'INTERACTIVE';
+  text?: string;
+  interactiveId?: string;
 }>;
 
 function parseProviderPayload(body: string): ProviderPayload {
   const value = JSON.parse(body) as Partial<ProviderPayload>;
-  for (const key of ['conversationId', 'messageId', 'senderId', 'senderPhone'] as const) {
+  for (const key of ['conversationId', 'messageId', 'senderId'] as const) {
     if (typeof value[key] !== 'string' || !value[key]?.trim()) throw new Error(`WHATSAPP_EVENT_INVALID:${key}`);
+  }
+  if (value.senderPhone !== undefined && (typeof value.senderPhone !== 'string' || !value.senderPhone.trim())) {
+    throw new Error('WHATSAPP_EVENT_INVALID:senderPhone');
   }
   if (value.kind !== 'TEXT' && value.kind !== 'INTERACTIVE') throw new Error('WHATSAPP_EVENT_INVALID:kind');
   return value as ProviderPayload;
@@ -58,7 +66,11 @@ export class MetaCloudApiTransport extends HmacWhatsAppTransport {
   readonly signatureHeader = 'x-hub-signature-256';
 }
 
+/**
+ * Legacy deterministic Kapso seam retained for existing harnesses.
+ * Real Kapso v2 physical webhooks are decoded by whatsapp.kapso.ts.
+ */
 export class KapsoTransport extends HmacWhatsAppTransport {
   readonly provider = 'KAPSO' as const;
-  readonly signatureHeader = 'x-kapso-signature';
+  readonly signatureHeader = 'x-webhook-signature';
 }
