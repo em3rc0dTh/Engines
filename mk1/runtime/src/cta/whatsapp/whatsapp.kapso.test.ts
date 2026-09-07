@@ -5,7 +5,7 @@ import { WhatsAppAdapter } from './whatsapp.adapter.js';
 import { decodeKapsoWebhook, KapsoWhatsAppApiClient } from './whatsapp.kapso.js';
 
 const secret = 'kapso-test-secret';
-const phoneNumberId = '597907523413541';
+const phoneNumberId = '123456789012345';
 
 function signed(body: string, extra: Readonly<Record<string, string>> = {}): Readonly<Record<string, string>> {
   return {
