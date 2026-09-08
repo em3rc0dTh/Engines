@@ -1,4 +1,5 @@
-import type { CustomerRegistrationRenderIntent } from '../channel-core/types.js';
+import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import type { AppointmentRenderIntent, CustomerRegistrationRenderIntent } from '../channel-core/types.js';
 
 export type TelegramRender = Readonly<{ text: string; replyMarkup?: Readonly<Record<string, unknown>> }>;
 
@@ -43,5 +44,113 @@ export function renderTelegramRegistration(intent: 'CONSENT' | CustomerRegistrat
     };
     case 'FINALIZE_REGISTRATION': return { text: 'Tus datos están completos. Confirma para finalizar.' };
     case 'WAIT': return { text: 'Un momento, estamos procesando tu registro.' };
+  }
+}
+
+export function telegramAppointmentRenderIntent(state: AppointmentStateProjection): AppointmentRenderIntent {
+  if (state.workflowStatus === 'FAILED' || state.phase === 'FAILED') return 'APPOINTMENT_FAILED';
+  if (state.workflowStatus === 'COMPLETED' && state.phase === 'CREATED') return 'APPOINTMENT_COMPLETE';
+
+  switch (state.phase) {
+    case 'WAITING_FOR_CUSTOMER': {
+      const customer = state.customer.customer;
+      if (!customer?.name?.trim()) return 'ASK_CUSTOMER_NAME';
+      if (!customer.contact?.email?.trim()) return 'ASK_CUSTOMER_EMAIL';
+      if (!customer.contact?.phones?.[0]?.number?.trim()) return 'ASK_CUSTOMER_PHONE';
+      return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
+    }
+    case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
+    case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
+    case 'WAITING_FOR_DATE': return 'ASK_DATE';
+    case 'WAITING_FOR_SLOT': return 'SELECT_SLOT';
+    case 'READY_TO_FINALIZE': return 'FINALIZE_APPOINTMENT';
+    case 'CREATED': return 'APPOINTMENT_COMPLETE';
+    case 'STARTED':
+    case 'RESOLVING_CUSTOMER':
+    case 'CUSTOMER_READY':
+    case 'LOADING_SERVICES':
+    case 'LOADING_PRODUCTS':
+    case 'LOADING_SLOTS':
+    case 'RESERVING_APPOINTMENT':
+      return 'WAIT';
+  }
+}
+
+function inlineRows(items: readonly Readonly<{ text: string; callback_data: string }>[]): Readonly<Record<string, unknown>> {
+  return { inline_keyboard: items.map((item) => [item]) };
+}
+
+export function renderTelegramAppointment(
+  state: AppointmentStateProjection,
+  intent: AppointmentRenderIntent = telegramAppointmentRenderIntent(state),
+): TelegramRender {
+  switch (intent) {
+    case 'ASK_CUSTOMER_NAME': return {
+      text: 'Vamos a registrar tu cita. ¿Cuál es tu nombre?',
+      replyMarkup: { remove_keyboard: true },
+    };
+    case 'ASK_CUSTOMER_EMAIL': return {
+      text: '¿Cuál es tu correo?',
+      replyMarkup: { remove_keyboard: true },
+    };
+    case 'ASK_CUSTOMER_PHONE': return {
+      text: '¿Cuál es tu teléfono? Puedes compartirlo con el botón o escribirlo.',
+      replyMarkup: {
+        keyboard: [[{ text: 'Compartir teléfono', request_contact: true }]],
+        is_persistent: true,
+        resize_keyboard: true,
+        input_field_placeholder: 'Comparte tu teléfono o escríbelo',
+      },
+    };
+    case 'RESOLVE_CUSTOMER': return {
+      text: 'Tus datos están completos. Ahora resolveremos el cliente.',
+      replyMarkup: inlineRows([{ text: 'Continuar', callback_data: 'appointment_resolve_customer' }]),
+    };
+    case 'SELECT_SERVICE': return {
+      text: 'Selecciona el servicio para tu cita.',
+      replyMarkup: inlineRows(state.services.map((service) => ({
+        text: service.name,
+        callback_data: `appointment_service:${service.serviceId}`,
+      }))),
+    };
+    case 'SELECT_OFFERING': return {
+      text: 'Selecciona la opción que deseas reservar.',
+      replyMarkup: inlineRows(state.products.map((product) => ({
+        text: product.name,
+        callback_data: `appointment_offering:${product.productId}`,
+      }))),
+    };
+    case 'ASK_DATE': return {
+      text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».',
+      replyMarkup: { remove_keyboard: true },
+    };
+    case 'SELECT_SLOT': return {
+      text: 'Selecciona un horario disponible.',
+      replyMarkup: inlineRows(state.availableSlots.map((slot) => ({
+        text: `${slot.start}–${slot.end}`,
+        callback_data: `appointment_slot:${slot.start}`,
+      }))),
+    };
+    case 'FINALIZE_APPOINTMENT': return {
+      text: 'Todo está listo. Confirma para crear la cita.',
+      replyMarkup: inlineRows([{ text: 'Confirmar cita', callback_data: 'appointment_finalize' }]),
+    };
+    case 'APPOINTMENT_COMPLETE': {
+      const appointmentId = state.result?.appointmentId ?? 'created';
+      const date = state.result?.appointmentDate ?? state.appointmentDate ?? '';
+      const slot = state.result?.slot ?? state.selectedSlot;
+      return {
+        text: `✅ Cita creada.\n\nID: ${appointmentId}${date ? `\nFecha: ${date}` : ''}${slot ? `\nHora: ${slot.start}–${slot.end}` : ''}`,
+        replyMarkup: { remove_keyboard: true },
+      };
+    }
+    case 'APPOINTMENT_FAILED': return {
+      text: `No pudimos completar la cita.${state.failure?.code ? `\n\nCódigo: ${state.failure.code}` : ''}`,
+      replyMarkup: { remove_keyboard: true },
+    };
+    case 'WAIT': return {
+      text: 'Un momento, estamos procesando tu cita.',
+      replyMarkup: { remove_keyboard: true },
+    };
   }
 }
