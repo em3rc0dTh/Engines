@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import { WhatsAppAdapter } from './whatsapp.adapter.js';
 import { renderWhatsAppAppointment, renderWhatsAppRegistration } from './whatsapp.renderer.js';
-import { MetaCloudApiTransport } from './whatsapp.transport.js';
+import { MetaCloudApiTransport, type VerifiedWhatsAppInbound } from './whatsapp.transport.js';
 
 const body = JSON.stringify({
   conversationId: 'conv-1', messageId: 'wamid-1', senderId: '51999111222', senderPhone: '+51999111222',
@@ -14,6 +14,19 @@ const secret = 'test-secret';
 const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 const transport = new MetaCloudApiTransport(secret, async () => {});
 const adapter = new WhatsAppAdapter();
+
+function asTextEvent(base: VerifiedWhatsAppInbound, text: string): VerifiedWhatsAppInbound {
+  return {
+    verified: true,
+    provider: base.provider,
+    conversationId: base.conversationId,
+    messageId: base.messageId,
+    senderId: base.senderId,
+    ...(base.senderPhone ? { senderPhone: base.senderPhone } : {}),
+    kind: 'TEXT',
+    text,
+  };
+}
 
 test('WA-RNC-005 rejects an unauthenticated webhook before the adapter', () => {
   assert.throws(() => transport.verifyAndNormalize(body, { 'x-hub-signature-256': 'sha256=00' }), /UNAUTHENTICATED/);
@@ -33,7 +46,8 @@ test('WA-RNC-002 consent start prefills verified sender phone', () => {
 });
 
 test('WA-RNC-003 text needs a core-derived intent and maps to one patch', () => {
-  const event = { ...transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature }), kind: 'TEXT' as const, text: 'eduardo@example.com' };
+  const base = transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature });
+  const event = asTextEvent(base, 'eduardo@example.com');
   assert.deepEqual(adapter.normalizeInbound(event, {
     businessSlug: 'golden-business', registrationRenderIntent: 'ASK_CUSTOMER_EMAIL',
   })?.payload, { customerPatch: { contact: { email: 'eduardo@example.com' } } });
@@ -63,7 +77,7 @@ test('WhatsApp renderer exposes duplicate-decision interactives', () => {
 
 test('WA-APPT-001 appointment text command enters canonical appointment path with verified phone provenance', () => {
   const base = transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature });
-  const event = { ...base, kind: 'TEXT' as const, text: '/appointment', interactiveId: undefined };
+  const event = asTextEvent(base, '/appointment');
   const envelope = adapter.normalizeInbound(event, { businessSlug: 'golden-business' });
   assert.equal(envelope?.action, 'START_APPOINTMENT');
   assert.deepEqual(envelope?.payload, {
@@ -75,7 +89,7 @@ test('WA-APPT-001 appointment text command enters canonical appointment path wit
 
 test('WA-APPT-002 appointment customer text maps only in durable appointment context', () => {
   const base = transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature });
-  const event = { ...base, kind: 'TEXT' as const, text: 'Eduardo', interactiveId: undefined };
+  const event = asTextEvent(base, 'Eduardo');
   const envelope = adapter.normalizeInbound(event, {
     businessSlug: 'golden-business', appointmentRenderIntent: 'ASK_CUSTOMER_NAME',
   });
