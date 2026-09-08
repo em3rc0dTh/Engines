@@ -62,6 +62,23 @@ function channelKind(raw: string | null): ChannelKind | undefined {
   return undefined;
 }
 
+function projectTerminalTemporalFailure(
+  state: AppointmentStateProjection,
+  closeTime: Date | undefined,
+): AppointmentStateProjection {
+  if (!closeTime || state.workflowStatus !== 'RUNNING') return state;
+  return {
+    ...state,
+    workflowStatus: 'FAILED',
+    phase: 'FAILED',
+    nextAction: 'NONE',
+    failure: state.failure ?? {
+      code: 'APPOINTMENT_WORKFLOW_FAILED',
+      message: 'Temporal workflow execution closed without a completed Appointment',
+    },
+  };
+}
+
 async function run(): Promise<void> {
   const config = loadRuntimeConfig();
   const pool = new Pool({ connectionString: config.postgresUrl, max: 8 });
@@ -140,8 +157,9 @@ async function run(): Promise<void> {
             return;
           }
           const handle = appointmentPort.client.workflow.getHandle(binding.workflowId);
-          const state = await handle.query(getAppointmentStateQuery) as AppointmentStateProjection;
+          const queriedState = await handle.query(getAppointmentStateQuery) as AppointmentStateProjection;
           const description = await handle.describe();
+          const state = projectTerminalTemporalFailure(queriedState, description.closeTime);
           const bindingStatus = state.workflowStatus === 'COMPLETED'
             ? 'COMPLETED'
             : state.workflowStatus === 'FAILED' ? 'FAILED' : 'ACTIVE';
