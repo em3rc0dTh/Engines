@@ -44,6 +44,13 @@ type ActionHandler = (
   envelope: CanonicalChannelEnvelope,
 ) => Promise<unknown>;
 
+export interface CatalogOfferingResolver {
+  getOffering(businessSlug: string, offeringIdOrCode: string): Promise<Readonly<{
+    serviceId: string;
+    offeringId: string;
+  }> | undefined>;
+}
+
 function record(value: unknown): JsonRecord | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonRecord
@@ -129,6 +136,7 @@ export class AppointmentChannelExecutionCore {
   constructor(
     private readonly repository: PostgresChannelRepository,
     private readonly appointmentPort: TemporalRegisterNewAppointmentPort,
+    private readonly catalog?: CatalogOfferingResolver,
   ) {}
 
   async execute(envelope: CanonicalChannelEnvelope): Promise<CanonicalChannelExecutionResponse> {
@@ -196,10 +204,10 @@ export class AppointmentChannelExecutionCore {
     });
     if (!binding) throw new ChannelExecutionError('CHANNEL_CONVERSATION_NOT_BOUND');
 
-    const handler = ACTION_HANDLERS.get(envelope.action);
-    if (!handler) throw new ChannelExecutionError('CHANNEL_OPERATION_NOT_SUPPORTED');
     const handle = this.appointmentPort.client.workflow.getHandle(binding.workflowId);
-    const operationResult = await handler(handle, envelope);
+    const operationResult = envelope.action === 'SELECT_OFFERING' && this.catalog
+      ? await this.selectCatalogOffering(handle, envelope)
+      : await this.executeHandler(handle, envelope);
     const state = await handle.query(getAppointmentStateQuery);
     const description = await handle.describe();
     const bindingStatus = state.workflowStatus === 'COMPLETED'
@@ -222,5 +230,37 @@ export class AppointmentChannelExecutionCore {
       binding: updatedBinding,
       operationResult,
     };
+  }
+
+  private async executeHandler(handle: WorkflowHandle, envelope: CanonicalChannelEnvelope): Promise<unknown> {
+    const handler = ACTION_HANDLERS.get(envelope.action);
+    if (!handler) throw new ChannelExecutionError('CHANNEL_OPERATION_NOT_SUPPORTED');
+    return handler(handle, envelope);
+  }
+
+  /**
+   * Canonical channels choose one CatalogOffering. The inherited Appointment
+   * Workflow still stores a Service projection, so this compatibility seam
+   * derives that parent internally without exposing a mandatory Service step.
+   */
+  private async selectCatalogOffering(handle: WorkflowHandle, envelope: CanonicalChannelEnvelope): Promise<unknown> {
+    const raw = envelope.payload.catalogOfferingId ?? envelope.payload.productId;
+    if (typeof raw !== 'string' || !raw.trim()) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'catalogOfferingId');
+    const offering = await this.catalog!.getOffering(envelope.businessSlug, raw.trim());
+    if (!offering) throw new ChannelExecutionError('PRODUCT_NOT_FOUND', raw.trim());
+    const state = await handle.query(getAppointmentStateQuery);
+    if (state.phase === 'WAITING_FOR_SERVICE') {
+      await handle.executeUpdate(selectAppointmentServiceUpdate, {
+        args: [{ inputId: `${channelOperationInputId(envelope)}:offering-parent`, serviceId: offering.serviceId }],
+      });
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const current = await handle.query(getAppointmentStateQuery);
+        if (current.phase === 'WAITING_FOR_PRODUCT') break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    return handle.executeUpdate(selectAppointmentProductUpdate, {
+      args: [{ inputId: channelOperationInputId(envelope), productId: offering.offeringId }],
+    });
   }
 }

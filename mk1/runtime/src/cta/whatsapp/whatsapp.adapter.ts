@@ -22,6 +22,12 @@ export class WhatsAppAdapter implements ChannelAdapter<VerifiedWhatsAppInbound> 
       externalSenderId: `whatsapp:user:${event.senderId}`,
     };
     if (event.kind === 'INTERACTIVE') {
+      if (event.interactiveId === 'register_appointment') {
+        const draft = event.senderPhone
+          ? { customer: { customer: { contact: { phones: [{ number: event.senderPhone, isWhatsapp: true, primary: true }] } } } }
+          : undefined;
+        return { ...base, action: 'START_APPOINTMENT', payload: { ...(draft ? { draft } : {}) } };
+      }
       if (event.interactiveId === 'register_customer_no') return undefined;
       if (event.interactiveId === 'register_customer_yes') {
         const draft = event.senderPhone

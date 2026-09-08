@@ -1,4 +1,11 @@
-export type ChannelKind = 'WEBCHAT' | 'TELEGRAM' | 'WHATSAPP';
+export type ChannelKind =
+  | 'WEBCHAT'
+  | 'TELEGRAM'
+  | 'WHATSAPP'
+  | 'API'
+  | 'MESSENGER'
+  | 'FACEBOOK_COMMENT'
+  | 'TIKTOK';
 
 export type CanonicalChannelAction =
   | 'START_CUSTOMER_REGISTRATION'

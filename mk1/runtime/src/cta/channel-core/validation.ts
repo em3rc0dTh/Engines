@@ -13,7 +13,15 @@ function stringField(body: JsonRecord, key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-const CHANNELS = new Set<ChannelKind>(['WEBCHAT', 'TELEGRAM', 'WHATSAPP']);
+const CHANNELS = new Set<ChannelKind>([
+  'WEBCHAT',
+  'TELEGRAM',
+  'WHATSAPP',
+  'API',
+  'MESSENGER',
+  'FACEBOOK_COMMENT',
+  'TIKTOK',
+]);
 const ACTIONS = new Set<CanonicalChannelAction>([
   'START_CUSTOMER_REGISTRATION',
   'PROVIDE_CUSTOMER_DATA',

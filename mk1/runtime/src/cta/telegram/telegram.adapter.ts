@@ -41,6 +41,9 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
 
     if (callback) {
       const data = id(callback.data, 'callback_query.data');
+      if (data === 'register_appointment') {
+        return { ...base, action: 'START_APPOINTMENT', payload: {} };
+      }
       if (data === 'register_customer_no') return undefined;
       if (data === 'register_customer_yes') {
         return { ...base, action: 'START_CUSTOMER_REGISTRATION', payload: { consentAccepted: true } };
@@ -71,6 +74,9 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
     }
 
     const text = typeof message?.text === 'string' ? message.text.trim() : '';
+    if (text === '/appointment' || text === '/cita') {
+      return { ...base, action: 'START_APPOINTMENT', payload: {} };
+    }
     const intent = route.registrationRenderIntent;
     const patch = intent && intent in PATCH_BY_INTENT
       ? PATCH_BY_INTENT[intent as keyof typeof PATCH_BY_INTENT](text)
