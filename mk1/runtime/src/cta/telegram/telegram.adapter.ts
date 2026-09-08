@@ -65,6 +65,14 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
         if (route.appointmentRenderIntent !== 'RESOLVE_CUSTOMER') contextRequired();
         return { ...base, action: 'RESOLVE_CUSTOMER', payload: {} };
       }
+      if (data.startsWith('appointment_customer:')) {
+        if (route.appointmentRenderIntent !== 'RESOLVE_CUSTOMER') contextRequired();
+        return {
+          ...base,
+          action: 'PROVIDE_CUSTOMER',
+          payload: { customerId: callbackValue(data, 'appointment_customer:') },
+        };
+      }
       if (data.startsWith('appointment_service:')) {
         if (route.appointmentRenderIntent !== 'SELECT_SERVICE') contextRequired();
         return { ...base, action: 'SELECT_SERVICE', payload: { serviceId: callbackValue(data, 'appointment_service:') } };
