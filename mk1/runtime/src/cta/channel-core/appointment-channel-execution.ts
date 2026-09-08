@@ -11,7 +11,7 @@ import {
   type SetAppointmentDateInput,
 } from '../../contracts/register-new-appointment/index.js';
 import {
-  GOLDEN_REGISTRATION_POLICY_V1,
+  GOLDEN_REGISTRATION_POLICY_V2,
   evaluateRegistrationCompleteness,
   validateProvideCustomerDataIngress,
 } from '../../contracts/register-new-customer/index.js';
@@ -108,7 +108,7 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
       const state = await handle.query(getAppointmentStateQuery);
       const draft = state.customer.customer;
       const completeDraft = draft
-        ? evaluateRegistrationCompleteness(GOLDEN_REGISTRATION_POLICY_V1, { customer: draft }).complete
+        ? evaluateRegistrationCompleteness(GOLDEN_REGISTRATION_POLICY_V2, { customer: draft }).complete
         : false;
       const shouldResolve = state.workflowStatus === 'RUNNING'
         && state.phase === 'WAITING_FOR_CUSTOMER'
