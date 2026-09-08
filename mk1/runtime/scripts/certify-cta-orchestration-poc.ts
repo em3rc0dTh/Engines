@@ -99,7 +99,7 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
         `SELECT status FROM resource_reservations WHERE workflow_id=$1`, [started.workflowId],
       );
       if (released.rows[0]?.status === 'RELEASED') {
-        return { workflowId: started.workflowId, workflowStatus: 'FAILED' };
+        return waitFor(conversationId, (v) => v.workflowStatus === 'FAILED', 'failure-terminal');
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
@@ -162,6 +162,15 @@ async function main(): Promise<void> {
       `SELECT status,release_reason FROM resource_reservations WHERE workflow_id=$1`, [failed.workflowId],
     );
     assert(released.rows[0]?.status === 'RELEASED', 'failed Appointment did not release HELD capacity');
+
+    const ingress = await pool.query<{ status: string; error_code: string | null }>(
+      `SELECT status,error_code FROM cta_ingress_records
+       WHERE workflow_id=$1 AND action='register_appointment'
+       ORDER BY created_at LIMIT 1`,
+      [failed.workflowId],
+    );
+    assert(ingress.rows[0]?.status === 'FAILED', 'failed workflow ingress did not reach FAILED');
+    assert(Boolean(ingress.rows[0]?.error_code), 'failed workflow ingress error code missing');
   } finally { await pool.end(); }
 
   console.log(`CTA_ORCHESTRATION_POC_PASS ${JSON.stringify({
