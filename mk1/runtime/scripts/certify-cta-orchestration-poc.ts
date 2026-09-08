@@ -139,6 +139,44 @@ async function verifyGraph(result: Json, workflowId: string, eventId: string): P
   } finally { await pool.end(); }
 }
 
+async function verifySequentialConversation(
+  conversationId: string,
+  first: Json,
+  second: Json,
+): Promise<void> {
+  const firstResult = record(first.result);
+  const secondResult = record(second.result);
+  assert(first.workflowId !== second.workflowId, 'sequential appointment reused workflow identity');
+  assert(firstResult.appointmentId !== secondResult.appointmentId, 'sequential appointment reused Appointment identity');
+
+  const pool = new Pool({ connectionString: loadRuntimeConfig().postgresUrl });
+  try {
+    const ingress = await pool.query<Json>(
+      `SELECT workflow_id,appointment_id,status
+       FROM cta_ingress_records
+       WHERE business_slug=$1 AND correlation_id=$2 AND action='register_appointment'
+       ORDER BY created_at`,
+      [businessSlug, conversationId],
+    );
+    assert(ingress.rows.length === 2, 'same conversation did not retain two distinct CTA ingress records');
+    assert(ingress.rows[0]?.workflow_id === first.workflowId, 'first ingress workflow was overwritten');
+    assert(ingress.rows[0]?.appointment_id === firstResult.appointmentId, 'first ingress Appointment was overwritten');
+    assert(ingress.rows[0]?.status === 'COMPLETED', 'first ingress lost terminal state');
+    assert(ingress.rows[1]?.workflow_id === second.workflowId, 'second ingress workflow mismatch');
+    assert(ingress.rows[1]?.appointment_id === secondResult.appointmentId, 'second ingress Appointment mismatch');
+    assert(ingress.rows[1]?.status === 'COMPLETED', 'second ingress did not complete');
+
+    const binding = await pool.query<Json>(
+      `SELECT workflow_id,binding_status
+       FROM channel_conversation_bindings
+       WHERE business_slug=$1 AND channel=$2 AND external_conversation_id=$3`,
+      [businessSlug, channel, conversationId],
+    );
+    assert(binding.rows[0]?.workflow_id === second.workflowId, 'terminal binding did not rebind to second workflow');
+    assert(binding.rows[0]?.binding_status === 'COMPLETED', 'second workflow binding did not reach COMPLETED');
+  } finally { await pool.end(); }
+}
+
 async function main(): Promise<void> {
   const health = await request('/health');
   assert(health.ok === true, 'channel core health failed');
@@ -152,6 +190,15 @@ async function main(): Promise<void> {
 
   const startEnvelope = record(startReplay.ingress);
   await verifyGraph(completed, workflowId, String(startEnvelope.eventId));
+
+  const secondToken = randomUUID();
+  const secondCompleted = await drive(conversationId, secondToken);
+  const secondReplay = await event(conversationId, `${secondToken}:start`, 'START_APPOINTMENT');
+  assert(secondReplay.replayed === true, 'second provider event replay was not deduplicated');
+  const secondEnvelope = record(secondReplay.ingress);
+  await verifyGraph(secondCompleted, String(secondCompleted.workflowId), String(secondEnvelope.eventId));
+  await verifyGraph(completed, workflowId, String(startEnvelope.eventId));
+  await verifySequentialConversation(conversationId, completed, secondCompleted);
 
   const failureToken = randomUUID();
   const failed = await drive(`api:conversation:${failureToken}`, failureToken, true);
@@ -176,6 +223,9 @@ async function main(): Promise<void> {
   console.log(`CTA_ORCHESTRATION_POC_PASS ${JSON.stringify({
     workflowId, appointmentId: completedResult.appointmentId, caseId: completedResult.caseId,
     resourceReservationId: completedResult.resourceReservationId,
+    secondWorkflowId: secondCompleted.workflowId,
+    secondAppointmentId: record(secondCompleted.result).appointmentId,
+    sequentialConversation: true,
   })}`);
 }
 
