@@ -7,12 +7,14 @@ Draft PR: `#24 — CTA orchestration: canonical Register Appointment PoC`
 
 ## Current candidate
 
-Current source HEAD:
+Current branch HEAD:
 
-- Candidate: `9785f363c08790bd3cfed1bfc56f680fe71b2377`
+- Branch HEAD: `adb6ccec66d269e1dc0ef8761445d4f7d4283d27`
+- Code candidate certified by the fix-pack CI: `9785f363c08790bd3cfed1bfc56f680fe71b2377`
+- Difference from code candidate to branch HEAD: evidence/documentation only
 - PR state: Draft, open, mergeable, unmerged
 
-Fresh CI on this exact code candidate:
+Fresh CI on the code candidate:
 
 - `CTA Orchestration Appointment PoC` — run `34273816610` — **PASS**
   - artifact `cta-orchestration-poc-34273816610`
@@ -50,9 +52,9 @@ CTAIngressRecord PROCESSING -> FAILED
 
 The candidate passes TypeScript, CTA compatibility/routing, existing channel regressions, clean PostgreSQL + MongoDB + Temporal startup, orchestration persistence verification, and evidence capture.
 
-## Lifecycle fix pack closed on current candidate
+## Lifecycle fix pack closed on current code candidate
 
-Physical testing exposed four lifecycle/UX gaps. They are now implemented and covered by CI on `9785f363c08790bd3cfed1bfc56f680fe71b2377`.
+Physical testing exposed four lifecycle/UX gaps. They are implemented and covered by CI on `9785f363c08790bd3cfed1bfc56f680fe71b2377`.
 
 ### TG-UX01 — appointment contact completeness
 
@@ -161,13 +163,13 @@ reservations_for_workflow = 1
 
 Therefore P2 physical provider delivery, persistence, provenance and replay/idempotency are certified for the tested candidate lineage.
 
-A subsequent physical UX smoke proved removal of the manual `Continuar` customer-resolution button, and also exposed the V1 contact-completeness issue that is now fixed on the current candidate with V2. The final candidate needs only a short Telegram regression smoke to confirm `name -> email -> phone -> service` and the lifecycle recovery changes; the full physical booking does not need to be repeated unless the smoke reveals a regression.
+A subsequent physical UX smoke proved removal of the manual `Continuar` customer-resolution button, and also exposed the V1 contact-completeness issue that is now fixed on the current code candidate with V2. The final candidate needs only a short Telegram regression smoke to confirm `name -> email -> phone -> service` and the lifecycle recovery changes; the full physical booking does not need to be repeated unless the smoke reveals a regression.
 
 ## Transport regression evidence
 
 ### Telegram
 
-Current candidate run `34273816578` passes:
+Code-candidate run `34273816578` passes:
 
 ```text
 TypeScript
@@ -182,7 +184,7 @@ This CI job is deterministic/runtime evidence and is separate from the physical 
 
 ### WhatsApp / Kapso
 
-Current candidate run `34273816586` passes the deterministic/runtime Kapso transport suite and existing real-Temporal regression.
+Code-candidate run `34273816586` passes the deterministic/runtime Kapso transport suite and existing real-Temporal regression.
 
 This does **not** yet certify a new physical WhatsApp provider delivery. P3 remains open.
 
