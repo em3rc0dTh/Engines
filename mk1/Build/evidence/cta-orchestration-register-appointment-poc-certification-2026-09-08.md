@@ -5,177 +5,222 @@ Repository: `em3rc0dTh/Engines`
 Branch: `feature/cta-orchestration-register-appointment-poc`
 Draft PR: `#24 — CTA orchestration: canonical Register Appointment PoC`
 
-## Candidate implementation certified
+## Current candidate
 
-The current runtime candidate was certified on source HEAD:
+Current source HEAD:
 
-- Candidate source HEAD: `712a283b12df10174607c7af1c5fce97dcfcb6c8`
-- Commit: `fix(cta): reconcile terminal Temporal failure into CTA projection`
-- Workflow: `CTA Orchestration Appointment PoC`
-- Run: `34250211810`
-- Conclusion: `success`
-- Artifact: `cta-orchestration-poc-34250211810`
-- Artifact id: `10065724939`
-- Artifact digest: `sha256:8912bb6bbc5c879762529b72f599543320be9d36e7eff69999b78bc471f7a1fe`
+- Candidate: `9785f363c08790bd3cfed1bfc56f680fe71b2377`
+- PR state: Draft, open, mergeable, unmerged
 
-This file supersedes the earlier corrupted receipt and the earlier `801e1b3` evidence snapshot. It deliberately distinguishes deterministic/clean-stack certification from live provider certification.
+Fresh CI on this exact code candidate:
 
-## Certified clean-stack path
+- `CTA Orchestration Appointment PoC` — run `34273816610` — **PASS**
+  - artifact `cta-orchestration-poc-34273816610`
+  - artifact id `10074933246`
+  - digest `sha256:80fb5a366c58475ba50e5af2c87347ea86534847cf5b1d6bc82b7e668652336e`
+- `MK1 C2 Telegram Official Bot API Transport` — run `34273816578` — **PASS**
+  - artifact `mk1-c2-telegram-official-34273816578`
+  - artifact id `10074917580`
+  - digest `sha256:31b8242f0d3f75495455da7d976089c72fb44382a14423013ce7f43b6002e954`
+- `MK1 C4P Kapso Official WhatsApp Transport` — run `34273816586` — **PASS**
 
-The CI run starts PostgreSQL, MongoDB, Temporal, migrations, workers, channel-core and the CTA runtime from a clean stack, then exercises the same canonical orchestration boundary used by the adapters.
+The receipt distinguishes deterministic/clean-stack certification from physical provider evidence. CI transport jobs do not by themselves prove live provider delivery.
+
+## Certified clean-stack architecture
 
 ```text
-CTA
-  -> provider/existing adapter boundary
+provider / existing adapter boundary
   -> CanonicalCTAEvent
   -> CTAIngressRecord
   -> Temporal RegisterNewAppointment
-  -> generic CatalogOffering compatibility
-  -> ResourceReservation HELD
-  -> Customer / ManagedEntity / Operational Case
+  -> CatalogOffering compatibility
+  -> Customer / ManagedEntity / OperationalCase
   -> Appointment
-  -> Operational TimelineEvent
   -> ResourceReservation BOOKED
+  -> Operational TimelineEvent
   -> CTAIngressRecord COMPLETED
 ```
 
-The candidate run passed:
+Failure compensation remains certified:
 
 ```text
-TypeScript                                      PASS
-CTA compatibility/routing/provider adapters    PASS
-Existing adapter regressions                    PASS
-Clean Temporal + persistence stack              PASS
-CTA -> Temporal -> persistence graph            PASS
-Evidence capture                                PASS
+ResourceReservation HELD -> RELEASED
+CTAIngressRecord PROCESSING -> FAILED
 ```
 
-The deterministic CTA suite covers WebChat, Telegram, WhatsApp, API, Messenger, Facebook Comment and TikTok boundaries, including fail-closed signature/authentication behavior where applicable. Existing WebChat/Telegram/WhatsApp regressions also pass against the candidate.
+The candidate passes TypeScript, CTA compatibility/routing, existing channel regressions, clean PostgreSQL + MongoDB + Temporal startup, orchestration persistence verification, and evidence capture.
 
-## Success and replay evidence
+## Lifecycle fix pack closed on current candidate
 
-The uploaded artifact records `CTA_ORCHESTRATION_POC_PASS` for the successful path.
+Physical testing exposed four lifecycle/UX gaps. They are now implemented and covered by CI on `9785f363c08790bd3cfed1bfc56f680fe71b2377`.
 
-Persistence evidence proves:
+### TG-UX01 — appointment contact completeness
+
+Appointment auto-resolution now evaluates `GOLDEN_REGISTRATION_POLICY_V2`, so a new appointment customer must have:
 
 ```text
-CTAIngressRecord.status       = COMPLETED
-CTAIngressRecord.workflowId   = Temporal workflow
-CTAIngressRecord.caseId       = persisted Case
-CTAIngressRecord.appointmentId= persisted Appointment
-duplicate_count               = 1
-ResourceReservation.status    = BOOKED
-Case relationship             = present
-Appointment relationship      = present
+name + phone + email
 ```
 
-Therefore replay of the same canonical/provider event reuses the operation rather than creating a second booking graph.
+The internal `Resolve Customer` operation remains automatic. The customer does not receive a meaningless `Continuar` button for an internal workflow step.
 
-## Failure and compensation evidence
+### TG-LC01 — stale binding after Temporal dev-server reset
 
-The certification probe deliberately injects an appointment-creation failure after capacity has been held.
+The Telegram live runner detects a Temporal workflow-not-found result instead of polling the stale binding until `TELEGRAM_APPOINTMENT_QUERY_TIMEOUT`.
 
-The candidate artifact proves both sides of the failure projection:
+The stale binding is reconciled to `FAILED` with workflow identity protection. A new `/appointment` event can then replace that terminal binding and start a fresh durable workflow in the same Telegram chat.
+
+### Channel binding lifecycle
+
+`channel_conversation_bindings` now acts as the current conversation pointer:
 
 ```text
-ResourceReservation.status = RELEASED
-release_reason              = APPOINTMENT_CREATION_FAILED
-CTAIngressRecord.status     = FAILED
-CTAIngressRecord.workflowId = failed Temporal workflow
-CTAIngressRecord.errorCode  = persisted terminal failure code
+ACTIVE -> COMPLETED | FAILED
+terminal binding + new workflow -> ACTIVE rebinding
 ```
 
-This closes the pre-merge gap found in the earlier evidence snapshot, where capacity compensation was correct but the ingress row remained `PROCESSING`.
+Active bindings still reject conflicting workflow material. Terminal bindings may be atomically rebound to a new workflow for a later appointment in the same provider conversation.
 
-The implementation now reconciles authoritative Temporal execution closure with the channel read-model. If Temporal has closed while the workflow's last query snapshot still reports `RUNNING`, channel-core projects the operation as terminal `FAILED`, updates the channel binding, and persists the failed CTA ingress projection.
+### CTA-LC01 — multiple appointments in the same provider conversation
 
-Certified failure semantics:
+CTA terminal reconciliation is now scoped by both correlation and authoritative `workflow_id`. It no longer updates the oldest `register_appointment` ingress merely because multiple appointments share one Telegram chat/correlation id.
+
+The clean-stack certification now explicitly creates **two sequential appointments in one conversation**, verifies distinct workflow and Appointment identities, verifies both CTA ingress records remain independently `COMPLETED`, and verifies the conversation binding points to the second workflow with `COMPLETED` status.
+
+Run `34273816610` produced:
 
 ```text
-HELD -> BOOKED      on successful appointment creation
-HELD -> RELEASED    on injected appointment-creation failure
-PROCESSING -> FAILED on terminal orchestration failure
+CTA_ORCHESTRATION_POC_PASS
+sequentialConversation = true
+first workflow / appointment  = distinct
+second workflow / appointment = distinct
 ```
 
-## Existing transport pre-merge regressions
+## Physical WebChat evidence — P1
+
+A real browser WebChat run was completed on the pre-Telegram-wiring candidate and proved the actual browser path through the canonical appointment architecture.
+
+Physical workflow:
+
+- Workflow: `register-appointment:golden-business:ebbe4959f906ca0c382dcbffe715f035`
+- Appointment: `apt_910686b8-3d63-432c-bd34-006630616308`
+- Case: `case_4e014b41-5a75-446e-8bd2-9faf28e05b36`
+- ResourceReservation: `rr_f60c5b49-637a-4e04-aa41-c83f0d2e064e`
+- Reservation status: `BOOKED`
+- CTA ingress: `cta_80e59dd777d951cce9a23340c4ad9f405fa0805c9ee20b0254e6e941665f1474`
+- CTA status: `COMPLETED`
+- Timeline: `APPOINTMENT_REGISTERED`
+
+The exact WebChat start event was replayed. Result:
+
+```text
+replayed = true
+duplicate_count = 1
+appointments = 1
+cases = 1
+reservations = 1
+```
+
+Closing the browser tab before finalization did not terminate the Temporal workflow; the same conversation was recovered and finalized.
+
+Known physical-test discovery `WEBCHAT-ST01` remains open: stale browser `localStorage` after a backend volume reset can retain a conversation id that no longer exists and leave Start Workflow disabled. Incognito/clearing the stale browser state recovers. This remains a pre-merge fix unless explicitly deferred.
+
+Because the branch has changed since the original physical run, WebChat requires only a short final regression smoke on the eventual merge candidate.
+
+## Physical Telegram evidence — P2
+
+A real Telegram app -> official Bot API -> Engines runner -> canonical CTA -> Temporal -> PostgreSQL appointment was completed successfully.
+
+Physical provider evidence:
+
+- Provider event: `telegram:update:974290101`
+- External user: `telegram:user:1589599355`
+- External conversation: `telegram:1589599355`
+- Workflow: `register-appointment:golden-business:1b038e5bd85758f545010271b805c035`
+- Appointment: `apt_1cf266e8-ff46-4b65-928e-8a34f36fde49`
+- Case: `case_27087ad0-b859-4597-8544-95655a64d70c`
+- ResourceReservation: `rr_cd6f787b-2240-434b-8604-994e721f3674`
+- Reservation status: `BOOKED`
+- CTA ingress: `cta_21e2c091238691866fc7fea4d0dd30d6c5d4500940ee7412a8ae557d18108f56`
+- CTA status: `COMPLETED`
+- Channel operation: `RegisterNewAppointment`
+- Timeline: `APPOINTMENT_REGISTERED`
+
+The exact normalized provider start event was replayed against channel-core. Result:
+
+```text
+replayed = true
+duplicate_count = 1
+same workflowId
+same caseId
+same appointmentId
+appointments_for_workflow = 1
+cases_for_workflow = 1
+reservations_for_workflow = 1
+```
+
+Therefore P2 physical provider delivery, persistence, provenance and replay/idempotency are certified for the tested candidate lineage.
+
+A subsequent physical UX smoke proved removal of the manual `Continuar` customer-resolution button, and also exposed the V1 contact-completeness issue that is now fixed on the current candidate with V2. The final candidate needs only a short Telegram regression smoke to confirm `name -> email -> phone -> service` and the lifecycle recovery changes; the full physical booking does not need to be repeated unless the smoke reveals a regression.
+
+## Transport regression evidence
 
 ### Telegram
 
-- Workflow: `MK1 C2 Telegram Official Bot API Transport`
-- Run: `34250211804`
-- Conclusion: `success`
-- Artifact: `mk1-c2-telegram-official-34250211804`
-- Artifact id: `10065690504`
-- Digest: `sha256:70d3c0795b9ec06ae952187506939c6b82251a9b7570b0f34b25274bb700eca9`
-
-The run passes the deterministic Bot API client contract, Telegram adapter regression, clean Engines infrastructure and existing real-Temporal Telegram regression.
-
-This is transport/runtime regression evidence; it is **not** a claim that a new live Telegram provider event was physically received during this candidate run.
-
-### WhatsApp / Kapso
-
-- Workflow: `MK1 C4P Kapso Official WhatsApp Transport`
-- Run: `34250211792`
-- Attempt: `2`
-- Conclusion: `success`
-- Latest artifact: `mk1-c4p-kapso-34250211792`
-- Artifact id: `10065863291`
-- Digest: `sha256:40d7f80a824458475d03c0485205aa62e55f2a0a8c11ce718fb496dc68c69ab0`
-
-Attempt 1 reached all deterministic adapter and real-Temporal regression gates but failed while Docker/BuildKit was booting the Kapso runner with `rpc error: code = Unavailable ... EOF`. The failed job was rerun without code changes. Attempt 2 passed every step, including:
+Current candidate run `34273816578` passes:
 
 ```text
 TypeScript
-Kapso v2 deterministic contract tests
-WhatsApp adapter regression
+Bot API deterministic client tests
+Telegram adapter tests
+Telegram lifecycle recovery tests
 clean Engines infrastructure
-existing real-Temporal WhatsApp regression
-Kapso runner boot with deterministic local configuration
-evidence capture
+existing real-Temporal Telegram regression
 ```
 
-The successful rerun supports classification of the first failure as an infrastructure/build flake rather than a demonstrated CTA/WhatsApp regression.
+This CI job is deterministic/runtime evidence and is separate from the physical Telegram evidence above.
 
-This remains deterministic/local transport certification, **not** a claim of a live WhatsApp provider delivery during this run.
+### WhatsApp / Kapso
+
+Current candidate run `34273816586` passes the deterministic/runtime Kapso transport suite and existing real-Temporal regression.
+
+This does **not** yet certify a new physical WhatsApp provider delivery. P3 remains open.
 
 ## Certified boundaries
 
-Certified for this PoC candidate:
+Certified in the candidate lineage:
 
-- channel-independent canonical CTA contract;
-- compatibility layer that preserves existing adapters;
-- deterministic routing to Register Appointment;
-- CTA ingress persistence and stable replay identity;
-- Temporal orchestration;
-- generic CatalogOffering compatibility;
-- Customer / ManagedEntity / Case / Appointment operational graph;
-- `ResourceReservation HELD -> BOOKED`;
-- compensation `HELD -> RELEASED`;
-- terminal failed CTA ingress projection;
-- WebChat, Telegram and WhatsApp regressions;
-- API adapter;
-- Messenger adapter contract;
-- Facebook Comments adapter contract;
-- TikTok adapter contract/capability boundary;
-- clean-stack PostgreSQL + MongoDB + Temporal + workers execution.
+- canonical provider-neutral Register Appointment CTA;
+- compatibility boundary preserving provider parsing/auth internals;
+- CTA ingress persistence and stable provider-event replay identity;
+- Temporal RegisterNewAppointment orchestration;
+- Customer / ManagedEntity / Case / Appointment graph;
+- ResourceReservation success and compensation lifecycle;
+- operational timeline persistence;
+- terminal CTA failure reconciliation;
+- workflow-scoped CTA completion/failure reconciliation;
+- sequential appointments in the same provider conversation;
+- terminal channel rebinding semantics;
+- Telegram stale-Temporal-binding recovery logic;
+- WebChat physical provider/browser path and replay;
+- Telegram physical provider path and replay;
+- deterministic Telegram and WhatsApp transport regressions;
+- API, Messenger, Facebook Comment and TikTok adapter/capability contracts covered by the CTA suite.
 
-## Physical provider gates intentionally open
+## Explicitly open before merge
 
-This receipt does **not** certify new live provider delivery. Before a final merge decision, physical provider evidence remains separate and must only be claimed when real credentials/subscriptions/events exist.
+- Short Telegram regression smoke on the current/final candidate (`name -> email -> phone -> service`) and stale-binding recovery confirmation.
+- P3 physical WhatsApp/Kapso provider delivery, persistence/provenance and replay if WhatsApp is selected as a merge gate.
+- Final WebChat regression smoke on the eventual merge candidate.
+- `WEBCHAT-ST01` stale-browser-state recovery fix unless explicitly deferred.
+- Final evidence review.
 
-Open physical gates:
+Messenger, Facebook Comments and TikTok physical provider events are not required to block this first PoC unless the merge claim is expanded to physical certification for those providers.
 
-- WebChat browser/real endpoint smoke against the candidate stack;
-- Telegram real provider event + provenance if required for this merge gate;
-- WhatsApp real provider event + provenance if required for this merge gate;
-- Messenger app + webhook subscription + real signed event;
-- Facebook Page comment webhook + real signed event;
-- TikTok only to the extent TikTok exposes a real supported comment/message delivery path;
-- real-event replay proving no duplicate Case, Appointment or ResourceReservation;
-- live negative signature/authentication test where provider infrastructure allows it.
+## Truth boundary
 
-No physical provider certification, production readiness, Services Engine completion or Scheduler Engine completion is claimed here.
+No AI Agent, MCP, full Services Engine, full Scheduler Engine, production readiness, universal physical-provider certification, or release readiness is claimed.
 
 ## Merge state
 
-PR #24 remains Draft and unmerged. The technical PoC clean-stack gate is green on candidate `712a283b12df10174607c7af1c5fce97dcfcb6c8`; final merge remains blocked on the explicitly selected physical-provider gates and final review.
+PR #24 remains Draft and unmerged. Merge requires explicit authorization after the selected physical gates, final smoke checks, known pre-merge defect decision and evidence review are complete.
