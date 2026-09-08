@@ -10,7 +10,11 @@ import {
   type SelectAppointmentSlotInput,
   type SetAppointmentDateInput,
 } from '../../contracts/register-new-appointment/index.js';
-import { validateProvideCustomerDataIngress } from '../../contracts/register-new-customer/index.js';
+import {
+  GOLDEN_REGISTRATION_POLICY_V1,
+  evaluateRegistrationCompleteness,
+  validateProvideCustomerDataIngress,
+} from '../../contracts/register-new-customer/index.js';
 import { adaptRegisterNewAppointmentCtaInput } from '../register-new-appointment.adapter.js';
 import type { TemporalRegisterNewAppointmentPort } from '../../orchestration/temporal/ports/register-new-appointment.temporal-port.js';
 import {
@@ -81,12 +85,47 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
   return new Map<CanonicalChannelAction, ActionHandler>([
     ['PROVIDE_CUSTOMER', async (handle, envelope) => {
       const customerPatch = record(envelope.payload.customerPatch);
-      if (!customerPatch) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'customerPatch');
+      const customerId = typeof envelope.payload.customerId === 'string'
+        ? envelope.payload.customerId.trim()
+        : undefined;
+      if (!customerPatch && !customerId) {
+        throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'customerId or customerPatch');
+      }
       const inputId = channelOperationInputId(envelope);
-      const validated = validateProvideCustomerDataIngress({ inputId, customerPatch });
-      if (!validated.ok) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', validated.issues[0]?.message ?? 'customerPatch');
-      const input: ProvideAppointmentCustomerInput = { inputId, customerPatch };
-      return handle.executeUpdate(provideAppointmentCustomerUpdate, { args: [input] });
+      if (customerPatch) {
+        const validated = validateProvideCustomerDataIngress({ inputId, customerPatch });
+        if (!validated.ok) {
+          throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', validated.issues[0]?.message ?? 'customerPatch');
+        }
+      }
+      const input: ProvideAppointmentCustomerInput = {
+        inputId,
+        ...(customerId ? { customerId } : {}),
+        ...(customerPatch ? { customerPatch } : {}),
+      };
+      const provided = await handle.executeUpdate(provideAppointmentCustomerUpdate, { args: [input] });
+
+      const state = await handle.query(getAppointmentStateQuery);
+      const draft = state.customer.customer;
+      const completeDraft = draft
+        ? evaluateRegistrationCompleteness(GOLDEN_REGISTRATION_POLICY_V1, { customer: draft }).complete
+        : false;
+      const shouldResolve = state.workflowStatus === 'RUNNING'
+        && state.phase === 'WAITING_FOR_CUSTOMER'
+        && state.customer.status !== 'AMBIGUOUS'
+        && (Boolean(customerId) || completeDraft);
+
+      if (shouldResolve) {
+        const resolveInput: ResolveAppointmentCustomerInput = { inputId: `${inputId}:auto-resolve` };
+        await handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [resolveInput] });
+        for (let attempt = 0; attempt < 50; attempt += 1) {
+          const current = await handle.query(getAppointmentStateQuery);
+          if (current.phase !== 'WAITING_FOR_CUSTOMER' || current.customer.status === 'AMBIGUOUS') break;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      return provided;
     }],
     ['RESOLVE_CUSTOMER', async (handle, envelope) => {
       const input: ResolveAppointmentCustomerInput = { inputId: channelOperationInputId(envelope) };
