@@ -46,6 +46,11 @@ jobs:
 
       - name: Certify CTA to Temporal to persistence graph
         run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8788/health >/tmp/cta-channel-health.json; then break; fi
+            sleep 1
+          done
+          grep -F '"ok":true' /tmp/cta-channel-health.json
           docker compose run --rm --no-deps -T \
             -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
@@ -76,3 +81,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose down -v --remove-orphans || true
+
