@@ -77,12 +77,26 @@ export class PostgresCTAIngressRepository implements CTAIngressRepository {
   }>): Promise<CTAIngressRecord | undefined> {
     const result = await this.pool.query<Row>(
       `UPDATE cta_ingress_records SET status='COMPLETED',workflow_id=$3,case_id=$4,
-       appointment_id=$5,updated_at=NOW()
+       appointment_id=$5,error_code=NULL,updated_at=NOW()
        WHERE event_id=(SELECT event_id FROM cta_ingress_records
          WHERE business_slug=$1 AND correlation_id=$2 AND action='register_appointment'
          ORDER BY created_at LIMIT 1)
        RETURNING ${COLUMNS}`,
       [input.businessSlug,input.correlationId,input.workflowId,input.caseId,input.appointmentId],
+    );
+    return result.rows[0] ? fromRow(result.rows[0]) : undefined;
+  }
+
+  async failConversation(input: Readonly<{
+    businessSlug: string; correlationId: string; workflowId: string; errorCode: string;
+  }>): Promise<CTAIngressRecord | undefined> {
+    const result = await this.pool.query<Row>(
+      `UPDATE cta_ingress_records SET status='FAILED',workflow_id=$3,error_code=$4,updated_at=NOW()
+       WHERE event_id=(SELECT event_id FROM cta_ingress_records
+         WHERE business_slug=$1 AND correlation_id=$2 AND action='register_appointment'
+         ORDER BY created_at LIMIT 1)
+       RETURNING ${COLUMNS}`,
+      [input.businessSlug,input.correlationId,input.workflowId,input.errorCode],
     );
     return result.rows[0] ? fromRow(result.rows[0]) : undefined;
   }
