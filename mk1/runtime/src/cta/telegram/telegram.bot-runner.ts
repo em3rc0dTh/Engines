@@ -19,10 +19,17 @@ import { projectCustomerRegistration } from '../channel-core/customer-registrati
 import type {
   AppointmentRenderIntent,
   CanonicalChannelEnvelope,
+  ChannelConversationBinding,
   CustomerRegistrationRenderIntent,
 } from '../channel-core/types.js';
 import { TelegramAdapter } from './telegram.adapter.js';
 import { TelegramBotApiClient, type TelegramUpdate } from './telegram.bot-api.js';
+import {
+  TelegramWorkflowMissingError,
+  channelBindingStatusForWorkflow,
+  isTemporalWorkflowNotFound,
+  isTerminalWorkflowStatus,
+} from './telegram.lifecycle.js';
 import {
   renderTelegramAppointment,
   renderTelegramRegistration,
@@ -97,7 +104,8 @@ async function queryRegistration(
       if (view.renderIntent !== 'WAIT' || state.workflowStatus !== 'RUNNING') {
         return { kind: 'REGISTRATION', workflowId, state, renderIntent: view.renderIntent };
       }
-    } catch {
+    } catch (error) {
+      if (isTemporalWorkflowNotFound(error)) throw new TelegramWorkflowMissingError(workflowId);
       // The Workflow may need a short interval before the first Query is available.
     }
     await delay(QUERY_POLL_MS);
@@ -139,7 +147,8 @@ async function queryAppointment(
       if (renderIntent !== 'WAIT' || state.workflowStatus !== 'RUNNING') {
         return { kind: 'APPOINTMENT', workflowId, state, renderIntent };
       }
-    } catch {
+    } catch (error) {
+      if (isTemporalWorkflowNotFound(error)) throw new TelegramWorkflowMissingError(workflowId);
       // The Workflow may need a short interval before the first Query is available.
     }
     await delay(QUERY_POLL_MS);
@@ -203,6 +212,36 @@ async function main(): Promise<void> {
     }
   };
 
+  const reconcileBinding = async (
+    binding: ChannelConversationBinding,
+    workflowStatus: string,
+  ): Promise<void> => {
+    const status = channelBindingStatusForWorkflow(workflowStatus);
+    if (status === binding.bindingStatus) return;
+    await repository.updateBindingStatus({
+      businessSlug: binding.businessSlug,
+      channel: binding.channel,
+      externalConversationId: binding.externalConversationId,
+      workflowId: binding.workflowId,
+      status,
+    });
+  };
+
+  const recoverMissingWorkflowBinding = async (binding: ChannelConversationBinding): Promise<void> => {
+    await repository.updateBindingStatus({
+      businessSlug: binding.businessSlug,
+      channel: binding.channel,
+      externalConversationId: binding.externalConversationId,
+      workflowId: binding.workflowId,
+      status: 'FAILED',
+    });
+    console.warn(`TELEGRAM_STALE_BINDING_RECOVERED ${JSON.stringify({
+      externalConversationId: binding.externalConversationId,
+      workflowId: binding.workflowId,
+      operation: binding.operation,
+    })}`);
+  };
+
   const sendCurrent = async (chatId: string, live: LiveConversation): Promise<void> => {
     if (live.kind === 'APPOINTMENT') {
       await api.sendMessage(chatId, renderTelegramAppointment(live.state, live.renderIntent));
@@ -219,15 +258,27 @@ async function main(): Promise<void> {
       externalConversationId,
     });
     if (!binding) return undefined;
-    if (binding.operation === 'RegisterNewCustomer') {
-      return queryRegistration(customerPort, binding.workflowId);
+
+    try {
+      if (binding.operation === 'RegisterNewCustomer') {
+        const live = await queryRegistration(customerPort, binding.workflowId);
+        await reconcileBinding(binding, live.state.workflowStatus);
+        return live;
+      }
+      if (binding.operation === 'RegisterNewAppointment') {
+        const live = await queryAppointment(appointmentPort, binding.workflowId);
+        await reconcileBinding(binding, live.state.workflowStatus);
+        await reconcileAppointmentIngress(externalConversationId, live);
+        return live;
+      }
+      return undefined;
+    } catch (error) {
+      if (error instanceof TelegramWorkflowMissingError) {
+        await recoverMissingWorkflowBinding(binding);
+        return undefined;
+      }
+      throw error;
     }
-    if (binding.operation === 'RegisterNewAppointment') {
-      const live = await queryAppointment(appointmentPort, binding.workflowId);
-      await reconcileAppointmentIngress(externalConversationId, live);
-      return live;
-    }
-    return undefined;
   };
 
   const startAppointment = async (envelope: CanonicalChannelEnvelope): Promise<LiveAppointment | undefined> => {
@@ -336,17 +387,21 @@ async function main(): Promise<void> {
       return;
     }
 
+    const appointmentRequested = isAppointmentCommand(meta.text) || meta.callbackData === 'register_appointment';
     const existing = await getLiveForConversation(meta.chatId);
     if (existing?.kind === 'REGISTRATION') {
-      await processRegistrationUpdate(update, meta, existing);
-      return;
+      if (!(appointmentRequested && isTerminalWorkflowStatus(existing.state.workflowStatus))) {
+        await processRegistrationUpdate(update, meta, existing);
+        return;
+      }
     }
     if (existing?.kind === 'APPOINTMENT') {
-      await processAppointmentUpdate(update, meta, existing);
-      return;
+      if (!(appointmentRequested && isTerminalWorkflowStatus(existing.state.workflowStatus))) {
+        await processAppointmentUpdate(update, meta, existing);
+        return;
+      }
     }
 
-    const appointmentRequested = isAppointmentCommand(meta.text) || meta.callbackData === 'register_appointment';
     if (appointmentRequested) {
       let envelope;
       try {
