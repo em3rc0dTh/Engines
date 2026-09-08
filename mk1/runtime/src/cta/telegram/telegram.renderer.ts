@@ -102,10 +102,24 @@ export function renderTelegramAppointment(
         input_field_placeholder: 'Comparte tu teléfono o escríbelo',
       },
     };
-    case 'RESOLVE_CUSTOMER': return {
-      text: 'Tus datos están completos. Ahora resolveremos el cliente.',
-      replyMarkup: inlineRows([{ text: 'Continuar', callback_data: 'appointment_resolve_customer' }]),
-    };
+    case 'RESOLVE_CUSTOMER': {
+      const candidates = state.customer.status === 'AMBIGUOUS'
+        ? state.customer.candidateCustomerIds ?? []
+        : [];
+      if (candidates.length > 0) {
+        return {
+          text: 'Encontramos más de un cliente que coincide con tus datos. Selecciona el registro que deseas usar.',
+          replyMarkup: inlineRows(candidates.map((customerId) => ({
+            text: `Usar ${customerId}`,
+            callback_data: `appointment_customer:${customerId}`,
+          }))),
+        };
+      }
+      return {
+        text: 'Tus datos están completos. Un momento...',
+        replyMarkup: { remove_keyboard: true },
+      };
+    }
     case 'SELECT_SERVICE': return {
       text: 'Selecciona el servicio para tu cita.',
       replyMarkup: inlineRows(state.services.map((service) => ({
