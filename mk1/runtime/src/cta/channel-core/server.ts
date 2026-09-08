@@ -157,6 +157,13 @@ async function run(): Promise<void> {
               caseId: completed.caseId,
               appointmentId: completed.appointmentId,
             });
+          } else if (state.workflowStatus === 'FAILED') {
+            await ingressRepository.failConversation({
+              businessSlug,
+              correlationId: externalConversationId,
+              workflowId: binding.workflowId,
+              errorCode: state.failure?.code ?? 'APPOINTMENT_WORKFLOW_FAILED',
+            });
           }
           sendJson(response, 200, {
             ok: true,
