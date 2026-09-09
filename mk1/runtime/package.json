@@ -18,7 +18,7 @@
     "test:services:s3": "tsx --test src/services/eligibility-engine.test.ts",
     "test:services:s4": "tsx --test src/contracts/services-engine/management.test.ts",
     "test:channel:c0": "tsx --test src/cta/channel-core/*.test.ts",
-    "test:channel:c1b": "tsx --test src/cta/channel-core/c1b-*.test.ts src/cta/webchat/webchat.adapter.test.ts",
+    "test:channel:c1b": "tsx --test src/cta/channel-core/c1b-*.test.ts src/cta/webchat/webchat.adapter.test.ts src/cta/webchat/webchat.session-recovery.test.ts",
     "test:telegram:bot-api": "tsx --test src/cta/telegram/telegram.bot-api.test.ts",
     "test:whatsapp:kapso": "tsx --test src/cta/whatsapp/whatsapp.kapso.test.ts",
     "test:cta:poc": "tsx --test src/cta/canonical/*.test.ts src/cta/meta/*.test.ts src/cta/tiktok/*.test.ts",
@@ -64,7 +64,6 @@
     "migrate:services": "tsx scripts/migrate-postgres-services.ts",
     "migrate:channel": "tsx scripts/migrate-postgres-channel.ts",
     "migrate:cta-orchestration": "tsx scripts/migrate-postgres-cta-orchestration.ts",
-    "migrate:cta-orchestration": "tsx scripts/migrate-postgres-cta-orchestration.ts",
     "probe:customer:b2:duplicate": "tsx scripts/certify-customer-b2-soft-duplicate-resolution.ts",
     "probe:services:s1": "tsx scripts/certify-services-s1-persistence.ts",
     "probe:services:s2": "tsx scripts/certify-services-s2-read-engine.ts",
@@ -85,7 +84,6 @@
   "dependencies": {
     "@temporalio/client": "1.22.0",
     "@temporalio/worker": "1.22.0",
-    "@temporalio/workflow": "1.22.0",
     "mongodb": "7.6.0",
     "pg": "8.23.0"
   },
