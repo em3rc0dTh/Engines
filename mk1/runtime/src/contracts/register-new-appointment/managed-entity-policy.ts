@@ -63,3 +63,27 @@ export const BATEYLATE_DESSERT_REQUEST_MANAGED_ENTITY_POLICY: ManagedEntityPolic
   type: 'dessert_request',
   label: 'Solicitud de postre',
 };
+
+/**
+ * Initial deterministic business-policy registry for the ME1 PoC.
+ *
+ * This is intentionally provider-neutral and small. Ground Control/business
+ * configuration may replace this lookup later, but channel adapters must never
+ * own these semantics.
+ */
+export function managedEntityPolicyForBusiness(businessSlug: string): ManagedEntityPolicy {
+  const slug = businessSlug.trim().toLowerCase();
+  if (['golden-business', 'gallo', 'gallo-autos', 'turagua'].includes(slug)) {
+    return GALLO_VEHICLE_MANAGED_ENTITY_POLICY;
+  }
+  if (['bateylate', 'bate-y-late'].includes(slug)) {
+    return BATEYLATE_DESSERT_REQUEST_MANAGED_ENTITY_POLICY;
+  }
+  return {
+    requirement: 'REQUIRED',
+    lifecycle: 'DURABLE_REUSABLE',
+    selectionMode: 'ALWAYS_EXPLICIT',
+    type: 'managed_subject',
+    label: 'Entidad gestionada',
+  };
+}
