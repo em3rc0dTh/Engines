@@ -3,7 +3,11 @@ import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import { WhatsAppAdapter } from './whatsapp.adapter.js';
-import { renderWhatsAppAppointment, renderWhatsAppRegistration } from './whatsapp.renderer.js';
+import {
+  renderWhatsAppAppointment,
+  renderWhatsAppRegistration,
+  whatsappAppointmentRenderIntent,
+} from './whatsapp.renderer.js';
 import { MetaCloudApiTransport, type VerifiedWhatsAppInbound } from './whatsapp.transport.js';
 
 const body = JSON.stringify({
@@ -111,7 +115,7 @@ test('WA-APPT-003 interactive selections stay on canonical appointment actions',
   assert.equal(finalize?.action, 'FINALIZE_APPOINTMENT');
 });
 
-test('WA-APPT-004 appointment renderer exposes service and completion states', () => {
+test('WA-APPT-004 appointment renderer exposes service and only terminal completion states', () => {
   const serviceState = {
     workflowId: 'wf-1', workflowStatus: 'RUNNING', phase: 'WAITING_FOR_SERVICE',
     customer: { status: 'EXISTING', customerId: 'cus-1' },
@@ -122,9 +126,9 @@ test('WA-APPT-004 appointment renderer exposes service and completion states', (
   assert.equal(service.type, 'interactive');
   assert.ok(Array.isArray(service.buttons));
 
-  const completed = {
+  const createdButAuditing = {
     ...serviceState,
-    workflowStatus: 'COMPLETED',
+    workflowStatus: 'RUNNING',
     phase: 'CREATED',
     nextAction: 'NONE',
     result: {
@@ -132,5 +136,12 @@ test('WA-APPT-004 appointment renderer exposes service and completion states', (
       resourceReservationId: 'rr-1', appointmentDate: '2026-09-12', slot: { start: '06:00', end: '06:30' },
     },
   } as AppointmentStateProjection;
+  assert.equal(whatsappAppointmentRenderIntent(createdButAuditing), 'WAIT');
+
+  const completed = {
+    ...createdButAuditing,
+    workflowStatus: 'COMPLETED',
+  } as AppointmentStateProjection;
+  assert.equal(whatsappAppointmentRenderIntent(completed), 'APPOINTMENT_COMPLETE');
   assert.match(String(renderWhatsAppAppointment(completed).text), /apt-1/);
 });
