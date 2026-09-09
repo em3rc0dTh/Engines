@@ -8,6 +8,12 @@ import {
   resolveAppointmentCustomer,
 } from '../../../persistence/postgres/appointment.repository.js';
 import {
+  closeManagedEntityRepository,
+  createManagedEntityForCustomer,
+  getManagedEntityForCustomer,
+  listManagedEntitiesForCustomer,
+} from '../../../persistence/postgres/managed-entity.repository.js';
+import {
   toAppointmentProduct,
   toAppointmentService,
 } from '../../../services/appointment-catalog.compat.js';
@@ -19,6 +25,12 @@ export const appointmentActivities: AppointmentActivities = {
   getBusinessToday: (input) => Promise.resolve(todayInTimeZone(input.timeZone)),
   resolveAppointmentCustomer: (input) =>
     resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer),
+
+  listAppointmentManagedEntities: (input) =>
+    listManagedEntitiesForCustomer(input.businessSlug, input.customerId, input.type),
+  getAppointmentManagedEntity: (input) =>
+    getManagedEntityForCustomer(input.businessSlug, input.customerId, input.managedEntityId),
+  createAppointmentManagedEntity: (input) => createManagedEntityForCustomer(input),
 
   // S7 authority boundary: Appointment no longer performs its own Service/Product
   // catalog queries. The same canonical Services read activities used by the
@@ -48,5 +60,8 @@ export const appointmentActivities: AppointmentActivities = {
 };
 
 export async function closeAppointmentActivities(): Promise<void> {
-  await closeAppointmentRepository();
+  await Promise.all([
+    closeAppointmentRepository(),
+    closeManagedEntityRepository(),
+  ]);
 }
