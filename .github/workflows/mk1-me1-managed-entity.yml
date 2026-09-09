@@ -1,0 +1,75 @@
+name: MK1 ME1 Managed Entity Resolution
+
+on:
+  push:
+    branches:
+      - feature/managed-entity-resolution-policy
+  pull_request:
+    branches:
+      - feature/cta-orchestration-register-appointment-poc
+
+permissions:
+  contents: read
+
+jobs:
+  contract-persistence-and-webchat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: Managed Entity policy and Appointment contract tests
+        run: npm run test:appointment
+
+      - name: WebChat and channel regression
+        run: npm run test:channel:c1b
+
+      - name: Start clean persistence and Temporal stack
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo temporal migrate worker cta channel-core
+          docker compose ps
+
+      - name: Certify Managed Entity persistence semantics
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:managed-entity | tee /tmp/managed-entity-me1.log
+          grep -F 'MANAGED_ENTITY_ME1_PERSISTENCE_PASS' /tmp/managed-entity-me1.log
+
+      - name: Capture ME1 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/managed-entity-me1-evidence
+          cp /tmp/managed-entity-me1.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT managed_entity_id,business_slug,customer_id,entity_type,display_name,external_ref,status FROM managed_entities ORDER BY created_at" \
+            > /tmp/managed-entity-me1-evidence/managed-entities.txt 2>&1 || true
+          git rev-parse HEAD > /tmp/managed-entity-me1-evidence/git-sha.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-me1-managed-entity-${{ github.run_id }}
+          path: /tmp/managed-entity-me1-evidence
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
