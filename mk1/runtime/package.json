@@ -66,6 +66,7 @@
     "migrate:channel": "tsx scripts/migrate-postgres-channel.ts",
     "migrate:cta-orchestration": "tsx scripts/migrate-postgres-cta-orchestration.ts",
     "migrate:managed-entity": "tsx scripts/migrate-postgres-managed-entity.ts",
+    "probe:managed-entity": "tsx scripts/certify-managed-entity-me1.ts",
     "probe:customer:b2:duplicate": "tsx scripts/certify-customer-b2-soft-duplicate-resolution.ts",
     "probe:services:s1": "tsx scripts/certify-services-s1-persistence.ts",
     "probe:services:s2": "tsx scripts/certify-services-s2-read-engine.ts",
