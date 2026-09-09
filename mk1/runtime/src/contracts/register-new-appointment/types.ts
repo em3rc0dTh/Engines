@@ -6,6 +6,10 @@ import type {
   ServiceRequirement,
   ServiceStatus,
 } from '../services-engine/types.js';
+import type {
+  ManagedEntityCandidate,
+  ManagedEntityPolicy,
+} from './managed-entity-policy.js';
 
 export const REGISTER_NEW_APPOINTMENT_OPERATION = 'RegisterNewAppointment' as const;
 export const REGISTER_NEW_APPOINTMENT_SCHEMA_VERSION = 'mk0.register-appointment.v0' as const;
@@ -26,6 +30,7 @@ export type AppointmentCustomerInput = Readonly<{
 
 export type RegisterNewAppointmentDraft = Readonly<{
   customer?: AppointmentCustomerInput;
+  managedEntityId?: string;
   serviceId?: string;
   productId?: string;
   appointmentDate?: string;
@@ -94,6 +99,10 @@ export type AppointmentPhase =
   | 'WAITING_FOR_CUSTOMER'
   | 'RESOLVING_CUSTOMER'
   | 'CUSTOMER_READY'
+  | 'LOADING_MANAGED_ENTITIES'
+  | 'WAITING_FOR_MANAGED_ENTITY'
+  | 'CREATING_MANAGED_ENTITY'
+  | 'MANAGED_ENTITY_READY'
   | 'LOADING_SERVICES'
   | 'WAITING_FOR_SERVICE'
   | 'LOADING_PRODUCTS'
@@ -111,6 +120,8 @@ export type AppointmentWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type AppointmentNextAction =
   | 'PROVIDE_CUSTOMER'
   | 'RESOLVE_CUSTOMER'
+  | 'SELECT_MANAGED_ENTITY'
+  | 'CREATE_MANAGED_ENTITY'
   | 'SELECT_SERVICE'
   | 'SELECT_PRODUCT'
   | 'PROVIDE_DATE'
@@ -123,6 +134,20 @@ export type AppointmentCustomerResolution = Readonly<{
   customerId?: string;
   customer?: CustomerDraft;
   candidateCustomerIds?: readonly string[];
+}>;
+
+export type AppointmentManagedEntityResolution = Readonly<{
+  status:
+    | 'PENDING'
+    | 'LOADING'
+    | 'NEEDS_SELECTION'
+    | 'NEEDS_CREATION'
+    | 'SELECTED'
+    | 'CREATED'
+    | 'NOT_REQUIRED';
+  policy: ManagedEntityPolicy;
+  candidates: readonly ManagedEntityCandidate[];
+  selected?: ManagedEntityCandidate;
 }>;
 
 export type AppointmentResult = Readonly<{
@@ -143,6 +168,10 @@ export type AppointmentIssue = Readonly<{
     | 'CUSTOMER_NOT_FOUND'
     | 'CUSTOMER_AMBIGUOUS'
     | 'CUSTOMER_INCOMPLETE'
+    | 'MANAGED_ENTITY_NOT_FOUND'
+    | 'MANAGED_ENTITY_REQUIRED'
+    | 'MANAGED_ENTITY_CONFLICT'
+    | 'MANAGED_ENTITY_INVALID'
     | 'SERVICE_NOT_FOUND'
     | 'PRODUCT_NOT_FOUND'
     | 'PRODUCT_SERVICE_MISMATCH'
@@ -160,6 +189,7 @@ export type AppointmentStateProjection = Readonly<{
   workflowStatus: AppointmentWorkflowStatus;
   phase: AppointmentPhase;
   customer: AppointmentCustomerResolution;
+  managedEntity: AppointmentManagedEntityResolution;
   services: readonly AppointmentService[];
   selectedService?: AppointmentService;
   products: readonly AppointmentProduct[];
@@ -180,6 +210,14 @@ export type ProvideAppointmentCustomerInput = Readonly<{
 }>;
 
 export type ResolveAppointmentCustomerInput = Readonly<{ inputId: string }>;
+export type SelectAppointmentManagedEntityInput = Readonly<{ inputId: string; managedEntityId: string }>;
+export type CreateAppointmentManagedEntityInput = Readonly<{
+  inputId: string;
+  displayName: string;
+  externalRef: string;
+  summary?: string;
+  data?: Readonly<Record<string, unknown>>;
+}>;
 export type SelectAppointmentServiceInput = Readonly<{ inputId: string; serviceId: string }>;
 export type SelectAppointmentProductInput = Readonly<{ inputId: string; productId: string }>;
 export type SetAppointmentDateInput = Readonly<{ inputId: string; appointmentDate: string }>;
