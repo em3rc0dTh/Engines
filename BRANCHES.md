@@ -1,106 +1,113 @@
 # Engines — Branch / Integration Ledger
 
-Snapshot: 2026-09-07
+Snapshot: 2026-09-09
 
-This document is the `main`-branch index for version and integration lineage. It does not delete branches and it does not treat documentation-only movement as runtime certification.
+This document records the current branch topology and the evidence/lineage rules after repository housekeeping. Deleting a branch ref does not delete commits, merged PRs, CI runs, artifacts, or evidence receipts.
 
-## Stable refs
-
-```text
-main                         MK0 certified runtime + cross-version registry
-developer                    integration/staging ref; not a feature branch
-release/mk0-complete         frozen MK0 release authority
-```
-
-## MK1 integrated customer/channel anchor
+## Current remote topology
 
 ```text
-build/mk1-customer-channels-integrated
+main
+└── developer
+    ├── feature/cta-orchestration-register-appointment-poc   # PR #24
+    │   └── feature/managed-entity-resolution-policy         # PR #26
+    └── build/mk1-c4p-whatsapp-cloud-api-official            # PR #21
 ```
 
-This anchor contains the consolidated Customer/CTA messaging line through:
+Exactly five remote branches are intentionally retained:
 
-```text
-Customer Registration Policy V2
-Durable ChannelExecutionCore
-WebChat durable semantics
-Telegram adapter
-WhatsApp adapter/transport port
-C2/C4 local real-Temporal E2E
-B2 Customer soft-duplicate resolution
-Telegram official Bot API physical certification
-Kapso WhatsApp Sandbox physical certification
-```
-
-The Kapso PR was merged into this anchor on 2026-09-07 with merge commit:
-
-```text
-b4378d90216829549f739415ffff45aa41bef068
-```
-
-## Meaningful MK1 branches
-
-| Scope | Branch | Status / policy |
+| Branch | Role | Current policy |
 |---|---|---|
-| Services S5 | `build/mk1-s5-services-snapshots` | historical certified milestone |
-| Services S6 | `build/mk1-s6-services-multibusiness` | certified milestone; keep through S8 closure |
-| Services S7 | `build/mk1-s7-appointment-services-integration` | certified milestone |
-| WebChat C1A | `build/mk1-c0-c1-webchat` | certified + human |
-| WebChat C1B | `build/mk1-c1b-durable-channel` | certified + restart/human |
-| Customer channels integrated | `build/mk1-customer-channels-integrated` | current consolidated messaging anchor |
-| Telegram official Bot API | `build/mk1-c2-telegram-bot-api-official` | physically sealed history; extraction candidate |
-| WhatsApp Kapso | `build/mk1-c4p-kapso-official` | physically verified history; merged into integrated anchor; extraction candidate |
-| WhatsApp Meta Cloud API | `build/mk1-c4p-whatsapp-cloud-api-official` | deterministic pass; physical gate pending |
-| Scheduler architecture | `design/mk1-services-scheduler-integration` | design authority only |
-| Messaging architecture | `design/mk1-telegram-whatsapp-official-channels` | design authority only |
+| `main` | stable repository truth / canonical docs | KEEP |
+| `developer` | integration and staging line | KEEP; never use as scratch branch |
+| `feature/cta-orchestration-register-appointment-poc` | certified Register Appointment PoC | KEEP until PR #24 integration decision |
+| `feature/managed-entity-resolution-policy` | active ManagedEntity policy/resolution slice | KEEP; stacked on PR #24 |
+| `build/mk1-c4p-whatsapp-cloud-api-official` | direct Meta Cloud API alternate provider path | KEEP while physical provider gate remains open |
 
-## Integration repository policy
+## Developer synchronization
 
-Target topology:
+`developer` was synchronized with `main` on 2026-09-09 by merge commit:
 
 ```text
-Engines
-├── provider-neutral core/contracts
-├── canonical version docs
-└── integrations/ registry
-
-Engines-Integration-WebChat
-Engines-Integration-Telegram
-Engines-Integration-WhatsApp-Kapso
-Engines-Integration-WhatsApp-Meta
-Engines-Integration-<future-provider>
+7fde58081ec0ac453c9b2eb269e55f93fb1ab79c
 ```
 
-One external provider integration should not become a permanent source-code subtree owned by the core repository. Until repository extraction occurs, bounded provider branches preserve the executable history; `main/integrations/<provider>` preserves the central registry, contracts, runbooks and evidence pointers.
+After that merge, `developer` contains all current `main` history and remains ahead with the accumulated MK1 runtime/integration history. This synchronization does not merge PR #21, #24, or #26.
 
-## Current channel truth
+## Current open PR topology
 
 ```text
-CLI / HTTP-Postman                         ✅ historical MK0 surfaces
-WebChat C1A                                ✅ CERTIFIED + HUMAN VERIFIED
-WebChat C1B                                ✅ CERTIFIED + HUMAN RESTART VERIFIED
-Telegram official Bot API                  ✅ PHYSICALLY VERIFIED / SEALED
-WhatsApp local adapter                     ✅ AUTOMATED + HUMAN VERIFIED
-WhatsApp Kapso Sandbox                     ✅ PHYSICALLY VERIFIED
-WhatsApp Meta Cloud API                    ✅ DETERMINISTIC PASS / PHYSICAL PENDING
+PR #24  feature/cta-orchestration-register-appointment-poc
+        → developer
+        Register Appointment PoC
+        physically/deterministically certified candidate
+        merge requires explicit authorization
+
+PR #26  feature/managed-entity-resolution-policy
+        → feature/cta-orchestration-register-appointment-poc
+        ManagedEntity resolution policy
+        active Draft / stacked work
+
+PR #21  build/mk1-c4p-whatsapp-cloud-api-official
+        → developer
+        direct Meta WhatsApp Cloud API transport
+        deterministic pass; physical route not sealed
 ```
 
-## Current build sequence
+## Integration capability truth
+
+CLI, HTTP/Postman, WebChat, Telegram and WhatsApp/Kapso are capabilities of the integrated Engines lineage; they are not maintained as permanent independent active branches.
 
 ```text
-MK0                                         ✅ CLOSED
-MK1 messaging/customer integrations          ✅ major provider gates closed except direct Meta physical path
-MK1 Services S8                              ⏭ NEXT CORE GATE
-Scheduler runtime                            ⏭ after Services G1 closure
-Agent / MCP / LLM routing                    ⏭ last
+CLI / HTTP-Postman                         ✅ historical/certified surfaces
+WebChat                                    ✅ certified + physical browser proof
+Telegram official Bot API                  ✅ physically verified / sealed
+WhatsApp through Kapso Sandbox             ✅ physically verified
+WhatsApp direct Meta Cloud API             ✅ deterministic pass / physical pending
+```
+
+Provider-specific transport remains below the canonical Engine boundary. Provider code may own authentication, provider identity, payload normalization, rendering and transport semantics; it may not own Customer, ManagedEntity, Services, Scheduler, Temporal business policy or canonical persistence.
+
+## Historical branches
+
+The former MK0/MK1 gate, design, channel-stack and consolidated-anchor refs were removed during housekeeping once their ancestry/evidence had been preserved elsewhere. They remain recoverable from Git history, merged/closed PRs, commits and evidence receipts.
+
+Notable historical work retained in history includes:
+
+```text
+MK0 CLI / HTTP-Postman / release milestones
+MK1 Services S0-S7 milestones
+WebChat C1A/C1B milestones
+Customer registration policy/channel-core stack
+Telegram registration + official Bot API proof
+WhatsApp registration + Kapso proof
+messaging-stack consolidation anchor
+repository integration-layout work
+```
+
+Branch deletion therefore means "no longer an active ref", not "evidence deleted".
+
+## Current construction sequence
+
+```text
+Repository housekeeping / developer-main synchronization       ✅ CLOSED
+Register Appointment PoC / PR #24                               ✅ CERTIFIED / REVIEW
+ManagedEntity resolution / PR #26                               🔧 ACTIVE
+Direct Meta Cloud API physical path / PR #21                    ⚪ OPTIONAL / OPEN
+Data Model v3 scheduling/capacity                               ⏭ after ManagedEntity seam
+Data Model v4 operational/corrective lifecycle                  ⏭ after v3
+Agent / MCP / LLM routing                                       ⏭ later
 ```
 
 ## Branch hygiene rules
 
-1. Every bounded architecture/build/certification gate gets its own branch.
-2. `main` and `developer` are not scratch or feature branches.
-3. A runtime claim stays attached to the exact executed source SHA even when later documentation commits exist.
-4. Provider branches may be retained as extraction/certification history after merge.
-5. Never delete a branch automatically; verify ancestry, PR state and evidence first.
-6. `mk0/runtime` stays frozen.
-7. A provider integration may not move Customer, Services, Scheduler, Temporal or persistence business policy into provider code.
+1. `main` is stable repository truth; `developer` is the integration/staging line.
+2. Feature/build branches are temporary and bounded by one explicit scope or certification gate.
+3. Do not create a permanent branch merely because a new channel/provider exists.
+4. Preserve proven channel integrations; normalize their outputs, not their internals.
+5. Runtime claims stay attached to the exact executed source SHA even when later merge/docs commits exist.
+6. CI green is not equivalent to external-provider physical certification.
+7. Before deleting a branch, verify PR state, ancestry and evidence reachability.
+8. `mk0/runtime` remains frozen.
+9. PR #24 must not be merged without explicit user authorization.
+10. Stacked PRs must preserve their base lineage until the parent PR is integrated or deliberately retargeted.
