@@ -10,7 +10,11 @@ import {
   type SelectAppointmentSlotInput,
   type SetAppointmentDateInput,
 } from '../../contracts/register-new-appointment/index.js';
-import { validateProvideCustomerDataIngress } from '../../contracts/register-new-customer/index.js';
+import {
+  GOLDEN_REGISTRATION_POLICY_V2,
+  evaluateRegistrationCompleteness,
+  validateProvideCustomerDataIngress,
+} from '../../contracts/register-new-customer/index.js';
 import { adaptRegisterNewAppointmentCtaInput } from '../register-new-appointment.adapter.js';
 import type { TemporalRegisterNewAppointmentPort } from '../../orchestration/temporal/ports/register-new-appointment.temporal-port.js';
 import {
@@ -44,6 +48,13 @@ type ActionHandler = (
   envelope: CanonicalChannelEnvelope,
 ) => Promise<unknown>;
 
+export interface CatalogOfferingResolver {
+  getOffering(businessSlug: string, offeringIdOrCode: string): Promise<Readonly<{
+    serviceId: string;
+    offeringId: string;
+  }> | undefined>;
+}
+
 function record(value: unknown): JsonRecord | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonRecord
@@ -74,12 +85,47 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
   return new Map<CanonicalChannelAction, ActionHandler>([
     ['PROVIDE_CUSTOMER', async (handle, envelope) => {
       const customerPatch = record(envelope.payload.customerPatch);
-      if (!customerPatch) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'customerPatch');
+      const customerId = typeof envelope.payload.customerId === 'string'
+        ? envelope.payload.customerId.trim()
+        : undefined;
+      if (!customerPatch && !customerId) {
+        throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'customerId or customerPatch');
+      }
       const inputId = channelOperationInputId(envelope);
-      const validated = validateProvideCustomerDataIngress({ inputId, customerPatch });
-      if (!validated.ok) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', validated.issues[0]?.message ?? 'customerPatch');
-      const input: ProvideAppointmentCustomerInput = { inputId, customerPatch };
-      return handle.executeUpdate(provideAppointmentCustomerUpdate, { args: [input] });
+      if (customerPatch) {
+        const validated = validateProvideCustomerDataIngress({ inputId, customerPatch });
+        if (!validated.ok) {
+          throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', validated.issues[0]?.message ?? 'customerPatch');
+        }
+      }
+      const input: ProvideAppointmentCustomerInput = {
+        inputId,
+        ...(customerId ? { customerId } : {}),
+        ...(customerPatch ? { customerPatch } : {}),
+      };
+      const provided = await handle.executeUpdate(provideAppointmentCustomerUpdate, { args: [input] });
+
+      const state = await handle.query(getAppointmentStateQuery);
+      const draft = state.customer.customer;
+      const completeDraft = draft
+        ? evaluateRegistrationCompleteness(GOLDEN_REGISTRATION_POLICY_V2, { customer: draft }).complete
+        : false;
+      const shouldResolve = state.workflowStatus === 'RUNNING'
+        && state.phase === 'WAITING_FOR_CUSTOMER'
+        && state.customer.status !== 'AMBIGUOUS'
+        && (Boolean(customerId) || completeDraft);
+
+      if (shouldResolve) {
+        const resolveInput: ResolveAppointmentCustomerInput = { inputId: `${inputId}:auto-resolve` };
+        await handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [resolveInput] });
+        for (let attempt = 0; attempt < 50; attempt += 1) {
+          const current = await handle.query(getAppointmentStateQuery);
+          if (current.phase !== 'WAITING_FOR_CUSTOMER' || current.customer.status === 'AMBIGUOUS') break;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      return provided;
     }],
     ['RESOLVE_CUSTOMER', async (handle, envelope) => {
       const input: ResolveAppointmentCustomerInput = { inputId: channelOperationInputId(envelope) };
@@ -129,6 +175,7 @@ export class AppointmentChannelExecutionCore {
   constructor(
     private readonly repository: PostgresChannelRepository,
     private readonly appointmentPort: TemporalRegisterNewAppointmentPort,
+    private readonly catalog?: CatalogOfferingResolver,
   ) {}
 
   async execute(envelope: CanonicalChannelEnvelope): Promise<CanonicalChannelExecutionResponse> {
@@ -196,10 +243,10 @@ export class AppointmentChannelExecutionCore {
     });
     if (!binding) throw new ChannelExecutionError('CHANNEL_CONVERSATION_NOT_BOUND');
 
-    const handler = ACTION_HANDLERS.get(envelope.action);
-    if (!handler) throw new ChannelExecutionError('CHANNEL_OPERATION_NOT_SUPPORTED');
     const handle = this.appointmentPort.client.workflow.getHandle(binding.workflowId);
-    const operationResult = await handler(handle, envelope);
+    const operationResult = envelope.action === 'SELECT_OFFERING' && this.catalog
+      ? await this.selectCatalogOffering(handle, envelope)
+      : await this.executeHandler(handle, envelope);
     const state = await handle.query(getAppointmentStateQuery);
     const description = await handle.describe();
     const bindingStatus = state.workflowStatus === 'COMPLETED'
@@ -222,5 +269,37 @@ export class AppointmentChannelExecutionCore {
       binding: updatedBinding,
       operationResult,
     };
+  }
+
+  private async executeHandler(handle: WorkflowHandle, envelope: CanonicalChannelEnvelope): Promise<unknown> {
+    const handler = ACTION_HANDLERS.get(envelope.action);
+    if (!handler) throw new ChannelExecutionError('CHANNEL_OPERATION_NOT_SUPPORTED');
+    return handler(handle, envelope);
+  }
+
+  /**
+   * Canonical channels choose one CatalogOffering. The inherited Appointment
+   * Workflow still stores a Service projection, so this compatibility seam
+   * derives that parent internally without exposing a mandatory Service step.
+   */
+  private async selectCatalogOffering(handle: WorkflowHandle, envelope: CanonicalChannelEnvelope): Promise<unknown> {
+    const raw = envelope.payload.catalogOfferingId ?? envelope.payload.productId;
+    if (typeof raw !== 'string' || !raw.trim()) throw new ChannelExecutionError('CHANNEL_EVENT_INVALID', 'catalogOfferingId');
+    const offering = await this.catalog!.getOffering(envelope.businessSlug, raw.trim());
+    if (!offering) throw new ChannelExecutionError('PRODUCT_NOT_FOUND', raw.trim());
+    const state = await handle.query(getAppointmentStateQuery);
+    if (state.phase === 'WAITING_FOR_SERVICE') {
+      await handle.executeUpdate(selectAppointmentServiceUpdate, {
+        args: [{ inputId: `${channelOperationInputId(envelope)}:offering-parent`, serviceId: offering.serviceId }],
+      });
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const current = await handle.query(getAppointmentStateQuery);
+        if (current.phase === 'WAITING_FOR_PRODUCT') break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    return handle.executeUpdate(selectAppointmentProductUpdate, {
+      args: [{ inputId: channelOperationInputId(envelope), productId: offering.offeringId }],
+    });
   }
 }

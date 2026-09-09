@@ -1,4 +1,11 @@
-export type ChannelKind = 'WEBCHAT' | 'TELEGRAM' | 'WHATSAPP';
+export type ChannelKind =
+  | 'WEBCHAT'
+  | 'TELEGRAM'
+  | 'WHATSAPP'
+  | 'API'
+  | 'MESSENGER'
+  | 'FACEBOOK_COMMENT'
+  | 'TIKTOK';
 
 export type CanonicalChannelAction =
   | 'START_CUSTOMER_REGISTRATION'
@@ -76,4 +83,25 @@ export type CustomerRegistrationRenderIntent =
   | 'RESOLVE_CUSTOMER_DUPLICATE'
   | 'REGISTRATION_COMPLETE'
   | 'REGISTRATION_FAILED'
+  | 'WAIT';
+
+/**
+ * Provider-neutral appointment interaction intent.
+ *
+ * Transports may render these intents with buttons, free text prompts, or other
+ * native affordances, but the durable Appointment Workflow remains the source
+ * of truth for which input is currently accepted.
+ */
+export type AppointmentRenderIntent =
+  | 'ASK_CUSTOMER_NAME'
+  | 'ASK_CUSTOMER_PHONE'
+  | 'ASK_CUSTOMER_EMAIL'
+  | 'RESOLVE_CUSTOMER'
+  | 'SELECT_SERVICE'
+  | 'SELECT_OFFERING'
+  | 'ASK_DATE'
+  | 'SELECT_SLOT'
+  | 'FINALIZE_APPOINTMENT'
+  | 'APPOINTMENT_COMPLETE'
+  | 'APPOINTMENT_FAILED'
   | 'WAIT';

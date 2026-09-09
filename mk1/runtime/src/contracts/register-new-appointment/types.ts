@@ -128,6 +128,9 @@ export type AppointmentCustomerResolution = Readonly<{
 export type AppointmentResult = Readonly<{
   appointmentId: string;
   customerId: string;
+  managedEntityId?: string;
+  caseId?: string;
+  resourceReservationId?: string;
   serviceId: string;
   productId: string;
   appointmentDate: string;
