@@ -31,7 +31,12 @@ jobs:
         run: npm ci
 
       - name: TypeScript
-        run: npm run check
+        shell: bash
+        run: |
+          set +e
+          npm run check 2>&1 | tee /tmp/managed-entity-me1-tsc.log
+          status=${PIPESTATUS[0]}
+          exit $status
 
       - name: Managed Entity policy and Appointment contract tests
         run: npm run test:appointment
@@ -56,6 +61,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/managed-entity-me1-evidence
+          cp /tmp/managed-entity-me1-tsc.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
           cp /tmp/managed-entity-me1.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
           docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
             "SELECT managed_entity_id,business_slug,customer_id,entity_type,display_name,external_ref,status FROM managed_entities ORDER BY created_at" \
