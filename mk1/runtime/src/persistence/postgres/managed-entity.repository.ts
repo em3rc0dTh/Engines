@@ -18,7 +18,7 @@ function canonicalJson(value: unknown): string {
       .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
       .join(',')}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? 'null';
 }
 
 function fingerprint(value: unknown): string {
