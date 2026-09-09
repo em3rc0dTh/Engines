@@ -1,8 +1,14 @@
+import {
+  WEBCHAT_CONVERSATION_STORAGE_KEY,
+  clearStaleConversationSession,
+  isRecoverableStaleConversationError,
+} from './session-recovery.js';
+
 const $ = (id) => document.getElementById(id);
 
 const params = new URLSearchParams(location.search);
 const state = {
-  conversationId: params.get('conversationId') || localStorage.getItem('engines.webchat.conversationId') || '',
+  conversationId: params.get('conversationId') || localStorage.getItem(WEBCHAT_CONVERSATION_STORAGE_KEY) || '',
   workflowId: params.get('workflowId') || '',
   snapshot: null,
   view: null,
@@ -24,8 +30,18 @@ function transportMessageId(label) {
 
 async function json(path, init = {}) {
   const response = await fetch(path, init);
-  const raw = await response.json();
-  if (!response.ok) throw new Error(raw.error || raw.code || `HTTP ${response.status}`);
+  let raw;
+  try {
+    raw = await response.json();
+  } catch {
+    raw = {};
+  }
+  if (!response.ok) {
+    const error = new Error(raw.error || raw.code || `HTTP ${response.status}`);
+    error.status = response.status;
+    error.code = raw.code;
+    throw error;
+  }
   return raw;
 }
 
@@ -247,6 +263,33 @@ function render(snapshot) {
   renderInteraction();
 }
 
+function recoverStaleConversation(error) {
+  if (!isRecoverableStaleConversationError(error)) return false;
+
+  const { staleConversationId, url } = clearStaleConversationSession(state, localStorage, location.href);
+  history.replaceState({}, '', url);
+
+  $('startButton').disabled = false;
+  $('businessSlug').disabled = false;
+  $('workflowId').textContent = 'not started';
+  $('workflowStatus').textContent = '—';
+  $('phase').textContent = '—';
+  $('nextAction').textContent = '—';
+  $('rawState').textContent = 'No Workflow state yet.';
+  const inspector = $('inspectorLink');
+  inspector.href = '/webchat/workflow.html';
+  inspector.classList.add('disabled');
+  renderSteps(null);
+  clearChoices();
+  setInput(null, 'Start the Workflow first', false);
+  $('connectionStatus').textContent = 'CTA + channel ready · previous conversation expired';
+  appendMessage(
+    'system',
+    `Previous durable conversation ${staleConversationId || 'unknown'} is no longer available. Start Workflow to begin a new conversation.`,
+  );
+  return true;
+}
+
 async function refresh() {
   if (!state.conversationId || state.polling) return;
   state.polling = true;
@@ -255,7 +298,7 @@ async function refresh() {
     render(snapshot);
     $('connectionStatus').textContent = 'Temporal + durable channel connected';
   } catch (error) {
-    if (String(error.message).includes('CHANNEL_CONVERSATION_NOT_BOUND')) return;
+    if (recoverStaleConversation(error)) return;
     $('connectionStatus').textContent = 'state unavailable';
     console.error(error);
   } finally {
@@ -287,7 +330,7 @@ async function withSubmission(task) {
 async function startWorkflow() {
   await withSubmission(async () => {
     state.conversationId = state.conversationId || randomId('webchat-conversation');
-    localStorage.setItem('engines.webchat.conversationId', state.conversationId);
+    localStorage.setItem(WEBCHAT_CONVERSATION_STORAGE_KEY, state.conversationId);
     const url = new URL(location.href);
     url.searchParams.set('conversationId', state.conversationId);
     history.replaceState({}, '', url);
