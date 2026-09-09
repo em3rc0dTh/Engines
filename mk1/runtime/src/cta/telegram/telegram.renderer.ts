@@ -64,7 +64,10 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
     case 'WAITING_FOR_SLOT': return 'SELECT_SLOT';
     case 'READY_TO_FINALIZE': return 'FINALIZE_APPOINTMENT';
-    case 'CREATED': return 'APPOINTMENT_COMPLETE';
+    // CREATED is not externally terminal until the workflow has completed its
+    // audit verification and workflowStatus is durably COMPLETED. Waiting here
+    // prevents provider runners from returning before CTA/binding reconciliation.
+    case 'CREATED': return 'WAIT';
     case 'STARTED':
     case 'RESOLVING_CUSTOMER':
     case 'CUSTOMER_READY':
