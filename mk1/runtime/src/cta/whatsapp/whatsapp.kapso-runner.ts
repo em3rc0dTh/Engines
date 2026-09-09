@@ -518,15 +518,16 @@ async function main(): Promise<void> {
       host: HOST,
       port: PORT,
       webhookPath: WEBHOOK_PATH,
+      phoneNumberId,
+      graphApiVersion,
       businessSlug: BUSINESS_SLUG,
-      provider: 'KAPSO',
       appointmentOperation: 'RegisterNewAppointment',
       registrationOperation: 'RegisterNewCustomer',
       agent: false,
       mcp: false,
     })}`);
 
-    while (!stopping) await delay(1_000);
+    await new Promise<void>((resolve) => server.once('close', resolve));
   } finally {
     await Promise.all([customerPort.close(), appointmentPort.close()]);
     await pool.end();
