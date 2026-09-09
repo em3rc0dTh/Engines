@@ -56,7 +56,11 @@ export function whatsappAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
     case 'WAITING_FOR_SLOT': return 'SELECT_SLOT';
     case 'READY_TO_FINALIZE': return 'FINALIZE_APPOINTMENT';
-    case 'CREATED': return 'APPOINTMENT_COMPLETE';
+    // The workflow persists the Appointment and audits it before flipping the
+    // durable workflowStatus to COMPLETED. Do not surface a terminal success
+    // message during that short CREATED/RUNNING window, otherwise provider
+    // runners can return before reconciling CTA ingress and channel binding.
+    case 'CREATED': return 'WAIT';
     case 'STARTED':
     case 'RESOLVING_CUSTOMER':
     case 'CUSTOMER_READY':
