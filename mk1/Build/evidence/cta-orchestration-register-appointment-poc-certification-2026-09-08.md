@@ -7,10 +7,11 @@ PR: `#24 — CTA orchestration: canonical Register Appointment PoC`
 
 ## Current candidate
 
-Code candidate used for the final physical WebChat regression:
+Code candidate used for the final physical WebChat regression and stale-session recovery proof:
 
-- Candidate: `2f15e2a741ba6cf0a677a69e33711e961cca8c10`
-- PR state before final evidence seal: Draft, open, mergeable, unmerged
+- Code candidate: `2f15e2a741ba6cf0a677a69e33711e961cca8c10`
+- Later branch commits are evidence/documentation-only.
+- PR state at seal time: open, mergeable, unmerged.
 
 Fresh CI on `2f15e2a741ba6cf0a677a69e33711e961cca8c10`:
 
@@ -49,7 +50,7 @@ ResourceReservation HELD -> RELEASED
 CTAIngressRecord PROCESSING -> FAILED
 ```
 
-## Lifecycle / UX fixes closed in code and CI
+## Lifecycle / UX fixes closed
 
 ### TG-UX01 — appointment contact completeness
 
@@ -84,9 +85,29 @@ The candidate treats `CREATED/RUNNING` as non-terminal and only surfaces success
 
 ### WEBCHAT-ST01 — stale browser session recovery
 
-The WebChat browser now recognizes `404 CHANNEL_CONVERSATION_NOT_BOUND` as a recoverable stale-session condition. It clears the stale persisted conversation identity, removes stale `conversationId`/`workflowId` URL parameters, resets the projection and re-enables `Start Workflow` while preserving unrelated query parameters.
+The WebChat browser recognizes `404 CHANNEL_CONVERSATION_NOT_BOUND` as a recoverable stale-session condition. It clears the stale persisted conversation identity, removes stale `conversationId`/`workflowId` URL parameters, resets the projection and re-enables `Start Workflow` while preserving unrelated query parameters.
 
-This behavior is regression-tested in code. A dedicated physical stale-session browser replay remains the only open proof item before the PR is marked ready for review.
+This was regression-tested in code and then physically exercised in the browser with persisted identity:
+
+```text
+webchat-conversation-stale-cert
+```
+
+Observed physical recovery:
+
+```text
+CTA + channel ready · previous conversation expired
+Workflow = not started
+Status = —
+Temporal phase = —
+Next action = —
+Previous durable conversation webchat-conversation-stale-cert is no longer available.
+Start Workflow to begin a new conversation.
+```
+
+`Start Workflow` was re-enabled automatically and the raw durable state reset to `No Workflow state yet.` No Incognito window, manual localStorage cleanup, SQL deletion or backend-volume reset was required.
+
+Therefore `WEBCHAT-ST01` is **PHYSICALLY CLOSED**.
 
 ## Physical evidence — P1 WebChat
 
@@ -115,9 +136,7 @@ reservations = 1
 
 ### Final WebChat physical regression on `2f15e2a...`
 
-The eventual merge-candidate code was exercised again in a real browser through the entire appointment flow, not merely to service selection.
-
-Physical workflow:
+The final code candidate was exercised again in a real browser through the entire appointment flow.
 
 - Workflow: `register-appointment:golden-business:d17ee5ee5d5eafedbd2a4d850ae286de`
 - Run: `01a08683-6845-7154-ba7f-88eb82d4df77`
@@ -138,7 +157,7 @@ Physical workflow:
 
 The WebChat and Temporal Workflow Inspector independently showed all 12 workflow-map steps as `COMPLETE` and the same business projection. Invalid human-date input was rejected with `INVALID_DATE`, after which a valid human date continued the same workflow to completion.
 
-Therefore the final-candidate WebChat appointment regression is **PASS**.
+P1 WebChat browser path, persistence/idempotency lineage, final-candidate regression and stale-session recovery are **CERTIFIED**.
 
 ## Physical evidence — P2 Telegram
 
@@ -156,12 +175,7 @@ A real Telegram app -> official Bot API -> Engines runner -> canonical CTA -> Te
 
 Exact normalized replay returned the same workflow, Case and Appointment with `duplicate_count=1` and exactly one Appointment, Case and Reservation.
 
-Subsequent physical regressions proved:
-
-- name + email + phone capture before resolution;
-- no user-facing `Continuar` step;
-- a completed appointment can be followed by another `/appointment` in the same Telegram chat;
-- sequential appointments receive distinct workflows and Appointment ids.
+Subsequent physical regressions proved name + email + phone capture before resolution, no user-facing `Continuar`, completed-to-new-appointment lifecycle in one Telegram chat, and distinct workflows/Appointment ids for sequential appointments.
 
 P2 physical provider delivery, persistence, provenance and replay/idempotency are **CERTIFIED**.
 
@@ -180,8 +194,8 @@ A real WhatsApp -> Kapso signed webhook -> Engines live runner -> canonical CTA 
 After WA-LC01 was fixed, the same physical workflow reconciled to:
 
 ```text
-CTA ingress   = COMPLETED
-binding       = COMPLETED
+CTA ingress = COMPLETED
+binding     = COMPLETED
 ```
 
 Exact signed Kapso webhook redelivery produced:
@@ -212,19 +226,27 @@ Certified for this PoC candidate lineage:
 - sequential appointments in one provider conversation;
 - terminal channel rebinding semantics;
 - Telegram stale-Temporal-binding recovery;
-- WebChat physical path + idempotency and final-candidate full regression;
+- WebChat physical path + idempotency + final-candidate regression + stale-session recovery;
 - Telegram physical provider path + idempotency;
 - WhatsApp/Kapso physical provider path + signed webhook replay/idempotency;
 - deterministic Telegram and WhatsApp transport regressions;
 - API, Messenger, Facebook Comment and TikTok adapter/capability contracts covered by the CTA suite.
 
-## Remaining pre-merge gate
+## Pre-merge gate status
 
-One proof item remains before marking PR #24 ready for review:
+Selected physical gates are closed:
 
-- physical browser proof of `WEBCHAT-ST01` stale-session auto-recovery on the final candidate.
-
-No additional Telegram or WhatsApp physical booking is required unless that final browser check exposes a regression.
+```text
+P1 WebChat physical             PASS
+P1 replay/idempotency           PASS
+WEBCHAT-ST01 physical recovery  PASS
+P2 Telegram physical            PASS
+P2 replay/idempotency           PASS
+P3 WhatsApp/Kapso physical      PASS
+P3 replay/idempotency           PASS
+Final candidate CI              PASS
+Final WebChat regression        PASS
+```
 
 Messenger, Facebook Comments and TikTok physical provider delivery do not block this first PoC unless the claim is expanded to physical certification for those providers.
 
@@ -234,4 +256,4 @@ No AI Agent, MCP, full Services Engine, full Scheduler Engine, production readin
 
 ## Merge state
 
-PR #24 remains unmerged. It must not be merged without explicit user authorization after the final stale-WebChat recovery proof and evidence review.
+The technical and selected physical pre-merge gates are closed. PR #24 may be marked **Ready for Review**, but it remains **unmerged**. Merge requires explicit user authorization.
