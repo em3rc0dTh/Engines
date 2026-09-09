@@ -25,6 +25,42 @@ test('C1B WebChat adapter normalizes into trusted canonical envelope', () => {
   });
 });
 
+test('ME1 WebChat adapter keeps managed entity creation provider-neutral', () => {
+  const adapter = new WebChatAdapter();
+  const result = adapter.normalizeInbound({
+    conversationId: 'conversation-1',
+    messageId: 'message-me-1',
+    senderId: 'browser-1',
+    operation: 'CREATE_MANAGED_ENTITY',
+    data: {
+      displayName: 'Renault Logan 2018',
+      externalRef: 'ABC-123',
+      data: { plate: 'ABC-123' },
+    },
+  }, { businessSlug: 'golden-business' });
+
+  assert.equal(result.action, 'CREATE_MANAGED_ENTITY');
+  assert.deepEqual(result.payload, {
+    displayName: 'Renault Logan 2018',
+    externalRef: 'ABC-123',
+    data: { plate: 'ABC-123' },
+  });
+});
+
+test('ME1 WebChat adapter accepts explicit managed entity selection', () => {
+  const adapter = new WebChatAdapter();
+  const result = adapter.normalizeInbound({
+    conversationId: 'conversation-1',
+    messageId: 'message-me-2',
+    senderId: 'browser-1',
+    operation: 'SELECT_MANAGED_ENTITY',
+    data: { managedEntityId: 'men_logan' },
+  }, { businessSlug: 'golden-business' });
+
+  assert.equal(result.action, 'SELECT_MANAGED_ENTITY');
+  assert.deepEqual(result.payload, { managedEntityId: 'men_logan' });
+});
+
 test('C1B WebChat adapter fails closed for unsupported action', () => {
   const adapter = new WebChatAdapter();
   assert.throws(() => adapter.normalizeInbound({
