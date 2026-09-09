@@ -2,9 +2,11 @@ import type { WorkflowHandle } from '@temporalio/client';
 import {
   normalizeAppointmentDateInput,
   todayInTimeZone,
+  type CreateAppointmentManagedEntityInput,
   type FinalizeAppointmentInput,
   type ProvideAppointmentCustomerInput,
   type ResolveAppointmentCustomerInput,
+  type SelectAppointmentManagedEntityInput,
   type SelectAppointmentProductInput,
   type SelectAppointmentServiceInput,
   type SelectAppointmentSlotInput,
@@ -18,10 +20,12 @@ import {
 import { adaptRegisterNewAppointmentCtaInput } from '../register-new-appointment.adapter.js';
 import type { TemporalRegisterNewAppointmentPort } from '../../orchestration/temporal/ports/register-new-appointment.temporal-port.js';
 import {
+  createAppointmentManagedEntityUpdate,
   finalizeAppointmentUpdate,
   getAppointmentStateQuery,
   provideAppointmentCustomerUpdate,
   resolveAppointmentCustomerUpdate,
+  selectAppointmentManagedEntityUpdate,
   selectAppointmentProductUpdate,
   selectAppointmentServiceUpdate,
   selectAppointmentSlotUpdate,
@@ -130,6 +134,28 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
     ['RESOLVE_CUSTOMER', async (handle, envelope) => {
       const input: ResolveAppointmentCustomerInput = { inputId: channelOperationInputId(envelope) };
       return handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [input] });
+    }],
+    ['SELECT_MANAGED_ENTITY', async (handle, envelope) => {
+      const input: SelectAppointmentManagedEntityInput = {
+        inputId: channelOperationInputId(envelope),
+        managedEntityId: stringField(envelope.payload as JsonRecord, 'managedEntityId'),
+      };
+      return handle.executeUpdate(selectAppointmentManagedEntityUpdate, { args: [input] });
+    }],
+    ['CREATE_MANAGED_ENTITY', async (handle, envelope) => {
+      const payload = envelope.payload as JsonRecord;
+      const summary = typeof payload.summary === 'string' && payload.summary.trim()
+        ? payload.summary.trim()
+        : undefined;
+      const data = record(payload.data);
+      const input: CreateAppointmentManagedEntityInput = {
+        inputId: channelOperationInputId(envelope),
+        displayName: stringField(payload, 'displayName'),
+        externalRef: stringField(payload, 'externalRef'),
+        ...(summary ? { summary } : {}),
+        ...(data ? { data } : {}),
+      };
+      return handle.executeUpdate(createAppointmentManagedEntityUpdate, { args: [input] });
     }],
     ['SELECT_SERVICE', async (handle, envelope) => {
       const input: SelectAppointmentServiceInput = {
