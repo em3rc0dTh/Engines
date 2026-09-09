@@ -13,6 +13,7 @@ const state = {
   snapshot: null,
   view: null,
   inputMode: null,
+  managedEntityDraft: {},
   lastPromptKey: '',
   lastPhaseSignature: '',
   polling: false,
@@ -134,11 +135,18 @@ function phaseBusy(phase) {
     'STARTED',
     'RESOLVING_CUSTOMER',
     'CUSTOMER_READY',
+    'LOADING_MANAGED_ENTITIES',
+    'CREATING_MANAGED_ENTITY',
+    'MANAGED_ENTITY_READY',
     'LOADING_SERVICES',
     'LOADING_PRODUCTS',
     'LOADING_SLOTS',
     'RESERVING_APPOINTMENT',
   ].includes(phase);
+}
+
+function managedEntityLabel(durable) {
+  return durable.managedEntity?.policy?.label ?? 'Entidad gestionada';
 }
 
 function renderInteraction() {
@@ -160,7 +168,7 @@ function renderInteraction() {
   }
 
   if (durable.phase === 'CREATED') {
-    promptOnce('created', `Appointment created.\nAppointment ID: ${durable.result?.appointmentId ?? '—'}`);
+    promptOnce('created', `Appointment created.\nAppointment ID: ${durable.result?.appointmentId ?? '—'}\nManaged Entity: ${durable.managedEntity?.selected?.displayName ?? durable.result?.managedEntityId ?? '—'}`);
     setInput(null, 'Workflow completed', false);
     return;
   }
@@ -189,8 +197,50 @@ function renderInteraction() {
     }
   }
 
+  if (durable.nextAction === 'SELECT_MANAGED_ENTITY') {
+    const label = managedEntityLabel(durable);
+    promptOnce('select-managed-entity', `Step 06 — Select the ${label.toLowerCase()} for this appointment.`);
+    setInput(null, `Choose ${label}`, false);
+    for (const entity of durable.managedEntity?.candidates ?? []) {
+      const text = entity.summary ? `${entity.displayName} · ${entity.summary}` : entity.displayName;
+      choice(text, () => runAction('SELECT_MANAGED_ENTITY', { managedEntityId: entity.managedEntityId }, entity.displayName));
+    }
+    return;
+  }
+
+  if (durable.nextAction === 'CREATE_MANAGED_ENTITY') {
+    const policy = durable.managedEntity?.policy ?? {};
+    const label = managedEntityLabel(durable);
+    if (!state.managedEntityDraft.displayName) {
+      const example = policy.type === 'vehicle'
+        ? 'Renault Logan 2018'
+        : policy.type === 'dessert_request' ? 'Torta para cumpleaños de mi hijo' : label;
+      promptOnce('managed-entity-name', `Step 06 — No compatible ${label.toLowerCase()} is selected. Create one.\nDescribe it so it is recognizable later.`);
+      setInput('managed-entity-name', example);
+      return;
+    }
+    if (policy.lifecycle === 'REQUEST_SCOPED') {
+      promptOnce('managed-entity-request-create', `Creating ${label.toLowerCase()} for this request…`);
+      setInput(null, `Creating ${label}`, false);
+      const displayName = state.managedEntityDraft.displayName;
+      state.managedEntityDraft = {};
+      runAction(
+        'CREATE_MANAGED_ENTITY',
+        { displayName, externalRef: randomId('request-subject') },
+        `Create ${displayName}`,
+      ).catch((error) => appendMessage('system', `ERROR: ${error.message}`));
+      return;
+    }
+    if (!state.managedEntityDraft.externalRef) {
+      const placeholder = policy.type === 'vehicle' ? 'Plate / stable vehicle reference' : 'Stable reference';
+      promptOnce('managed-entity-reference', `Provide a stable reference for ${state.managedEntityDraft.displayName}.`);
+      setInput('managed-entity-ref', placeholder);
+      return;
+    }
+  }
+
   if (durable.nextAction === 'SELECT_SERVICE') {
-    promptOnce('select-service', 'Step 06 — Select a Service loaded by the Workflow.');
+    promptOnce('select-service', 'Step 07 — Select a Service loaded by the Workflow.');
     setInput(null, 'Choose a Service', false);
     for (const service of durable.services ?? []) {
       choice(service.name, () => runAction('SELECT_SERVICE', { serviceId: service.serviceId }, service.name));
@@ -199,7 +249,7 @@ function renderInteraction() {
   }
 
   if (durable.nextAction === 'SELECT_PRODUCT') {
-    promptOnce('select-product', 'Step 07 — Select an Offering / Product for the selected Service.');
+    promptOnce('select-product', 'Step 08 — Select an Offering / Product for the selected Service.');
     setInput(null, 'Choose an Offering', false);
     for (const product of durable.products ?? []) {
       choice(`${product.name} · ${product.durationMinutes} min`, () => runAction('SELECT_OFFERING', { productId: product.productId }, product.name));
@@ -208,7 +258,7 @@ function renderInteraction() {
   }
 
   if (durable.nextAction === 'PROVIDE_DATE') {
-    promptOnce('date', 'Step 08 — Enter the appointment date. The CTA accepts the same human date forms as the CLI.');
+    promptOnce('date', 'Step 09 — Enter the appointment date. The CTA accepts the same human date forms as the CLI.');
     setInput('date', 'viernes / Friday / YYYY-MM-DD');
     return;
   }
@@ -268,6 +318,7 @@ function recoverStaleConversation(error) {
 
   const { staleConversationId, url } = clearStaleConversationSession(state, localStorage, location.href);
   history.replaceState({}, '', url);
+  state.managedEntityDraft = {};
 
   $('startButton').disabled = false;
   $('businessSlug').disabled = false;
@@ -330,6 +381,7 @@ async function withSubmission(task) {
 async function startWorkflow() {
   await withSubmission(async () => {
     state.conversationId = state.conversationId || randomId('webchat-conversation');
+    state.managedEntityDraft = {};
     localStorage.setItem(WEBCHAT_CONVERSATION_STORAGE_KEY, state.conversationId);
     const url = new URL(location.href);
     url.searchParams.set('conversationId', state.conversationId);
@@ -357,6 +409,25 @@ async function sendInput() {
   if (!value || !state.inputMode || !state.conversationId) return;
   $('messageInput').value = '';
   appendMessage('user', value);
+
+  if (state.inputMode === 'managed-entity-name') {
+    state.managedEntityDraft.displayName = value;
+    state.inputMode = null;
+    state.lastPromptKey = '';
+    renderInteraction();
+    return;
+  }
+
+  if (state.inputMode === 'managed-entity-ref') {
+    state.managedEntityDraft.externalRef = value;
+    const draft = { ...state.managedEntityDraft };
+    state.managedEntityDraft = {};
+    await withSubmission(async () => {
+      await sendChannel('CREATE_MANAGED_ENTITY', draft);
+      await refresh();
+    });
+    return;
+  }
 
   const actions = {
     'customer-name': ['PROVIDE_CUSTOMER', { customerPatch: { name: value } }],
