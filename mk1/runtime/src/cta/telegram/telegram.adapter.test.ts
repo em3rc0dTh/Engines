@@ -157,7 +157,7 @@ test('TG-APPT-003 appointment buttons normalize to the same canonical orchestrat
   }), /TELEGRAM_CONTEXT_REQUIRED/);
 });
 
-test('TG-APPT-004 renderer follows the durable Appointment projection through selection and completion', () => {
+test('TG-APPT-004 renderer follows the durable Appointment projection through selection and terminal completion', () => {
   const serviceState = appointmentState({
     phase: 'WAITING_FOR_SERVICE',
     customer: { status: 'CREATED', customerId: 'cus_1', customer: { name: 'Pepito' } },
@@ -174,14 +174,20 @@ test('TG-APPT-004 renderer follows the durable Appointment projection through se
   });
   assert.match(JSON.stringify(renderTelegramAppointment(slotState).replyMarkup), /appointment_slot:06:00/);
 
-  const completed = appointmentState({
-    workflowStatus: 'COMPLETED',
+  const createdButAuditing = appointmentState({
+    workflowStatus: 'RUNNING',
     phase: 'CREATED',
     nextAction: 'NONE',
     result: {
       appointmentId: 'apt_1', customerId: 'cus_1', serviceId: 'svc_car_wash', productId: 'prd_car_wash_salon',
       appointmentDate: '2026-09-11', slot: { start: '06:00', end: '06:30', durationMinutes: 30 },
     },
+  });
+  assert.equal(telegramAppointmentRenderIntent(createdButAuditing), 'WAIT');
+
+  const completed = appointmentState({
+    ...createdButAuditing,
+    workflowStatus: 'COMPLETED',
   });
   assert.equal(telegramAppointmentRenderIntent(completed), 'APPOINTMENT_COMPLETE');
   assert.match(renderTelegramAppointment(completed).text, /apt_1/);
