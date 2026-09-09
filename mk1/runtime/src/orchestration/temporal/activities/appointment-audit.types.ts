@@ -1,6 +1,7 @@
 export type AppointmentAuditEventType =
   | 'APPOINTMENT_SESSION_STARTED'
   | 'APPOINTMENT_CUSTOMER_RESOLVED'
+  | 'APPOINTMENT_MANAGED_ENTITY_RESOLVED'
   | 'APPOINTMENT_SERVICE_SELECTED'
   | 'APPOINTMENT_PRODUCT_SELECTED'
   | 'APPOINTMENT_DATE_SELECTED'
@@ -18,6 +19,7 @@ export type AppointmentAuditEventInput = Readonly<{
   occurredAt: string;
   correlationId?: string;
   customerId?: string;
+  managedEntityId?: string;
   appointmentId?: string;
   metadata?: Readonly<Record<string, unknown>>;
 }>;
