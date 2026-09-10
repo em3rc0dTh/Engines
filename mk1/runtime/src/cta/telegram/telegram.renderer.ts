@@ -55,8 +55,10 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'WAITING_FOR_CUSTOMER': {
       const customer = state.customer.customer;
       if (!customer?.name?.trim()) return 'ASK_CUSTOMER_NAME';
-      if (!customer.contact?.email?.trim()) return 'ASK_CUSTOMER_EMAIL';
-      if (!customer.contact?.phones?.[0]?.number?.trim()) return 'ASK_CUSTOMER_PHONE';
+      const hasEmail = Boolean(customer.contact?.email?.trim());
+      const hasPhone = Boolean(customer.contact?.phones?.[0]?.number?.trim()
+        || customer.contact?.phones?.[0]?.normalized?.trim());
+      if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
     // Telegram provider interaction for ME1 is intentionally gated until the
@@ -97,7 +99,7 @@ export function renderTelegramAppointment(
       replyMarkup: { remove_keyboard: true },
     };
     case 'ASK_CUSTOMER_EMAIL': return {
-      text: '¿Cuál es tu correo?',
+      text: 'No pudimos identificar un cliente único solo con el nombre. ¿Cuál es tu correo?',
       replyMarkup: { remove_keyboard: true },
     };
     case 'ASK_CUSTOMER_PHONE': return {
@@ -115,15 +117,12 @@ export function renderTelegramAppointment(
         : [];
       if (candidates.length > 0) {
         return {
-          text: 'Encontramos más de un cliente que coincide con tus datos. Selecciona el registro que deseas usar.',
-          replyMarkup: inlineRows(candidates.map((customerId) => ({
-            text: `Usar ${customerId}`,
-            callback_data: `appointment_customer:${customerId}`,
-          }))),
+          text: 'Encontramos más de un cliente que coincide con tus datos. Necesitamos otro dato de identidad antes de continuar.',
+          replyMarkup: { remove_keyboard: true },
         };
       }
       return {
-        text: 'Tus datos están completos. Un momento...',
+        text: 'Un momento, Temporal está verificando tus datos.',
         replyMarkup: { remove_keyboard: true },
       };
     }
