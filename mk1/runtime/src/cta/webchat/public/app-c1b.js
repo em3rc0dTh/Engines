@@ -159,7 +159,6 @@ function renderInteraction() {
   const durable = state.snapshot.state;
   const draft = customerDraft();
   const contact = draft.contact ?? {};
-  const phone = contact.phones?.[0]?.number ?? contact.phones?.[0]?.normalized;
 
   if (durable.workflowStatus === 'FAILED') {
     promptOnce('failed', `Workflow failed: ${durable.failure?.message ?? 'unknown failure'}`);
@@ -173,26 +172,37 @@ function renderInteraction() {
     return;
   }
 
+  // WebChat has no trusted identity when a fresh browser conversation starts.
+  // Ask only the name first. Temporal performs the lookup. Email is requested
+  // only if the name does not resolve exactly one active Customer.
   if (!customerResolved()) {
     if (!draft.name) {
-      promptOnce('customer-name', 'Step 02 — Enter the customer name.');
-      setInput('customer-name', 'Customer name');
+      promptOnce('customer-name', 'Step 02 — ¿Cuál es tu nombre? Temporal verificará si ya eres cliente.');
+      setInput('customer-name', 'Nombre del cliente');
       return;
     }
+
+    if (durable.phase === 'RESOLVING_CUSTOMER') {
+      promptOnce('customer-name-resolving', `Temporal está verificando si ya existe un cliente llamado ${draft.name}…`);
+      setInput(null, 'Verificando cliente…', false);
+      return;
+    }
+
     if (!contact.email) {
-      promptOnce('customer-email', 'Step 03 — Enter the customer email.');
-      setInput('customer-email', 'Customer email');
+      const ambiguous = durable.customer?.status === 'AMBIGUOUS';
+      promptOnce(
+        ambiguous ? 'customer-email-ambiguous' : 'customer-email-unresolved',
+        ambiguous
+          ? `Encontramos más de un cliente llamado ${draft.name}. Ingresa tu correo para identificar el registro correcto.`
+          : `No encontramos un cliente único llamado ${draft.name}. Ingresa tu correo para continuar.`,
+      );
+      setInput('customer-email', 'Correo del cliente');
       return;
     }
-    if (!phone) {
-      promptOnce('customer-phone', 'Step 04 — Enter the customer phone number.');
-      setInput('customer-phone', 'Customer phone');
-      return;
-    }
+
     if (durable.phase === 'WAITING_FOR_CUSTOMER') {
-      promptOnce('resolve-customer', 'Step 05 — Customer data is captured. Resolve the customer through Temporal.');
-      setInput(null, 'Use Resolve Customer', false);
-      choice('Resolve Customer', () => runAction('RESOLVE_CUSTOMER', {}, 'Resolve Customer'));
+      promptOnce('customer-strong-resolving', 'Temporal está verificando el correo y resolviendo el cliente…');
+      setInput(null, 'Verificando identidad…', false);
       return;
     }
   }
@@ -432,11 +442,6 @@ async function sendInput() {
   const actions = {
     'customer-name': ['PROVIDE_CUSTOMER', { customerPatch: { name: value } }],
     'customer-email': ['PROVIDE_CUSTOMER', { customerPatch: { contact: { email: value } } }],
-    'customer-phone': ['PROVIDE_CUSTOMER', {
-      customerPatch: {
-        contact: { phones: [{ number: value, normalized: value.replace(/\D/g, ''), primary: true }] },
-      },
-    }],
     date: ['SET_DATE', { dateInput: value }],
   };
   const selected = actions[state.inputMode];
