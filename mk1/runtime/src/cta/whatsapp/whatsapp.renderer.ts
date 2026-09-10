@@ -47,10 +47,15 @@ export function whatsappAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'WAITING_FOR_CUSTOMER': {
       const customer = state.customer.customer;
       if (!customer?.name?.trim()) return 'ASK_CUSTOMER_NAME';
-      if (!customer.contact?.email?.trim()) return 'ASK_CUSTOMER_EMAIL';
-      if (!customer.contact?.phones?.[0]?.number?.trim()) return 'ASK_CUSTOMER_PHONE';
+      const hasEmail = Boolean(customer.contact?.email?.trim());
+      const hasPhone = Boolean(customer.contact?.phones?.[0]?.number?.trim()
+        || customer.contact?.phones?.[0]?.normalized?.trim());
+      if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
+    // ManagedEntity interaction is owned by Temporal now. Native WhatsApp
+    // selection/creation remains gated to the provider regression slice.
+    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
@@ -64,6 +69,9 @@ export function whatsappAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'STARTED':
     case 'RESOLVING_CUSTOMER':
     case 'CUSTOMER_READY':
+    case 'LOADING_MANAGED_ENTITIES':
+    case 'CREATING_MANAGED_ENTITY':
+    case 'MANAGED_ENTITY_READY':
     case 'LOADING_SERVICES':
     case 'LOADING_PRODUCTS':
     case 'LOADING_SLOTS':
@@ -80,7 +88,7 @@ export function renderWhatsAppAppointment(
     case 'ASK_CUSTOMER_NAME':
       return { type: 'text', text: 'Vamos a registrar tu cita. ¿Cuál es tu nombre?' };
     case 'ASK_CUSTOMER_EMAIL':
-      return { type: 'text', text: '¿Cuál es tu correo?' };
+      return { type: 'text', text: 'No pudimos identificar un cliente único solo con esos datos. ¿Cuál es tu correo?' };
     case 'ASK_CUSTOMER_PHONE':
       return { type: 'text', text: '¿Cuál es tu teléfono?' };
     case 'RESOLVE_CUSTOMER': {
@@ -89,12 +97,25 @@ export function renderWhatsAppAppointment(
         : [];
       if (candidates.length > 0) {
         return interactiveRows(
-          'Encontramos más de un cliente que coincide con tus datos. Selecciona el registro que deseas usar.',
+          'Encontramos más de un cliente que coincide con tus datos. Necesitamos otro dato de identidad antes de continuar.',
           candidates.slice(0, 3).map((customerId) => ({ id: `appointment_customer:${customerId}`, title: customerId.slice(0, 20) })),
         );
       }
-      return { type: 'text', text: 'Tus datos están completos. Un momento...' };
+      return { type: 'text', text: 'Un momento, Temporal está verificando tus datos.' };
     }
+    case 'SELECT_MANAGED_ENTITY':
+      return interactiveRows(
+        `Selecciona ${state.managedEntity.policy.label.toLowerCase()}.`,
+        state.managedEntity.candidates.slice(0, 3).map((entity) => ({
+          id: `appointment_managed_entity:${entity.managedEntityId}`,
+          title: entity.displayName.slice(0, 20),
+        })),
+      );
+    case 'CREATE_MANAGED_ENTITY':
+      return {
+        type: 'text',
+        text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+      };
     case 'SELECT_SERVICE':
       return interactiveRows(
         'Selecciona el servicio para tu cita.',
