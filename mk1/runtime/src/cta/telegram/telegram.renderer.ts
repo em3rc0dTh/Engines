@@ -55,22 +55,28 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
     case 'WAITING_FOR_CUSTOMER': {
       const customer = state.customer.customer;
       if (!customer?.name?.trim()) return 'ASK_CUSTOMER_NAME';
-      if (!customer.contact?.email?.trim()) return 'ASK_CUSTOMER_EMAIL';
-      if (!customer.contact?.phones?.[0]?.number?.trim()) return 'ASK_CUSTOMER_PHONE';
+      const hasEmail = Boolean(customer.contact?.email?.trim());
+      const hasPhone = Boolean(customer.contact?.phones?.[0]?.number?.trim()
+        || customer.contact?.phones?.[0]?.normalized?.trim());
+      if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
+    // Telegram provider interaction for ME1 is intentionally gated until the
+    // provider regression slice. Temporal owns the new phase now; Telegram
+    // must not invent selection/creation semantics independently.
+    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
     case 'WAITING_FOR_SLOT': return 'SELECT_SLOT';
     case 'READY_TO_FINALIZE': return 'FINALIZE_APPOINTMENT';
-    // CREATED is not externally terminal until the workflow has completed its
-    // audit verification and workflowStatus is durably COMPLETED. Waiting here
-    // prevents provider runners from returning before CTA/binding reconciliation.
     case 'CREATED': return 'WAIT';
     case 'STARTED':
     case 'RESOLVING_CUSTOMER':
     case 'CUSTOMER_READY':
+    case 'LOADING_MANAGED_ENTITIES':
+    case 'CREATING_MANAGED_ENTITY':
+    case 'MANAGED_ENTITY_READY':
     case 'LOADING_SERVICES':
     case 'LOADING_PRODUCTS':
     case 'LOADING_SLOTS':
@@ -93,7 +99,7 @@ export function renderTelegramAppointment(
       replyMarkup: { remove_keyboard: true },
     };
     case 'ASK_CUSTOMER_EMAIL': return {
-      text: '¿Cuál es tu correo?',
+      text: 'No pudimos identificar un cliente único solo con el nombre. ¿Cuál es tu correo?',
       replyMarkup: { remove_keyboard: true },
     };
     case 'ASK_CUSTOMER_PHONE': return {
@@ -111,18 +117,26 @@ export function renderTelegramAppointment(
         : [];
       if (candidates.length > 0) {
         return {
-          text: 'Encontramos más de un cliente que coincide con tus datos. Selecciona el registro que deseas usar.',
-          replyMarkup: inlineRows(candidates.map((customerId) => ({
-            text: `Usar ${customerId}`,
-            callback_data: `appointment_customer:${customerId}`,
-          }))),
+          text: 'Encontramos más de un cliente que coincide con tus datos. Necesitamos otro dato de identidad antes de continuar.',
+          replyMarkup: { remove_keyboard: true },
         };
       }
       return {
-        text: 'Tus datos están completos. Un momento...',
+        text: 'Un momento, Temporal está verificando tus datos.',
         replyMarkup: { remove_keyboard: true },
       };
     }
+    case 'SELECT_MANAGED_ENTITY': return {
+      text: `Selecciona ${state.managedEntity.policy.label.toLowerCase()}.`,
+      replyMarkup: inlineRows(state.managedEntity.candidates.map((entity) => ({
+        text: entity.displayName,
+        callback_data: `appointment_managed_entity:${entity.managedEntityId}`,
+      }))),
+    };
+    case 'CREATE_MANAGED_ENTITY': return {
+      text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+      replyMarkup: { remove_keyboard: true },
+    };
     case 'SELECT_SERVICE': return {
       text: 'Selecciona el servicio para tu cita.',
       replyMarkup: inlineRows(state.services.map((service) => ({

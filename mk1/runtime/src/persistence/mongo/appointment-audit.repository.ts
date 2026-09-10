@@ -17,6 +17,7 @@ type AppointmentAuditDocument = Readonly<{
   occurredAt: string;
   correlationId?: string;
   customerId?: string;
+  managedEntityId?: string;
   appointmentId?: string;
   metadata?: Readonly<Record<string, unknown>>;
   payloadHash: string;
@@ -63,6 +64,10 @@ async function ensureIndexes(): Promise<void> {
       { appointmentId: 1, occurredAt: 1 },
       { sparse: true, name: 'idx_appointment_audit_appointment_time' },
     );
+    await c.createIndex(
+      { managedEntityId: 1, occurredAt: 1 },
+      { sparse: true, name: 'idx_appointment_audit_managed_entity_time' },
+    );
   })();
   await indexesReady;
 }
@@ -87,6 +92,7 @@ export async function persistAppointmentAuditEvents(
       occurredAt: event.occurredAt,
       ...(event.correlationId ? { correlationId: event.correlationId } : {}),
       ...(event.customerId ? { customerId: event.customerId } : {}),
+      ...(event.managedEntityId ? { managedEntityId: event.managedEntityId } : {}),
       ...(event.appointmentId ? { appointmentId: event.appointmentId } : {}),
       ...(event.metadata ? { metadata: event.metadata } : {}),
       payloadHash: hash,

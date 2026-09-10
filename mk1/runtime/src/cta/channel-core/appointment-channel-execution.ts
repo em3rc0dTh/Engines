@@ -2,26 +2,28 @@ import type { WorkflowHandle } from '@temporalio/client';
 import {
   normalizeAppointmentDateInput,
   todayInTimeZone,
+  type CreateAppointmentManagedEntityInput,
   type FinalizeAppointmentInput,
   type ProvideAppointmentCustomerInput,
   type ResolveAppointmentCustomerInput,
+  type SelectAppointmentManagedEntityInput,
   type SelectAppointmentProductInput,
   type SelectAppointmentServiceInput,
   type SelectAppointmentSlotInput,
   type SetAppointmentDateInput,
 } from '../../contracts/register-new-appointment/index.js';
 import {
-  GOLDEN_REGISTRATION_POLICY_V2,
-  evaluateRegistrationCompleteness,
   validateProvideCustomerDataIngress,
 } from '../../contracts/register-new-customer/index.js';
 import { adaptRegisterNewAppointmentCtaInput } from '../register-new-appointment.adapter.js';
 import type { TemporalRegisterNewAppointmentPort } from '../../orchestration/temporal/ports/register-new-appointment.temporal-port.js';
 import {
+  createAppointmentManagedEntityUpdate,
   finalizeAppointmentUpdate,
   getAppointmentStateQuery,
   provideAppointmentCustomerUpdate,
   resolveAppointmentCustomerUpdate,
+  selectAppointmentManagedEntityUpdate,
   selectAppointmentProductUpdate,
   selectAppointmentServiceUpdate,
   selectAppointmentSlotUpdate,
@@ -105,22 +107,26 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
       };
       const provided = await handle.executeUpdate(provideAppointmentCustomerUpdate, { args: [input] });
 
+      // The channel does not infer identity or decide whether a Customer exists.
+      // Every accepted customer datum is handed back to the durable Temporal
+      // Workflow for deterministic resolution. The activity chooses name discovery
+      // versus strong identity lookup (email/phone/document/customerId).
       const state = await handle.query(getAppointmentStateQuery);
-      const draft = state.customer.customer;
-      const completeDraft = draft
-        ? evaluateRegistrationCompleteness(GOLDEN_REGISTRATION_POLICY_V2, { customer: draft }).complete
-        : false;
-      const shouldResolve = state.workflowStatus === 'RUNNING'
-        && state.phase === 'WAITING_FOR_CUSTOMER'
-        && state.customer.status !== 'AMBIGUOUS'
-        && (Boolean(customerId) || completeDraft);
+      const shouldAskTemporalToResolve = state.workflowStatus === 'RUNNING'
+        && state.phase === 'WAITING_FOR_CUSTOMER';
 
-      if (shouldResolve) {
+      if (shouldAskTemporalToResolve) {
         const resolveInput: ResolveAppointmentCustomerInput = { inputId: `${inputId}:auto-resolve` };
         await handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [resolveInput] });
         for (let attempt = 0; attempt < 50; attempt += 1) {
           const current = await handle.query(getAppointmentStateQuery);
-          if (current.phase !== 'WAITING_FOR_CUSTOMER' || current.customer.status === 'AMBIGUOUS') break;
+          const needsMoreIdentity = current.issues.some((item) =>
+            item.code === 'CUSTOMER_INCOMPLETE' || item.code === 'CUSTOMER_NOT_FOUND');
+          if (
+            current.phase !== 'WAITING_FOR_CUSTOMER'
+            || current.customer.status === 'AMBIGUOUS'
+            || needsMoreIdentity
+          ) break;
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
       }
@@ -130,6 +136,28 @@ function actionHandlers(): ReadonlyMap<CanonicalChannelAction, ActionHandler> {
     ['RESOLVE_CUSTOMER', async (handle, envelope) => {
       const input: ResolveAppointmentCustomerInput = { inputId: channelOperationInputId(envelope) };
       return handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [input] });
+    }],
+    ['SELECT_MANAGED_ENTITY', async (handle, envelope) => {
+      const input: SelectAppointmentManagedEntityInput = {
+        inputId: channelOperationInputId(envelope),
+        managedEntityId: stringField(envelope.payload as JsonRecord, 'managedEntityId'),
+      };
+      return handle.executeUpdate(selectAppointmentManagedEntityUpdate, { args: [input] });
+    }],
+    ['CREATE_MANAGED_ENTITY', async (handle, envelope) => {
+      const payload = envelope.payload as JsonRecord;
+      const summary = typeof payload.summary === 'string' && payload.summary.trim()
+        ? payload.summary.trim()
+        : undefined;
+      const data = record(payload.data);
+      const input: CreateAppointmentManagedEntityInput = {
+        inputId: channelOperationInputId(envelope),
+        displayName: stringField(payload, 'displayName'),
+        externalRef: stringField(payload, 'externalRef'),
+        ...(summary ? { summary } : {}),
+        ...(data ? { data } : {}),
+      };
+      return handle.executeUpdate(createAppointmentManagedEntityUpdate, { args: [input] });
     }],
     ['SELECT_SERVICE', async (handle, envelope) => {
       const input: SelectAppointmentServiceInput = {
