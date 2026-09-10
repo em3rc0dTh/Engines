@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { Pool } from 'pg';
 import { loadRuntimeConfig } from '../src/config/runtime-config.js';
 import {
+  closeAppointmentCustomerNameRepository,
+  resolveAppointmentCustomerByName,
+} from '../src/persistence/postgres/appointment-customer-name.repository.js';
+import {
   closeManagedEntityRepository,
   createManagedEntityForCustomer,
   getManagedEntityForCustomer,
@@ -14,18 +18,40 @@ async function run(): Promise<void> {
   const businessSlug = 'me1-cert-business';
   const customerId = 'cus_me1_cert';
   const otherCustomerId = 'cus_me1_other';
+  const duplicateNameA = 'cus_me1_duplicate_a';
+  const duplicateNameB = 'cus_me1_duplicate_b';
 
   try {
     await pool.query('BEGIN');
     await pool.query(`DELETE FROM managed_entities WHERE business_slug = $1`, [businessSlug]);
+    await pool.query(`DELETE FROM customer_contacts WHERE business_slug = $1`, [businessSlug]);
+    await pool.query(`DELETE FROM customer_phones WHERE business_slug = $1`, [businessSlug]);
+    await pool.query(`DELETE FROM customer_documents WHERE business_slug = $1`, [businessSlug]);
     await pool.query(`DELETE FROM customers WHERE business_slug = $1`, [businessSlug]);
     await pool.query(
       `INSERT INTO customers (customer_id,business_slug,customer_type,customer_name,status)
        VALUES ($1,$2,'PERSON','ME1 Cert Customer','ACTIVE'),
-              ($3,$2,'PERSON','ME1 Other Customer','ACTIVE')`,
-      [customerId, businessSlug, otherCustomerId],
+              ($3,$2,'PERSON','ME1 Other Customer','ACTIVE'),
+              ($4,$2,'PERSON','Repeated Name','ACTIVE'),
+              ($5,$2,'PERSON','Repeated Name','ACTIVE')`,
+      [customerId, businessSlug, otherCustomerId, duplicateNameA, duplicateNameB],
     );
     await pool.query('COMMIT');
+
+    // Customer discovery is deliberately name-first when no stronger identity
+    // has already been supplied by the channel/session.
+    assert.deepEqual(
+      await resolveAppointmentCustomerByName(businessSlug, '  me1   CERT customer  '),
+      { kind: 'EXISTING', customerId },
+    );
+    assert.deepEqual(
+      await resolveAppointmentCustomerByName(businessSlug, 'Nobody Here'),
+      { kind: 'NONE' },
+    );
+    assert.deepEqual(
+      await resolveAppointmentCustomerByName(businessSlug, 'Repeated Name'),
+      { kind: 'AMBIGUOUS', candidateCustomerIds: [duplicateNameA, duplicateNameB] },
+    );
 
     assert.deepEqual(await listManagedEntitiesForCustomer(businessSlug, customerId, 'vehicle'), []);
 
@@ -99,6 +125,11 @@ async function run(): Promise<void> {
     console.log(JSON.stringify({
       businessSlug,
       customerId,
+      customerDiscovery: {
+        uniqueNameResolved: true,
+        noNameMatchRequestsMoreIdentity: true,
+        duplicateNameRemainsAmbiguous: true,
+      },
       firstManagedEntityId: first.managedEntity.managedEntityId,
       candidateCount: listed.length,
       replaySameId: replay.managedEntity.managedEntityId === first.managedEntity.managedEntityId,
@@ -106,6 +137,7 @@ async function run(): Promise<void> {
       ownershipIsolation: foreignLookup === undefined,
     }));
   } finally {
+    await closeAppointmentCustomerNameRepository();
     await closeManagedEntityRepository();
     await pool.end();
   }
