@@ -1,6 +1,7 @@
 # ME1 — Managed Entity Resolution Design
 
-Date: 2026-09-09
+Date: 2026-09-09  
+Updated: 2026-09-10
 
 ## Canonical subject rule
 
@@ -13,6 +14,35 @@ CustomerResolution
 ```
 
 The rule is provider-neutral and agent-neutral.
+
+## Customer resolution before ManagedEntity
+
+ME1 does not assume an Agent, MCP, LLM, semantic matcher, or external identity service. Customer resolution is deterministic Temporal orchestration backed by persistence queries.
+
+For a channel without a pre-established trusted identity, such as a fresh WebChat session, the interaction is name-first:
+
+```text
+Ask name
+→ Temporal resolves exact normalized active Customer name
+   ├─ exactly 1 match → Customer EXISTING
+   ├─ 0 matches       → request stronger identity material
+   └─ >1 matches      → request stronger identity material
+
+stronger material
+→ email / phone / document
+→ Temporal performs canonical strong-identity lookup
+   ├─ exactly 1 match → Customer EXISTING
+   ├─ >1 matches      → AMBIGUOUS
+   └─ 0 matches       → if registration minimum is complete, create Customer
+```
+
+Name is a discovery key, not a globally unique identity. Email is treated as strong identifying material, but the current persistence model does not declare email globally unique; therefore code must still handle zero, one, or multiple matches.
+
+A trusted identity already supplied by the provider/session takes precedence over name discovery. For example, a verified WhatsApp phone or an explicit trusted `customerId` may resolve the Customer directly. This preserves the previously established cross-channel rule without adding an Agent.
+
+Strong-identity mismatch must never silently fall back to a same-name Customer. Once email/phone/document/customerId is supplied, the strong identity resolver is authoritative for that attempt.
+
+The channel is transport only. It submits customer material and invokes Temporal's resolution update. The decision about whether the Customer exists comes from the Workflow + Activities + persistence, not from WebChat/Telegram/WhatsApp UI logic.
 
 ## Canonical policy
 
@@ -67,7 +97,7 @@ Rules:
 
 ## Temporal target state extension
 
-The next integration step adds an explicit managed-entity segment to RegisterNewAppointment:
+The RegisterNewAppointment orchestration owns both identity resolution and the explicit managed-entity segment:
 
 ```text
 WAITING_FOR_CUSTOMER
@@ -79,11 +109,10 @@ WAITING_FOR_CUSTOMER
 → LOADING_SERVICES
 ```
 
-Target actions:
+ManagedEntity actions:
 
 ```text
 SELECT_MANAGED_ENTITY
-PROVIDE_MANAGED_ENTITY
 CREATE_MANAGED_ENTITY
 ```
 
@@ -127,3 +156,14 @@ The ManagedEntity identifies the subject. Historical facts remain in their sourc
 ## Appointment truth rule
 
 An Appointment attached to a ManagedEntity means a service was scheduled for that subject. It does not prove execution happened. Execution/outcome history is added by WorkOrder/validation layers later.
+
+## Explicit non-goals for ME1
+
+```text
+Agent          NO
+MCP            NO
+LLM matching   NO
+semantic guess NO
+```
+
+ME1 must remain reproducible from Temporal state, deterministic activities, canonical channel events, and persisted business data.
