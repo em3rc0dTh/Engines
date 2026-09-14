@@ -15,6 +15,10 @@ const MINUTE_MS = 60_000;
 export type AvailabilityQueryOptions = Readonly<{
   granularityMinutes?: number;
   generatedAt?: string;
+  /** Logical observation time for persisted hold expiry. Defaults to generatedAt. */
+  asOf?: string;
+  /** Internal mutation-only escape hatch used when a hold is being consumed atomically. */
+  excludeHoldId?: string;
 }>;
 
 export class SchedulerAvailabilityError extends Error {
@@ -291,6 +295,12 @@ export async function queryDeterministicAvailability(
   const granularityMinutes = options.granularityMinutes ?? 15;
   validateQuery(input, granularityMinutes);
 
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
+  const asOf = options.asOf ?? generatedAt;
+  if (!Number.isFinite(Date.parse(asOf))) {
+    throw new SchedulerAvailabilityError('SCHEDULING_DEMAND_INVALID', 'availability asOf must be an unambiguous instant');
+  }
+
   const queryStart = Date.parse(input.window.startAt);
   const queryEnd = Date.parse(input.window.endAt);
   const paddingMs = Math.max(input.demand.buffers.beforeMinutes, input.demand.buffers.afterMinutes) * MINUTE_MS;
@@ -347,10 +357,12 @@ export async function queryDeterministicAvailability(
            ON a.business_slug = h.business_slug AND a.hold_id = h.hold_id
         WHERE h.business_slug = $1
           AND h.status = 'ACTIVE'
+          AND h.expires_at > $4::timestamptz
+          AND ($5::text IS NULL OR h.hold_id <> $5::text)
           AND h.start_at < $3::timestamptz
           AND h.end_at > $2::timestamptz
         ORDER BY a.resource_id ASC, h.start_at ASC, h.hold_id ASC`,
-      [input.businessSlug, loadStart, loadEnd],
+      [input.businessSlug, loadStart, loadEnd, asOf, options.excludeHoldId ?? null],
     ),
   ]);
 
@@ -404,7 +416,7 @@ export async function queryDeterministicAvailability(
 
   return {
     requestId: input.requestId,
-    generatedAt: options.generatedAt ?? new Date().toISOString(),
+    generatedAt,
     slots: input.limit === undefined ? slots : slots.slice(0, Math.max(0, input.limit)),
   };
 }
