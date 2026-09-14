@@ -2,7 +2,7 @@
 
 ## Status
 
-**SCHEDULER G2-S4 CERTIFIED — G2-S5 NEXT**
+**SCHEDULER G2-S5 CERTIFIED — G2-S6 NEXT**
 
 This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
@@ -31,7 +31,8 @@ Step 4 Scheduler Engine
   G2-S2 Deterministic availability      ✅ CERTIFIED
   G2-S3 Atomic reservation conflict     ✅ CERTIFIED
   G2-S4 Holds + expiry/replay           ✅ CERTIFIED
-  G2-S5 Multi-business generality       ⏭️ NEXT
+  G2-S5 Multi-business generality       ✅ CERTIFIED
+  G2-S6 Services snapshot integration   ⏭️ NEXT
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
@@ -98,8 +99,8 @@ G2-S1 Resource/capability/schedule management                   ✅ CERTIFIED
 G2-S2 Deterministic availability engine                        ✅ CERTIFIED
 G2-S3 Atomic reservation + concurrency conflict                ✅ CERTIFIED
 G2-S4 Holds + expiry + replay                                   ✅ CERTIFIED
-G2-S5 Multi-business generality                                 ⏭️ NEXT
-G2-S6 Services snapshot/demand integration                      OPEN
+G2-S5 Multi-business generality                                 ✅ CERTIFIED
+G2-S6 Services snapshot/demand integration                      ⏭️ NEXT
 G2-S7 Appointment Workflow integration                          OPEN
 G2-S8 Multi-resource assignment proof or explicit deferral      OPEN
 G2-S9 Final clean Scheduler certification                       OPEN
@@ -196,31 +197,56 @@ Correctness does not depend on `setTimeout`, `setInterval`, cron, in-memory stat
 
 G2-S4 preserves the G2-S3 atomic confirmation invariant and does not migrate Appointment.
 
-### G2-S5 — NEXT
+### G2-S5 — CERTIFIED
 
-Run materially different businesses through the same Scheduler implementation with zero vertical/provider branches.
+The same Scheduler implementation is now proven against two materially different business fixtures with no fixture/provider branch in Scheduler core.
+
+Certified proof:
+
+```text
+distinct business slugs
+BAY vs ROOM resource kinds
+distinct capability codes
+different schedules
+different immutable SchedulingDemand revisions/durations/buffers
+same resource code safely reused across businesses
+same operationId safely reused across businesses
+business-scoped management/read isolation
+business-scoped availability isolation
+business-scoped hold isolation
+business-scoped reservation isolation
+cross-business schedule→resource reference rejected
+cross-business demand scope rejected
+cross-business preferred resource yields no candidate
+cross-business hold reference rejected
+capacity exhaustion in business A does not affect business B
+one independent reservation + consumed hold per business
+G2-S0..G2-S4 predecessor regressions green
+inherited CTA/Temporal regression green
+```
+
+Business differences remain data. G2-S5 introduced no customer-specific Scheduler runtime branch.
+
+### G2-S6 — NEXT
+
+Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Offering revisions.
 
 Minimum executable proof:
 
 ```text
-at least two distinct business slugs
-materially different resource kinds / capabilities / schedules
-distinct immutable SchedulingDemand fixtures
-availability isolation per business
-hold isolation per business
-reservation isolation per business
-same operationId may safely exist in different businesses
-cross-business resource/schedule/hold/reservation references fail closed
-one business reaching capacity does not affect the other
-no provider/vertical names or branching in Scheduler core
-G2-S0..G2-S4 predecessor regressions remain green
+create/version a real Services Service + Offering
+materialize canonical SchedulingDemand from one frozen Offering revision
+prove duration/capability/buffer material is copied by value into the demand
+persist/use that demand in Scheduler without mutable catalog-head FK coupling
+advance Services catalog head to revision N+1 with materially changed scheduling fields
+prove already-materialized demand from N remains byte/material stable
+prove Scheduler availability/hold/reservation continues using N for that demand
+create a new demand from N+1 and prove it sees N+1 material
+reject mismatched business scope or stale/nonexistent snapshot identity
+preserve G2-S0..G2-S5 regressions
 ```
 
-G2-S5 proves generality/isolation of the already-certified Scheduler semantics. It must not add customer-specific special cases merely to make fixtures pass.
-
-### G2-S6
-
-Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Offering revisions. Prove catalog head N+1 cannot silently mutate an active demand from N.
+G2-S6 owns only the Services→SchedulingDemand runtime handoff. It does not migrate the Appointment workflow; that remains G2-S7.
 
 ### G2-S7
 
@@ -292,12 +318,12 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Final-seal G2-S4 on the exact receipt/evidence/roadmap/ledger head.
+1. Final-seal G2-S5 on the exact receipt/evidence/design/roadmap/ledger head.
 2. Keep PR #32 draft/unmerged; certification does not authorize merge.
-3. Do NOT create a G2-S5 branch.
-4. Continue G2-S5 directly on build/g2-scheduler.
-5. Prove two materially different businesses with strict data/operation isolation.
-6. Prove capacity/hold/reservation state cannot bleed across business scope.
-7. Preserve G2-S0/S1/S2/S3/S4 regressions.
+3. Do NOT create a G2-S6 branch.
+4. Continue G2-S6 directly on build/g2-scheduler.
+5. Build the canonical Services frozen-revision → SchedulingDemand runtime handoff.
+6. Prove catalog head N+1 cannot mutate an already-materialized demand from N.
+7. Preserve G2-S0/S1/S2/S3/S4/S5 regressions.
 8. Do not migrate Appointment before G2-S7.
 ```
