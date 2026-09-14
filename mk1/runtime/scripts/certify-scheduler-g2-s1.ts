@@ -48,9 +48,11 @@ async function run(): Promise<void> {
     ...resourceV1,
     name: 'Bay One Premium',
     capacity: 3,
+    // Canonical read order is capability_code ASC; keep the expected snapshot
+    // in that same deterministic order so the round-trip assertion is exact.
     capabilities: [
-      { code: 'WASH_BAY', capacityUnits: 3, metadata: { lane: 'north' } },
       { code: 'DETAILING', capacityUnits: 1 },
+      { code: 'WASH_BAY', capacityUnits: 3, metadata: { lane: 'north' } },
     ],
     revision: 2,
   };
