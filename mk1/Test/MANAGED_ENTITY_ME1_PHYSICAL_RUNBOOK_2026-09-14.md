@@ -230,9 +230,8 @@ The Workflow proceeds to ManagedEntity resolution.
 Use the Case A Workflow id recorded from the completed Renault Logan Car Wash flow:
 
 ```bash
-ME1_PHYSICAL_WORKFLOW_ID='register-appointment:...' \
-  docker compose exec -T -e ME1_PHYSICAL_WORKFLOW_ID="$ME1_PHYSICAL_WORKFLOW_ID" \
-  cta npm run verify:me1:physical
+export ME1_PHYSICAL_WORKFLOW_ID='register-appointment:...'
+docker compose exec -T -e ME1_PHYSICAL_WORKFLOW_ID cta npm run verify:me1:physical
 ```
 
 Expected markers:
