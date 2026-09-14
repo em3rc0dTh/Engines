@@ -2,13 +2,17 @@
 
 ## Status
 
-**CANDIDATE CERTIFICATION PASSED — EXACT-FINAL-HEAD RECERTIFICATION REQUIRED**
+**CERTIFIED — G2-S7 NEXT**
 
 Predecessor: **G2-S5 CERTIFIED**.
 
 G2-S6 proves that certified Services revision/snapshot semantics feed Scheduler without allowing later mutable catalog-head changes to rewrite an already-materialized scheduling demand.
 
-## Certified candidate head
+The implementation candidate passed independently in push and PR contexts. After this receipt/evidence/design/roadmap/ledger state is complete, the same dedicated workflow is rerun on the exact branch head. Final exact-head run IDs and artifact digests are recorded on PR #32 rather than committed after the seal, because any post-seal branch commit would invalidate the exact-head claim.
+
+## Implementation candidate evidence
+
+Candidate head:
 
 ```text
 9d6af52e5749e83469e7d4aca89775753ea2f4e5
@@ -21,7 +25,7 @@ Push run  34908156644 — SUCCESS
 PR run    34908161495 — SUCCESS
 ```
 
-Both candidate runs completed all three jobs successfully:
+Both candidate runs completed:
 
 ```text
 g2-s6-contracts-boundaries       PASS
@@ -53,11 +57,7 @@ id      10373631264
 sha256  1b2b7e2c4cb37f2d83a698026142654399b840ddd0aad6e1c9612fa711a4d0fd
 ```
 
-These artifacts certify the implementation candidate. Documentation/ledger/evidence commits after this candidate change the branch head and therefore must be followed by the same G2-S6 workflow on the exact final head in both push and PR contexts.
-
-## Gate claim
-
-Certified candidate behavior:
+## Certified gate claim
 
 ```text
 Services revision N
@@ -98,7 +98,7 @@ Canonical implementation:
 mk1/runtime/src/scheduler/services-demand-handoff.ts
 ```
 
-The materializer consumes an already-frozen `ServicesSelectionSnapshot`; it does not query the mutable Services catalog. It validates Service/Offering scope, identity, lifecycle and scheduling profile, then copies exact revisioned scheduling material into `SchedulingDemand`.
+The materializer consumes an already-frozen `ServicesSelectionSnapshot`; it does not query mutable Services catalog head. It validates Service/Offering scope, parent identity, lifecycle and scheduling profile, then copies exact revisioned scheduling material into `SchedulingDemand`.
 
 Persistence rules:
 
@@ -118,7 +118,7 @@ same demandId + different frozen material
 
 ## Executable N → N+1 proof
 
-The dedicated PostgreSQL probe uses one business with two materially different Scheduler resource semantics:
+The PostgreSQL proof uses materially different scheduling semantics:
 
 ```text
 revision N
@@ -134,21 +134,21 @@ revision N+1
   buffers                 0 / 15
 ```
 
-The probe proves:
+Certified assertions:
 
 ```text
-1. Services Service + Offering revision N are persisted and projected.
+1. Services Service + Offering revision N persist and project correctly.
 2. ServiceSchedulingProfile N round-trips from PostgreSQL.
 3. snapshot N is captured by value.
 4. SchedulingDemand N carries exact Service/Offering revisions and scheduling material.
-5. demand N is persisted into scheduler_demands with snapshot_hash.
+5. demand N persists in scheduler_demands with snapshot_hash.
 6. identical demand N persistence replays without duplication.
-7. Scheduler availability loaded from persisted demand N resolves only the N-compatible BAY resource and 30m semantics.
-8. Services is advanced to materially different Service/Offering N+1.
+7. Scheduler reloads persisted demand N and resolves only the N-compatible BAY resource and 30m semantics.
+8. Services advances to materially different Service/Offering N+1.
 9. persisted demand N and its snapshot_hash remain unchanged.
 10. availability from persisted demand N remains unchanged after N+1 publication.
-11. a new demand materialized from the current Services head sees N+1 revisions and scheduling material.
-12. Scheduler availability for demand N+1 resolves only the N+1-compatible ROOM resource and 60m semantics.
+11. a new demand from the current Services head sees N+1 revisions and scheduling material.
+12. Scheduler reloads demand N+1 and resolves only the N+1-compatible ROOM resource and 60m semantics.
 13. reusing demandId N with N+1 material returns DEMAND_MATERIAL_CONFLICT.
 14. that conflict commits no mutation to demand N.
 15. G2-S0..G2-S5 predecessor probes remain green.
@@ -169,6 +169,10 @@ SCHEDULER_G2_S6_PLATFORM_REGRESSION_PASS
 SCHEDULER_G2_S6_CERTIFICATION_PASS
 ```
 
+## Exact-final-head evidence policy
+
+Final same-workflow push/PR evidence is attached to PR #32 after the documentation-complete head passes. The branch is intentionally not edited merely to copy those final run IDs into this receipt; doing so would create a new unsealed head.
+
 ## Truth boundary / non-claims
 
 G2-S6 certifies the Services frozen-revision → immutable Scheduler demand boundary and continued Scheduler behavior from persisted frozen material.
@@ -182,6 +186,4 @@ It does **not** certify:
 - reservation cancel/complete lifecycle;
 - distributed HA/scale/security readiness beyond the protected gate scope.
 
-## Final promotion rule
-
-Candidate proof is complete. The ledger/design/roadmap/evidence may now advance G2-S6 and G2-S7, but the branch is not final-head certified until the **same G2-S6 workflow** passes again on the exact documentation-complete branch head in both push and PR contexts. No subsequent branch commit may be made after that seal without invalidating the exact-head claim.
+Certification does not authorize merge. PR #32 remains the canonical draft/unmerged Scheduler track.
