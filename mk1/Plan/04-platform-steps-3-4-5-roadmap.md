@@ -2,41 +2,64 @@
 
 ## Status
 
-**DESIGN ROADMAP — BUILD NOT STARTED FOR SCHEDULER/INTEGRATION**
+**PRE-SCHEDULER BASELINE CERTIFIED — SCHEDULER BUILD NEXT**
 
-This roadmap advances the architecture shown in the platform diagram while preserving current certified work.
+This roadmap advances the architecture shown in the platform diagram while preserving the certified platform slice. Scheduler and Integration remain separate future engines; the pre-Scheduler closure does not silently absorb their responsibilities.
 
 ## Current certified baseline
 
 ```text
 Step 1 CTA / Channels
   WebChat C1A+C1B                       ✅ CERTIFIED + HUMAN VERIFIED
-  Telegram C2                           DESIGN/BUILD PREP
+  Telegram adapter/official transport  ✅ CERTIFIED ON INHERITED BASELINE
+  WhatsApp/Kapso transport regression  ✅ CERTIFIED ON INHERITED BASELINE
+  Canonical CTA compatibility/router   ✅ PRE-SCHEDULER RE-CERTIFIED
 
-Step 2 Temporal Orchestration           ✅ FOUNDATION CERTIFIED
+Step 2 Temporal Orchestration           ✅ CURRENT APPOINTMENT SLICE CERTIFIED
 
 Step 3 Services Engine
-  S0–S5                                 ✅ CERTIFIED
-  S6–S8                                 OPEN
+  S0–S8 / G1                           ✅ CERTIFIED
 
-Step 4 Scheduler Engine                 DESIGN NOW
+Layer 6 Persistence / Storage
+  PostgreSQL + MongoDB v4 + ObjectStore ✅ CERTIFIED
 
-Step 5 Integration Engine               BOUNDARY DESIGN NOW / BUILD LATER
+Pre-Scheduler node/edge closure         ✅ CERTIFIED
+
+Step 4 Scheduler Engine                 ⏭️ NEXT — BUILD NOT STARTED BY CLOSURE
+
+Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
+
+Current pre-Scheduler seal:
+
+```text
+branch  feature/pre-scheduler-node-edge-certification
+head    06d5e0289ca1cff7b24826f06af2a61bf0a45a76
+push    34879640428  SUCCESS
+PR      34879680774  SUCCESS
+marker  PRE_SCHEDULER_NODE_EDGE_CERTIFICATION_PASS
+```
+
+The documentation-only seal update may advance the branch head after this receipt; the certification workflow must pass again on that final documentation head before it becomes the new candidate.
 
 ## Track A — Services completion
 
+**CLOSED.**
+
 ```text
-S6 Multi-business generality
-S7 Appointment integration with new Services contract
-S8 final clean G1 certification
+S6 Multi-business generality                     ✅ CERTIFIED
+S7 Appointment integration with Services         ✅ CERTIFIED
+S8 Final clean G1 certification                  ✅ CERTIFIED
+G1 Services Engine                               ✅ CERTIFIED
 ```
 
-Before S7 closes, the Appointment flow must consume canonical Services snapshots rather than legacy assumptions. Do not couple S7 to a non-existent Scheduler implementation beyond the frozen handoff contract.
+The Appointment flow consumes canonical Services snapshots rather than bypassing Services authority. The pre-Scheduler closure also guards this boundary statically and reruns S7 from a pristine laboratory.
 
 ## Track B — Scheduler design/build
 
-Proposed gates:
+Scheduler is now the next engine to build. It owns concrete time/resource allocation; it does not own catalog/commercial semantics.
+
+Frozen build gates:
 
 ```text
 G2-S0 Contract + persistence foundation
@@ -103,7 +126,7 @@ Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Of
 
 ### G2-S7
 
-Migrate `RegisterNewAppointment`:
+Only after Scheduler conflict correctness is certified, migrate `RegisterNewAppointment`:
 
 ```text
 Services selection
@@ -116,7 +139,19 @@ Services selection
 → Appointment result references Scheduler reservation
 ```
 
-Preserve `availability shown != reservation persisted`.
+Preserve:
+
+```text
+availability shown != reservation persisted
+```
+
+### G2-S8
+
+Prove multi-resource assignment if the first Scheduler product slice requires it; otherwise record an explicit, testable deferral rather than implying support.
+
+### G2-S9
+
+Run one clean Scheduler closure suite over G2-S0–G2-S8 plus protected CTA/Temporal/Services/Persistence regressions and emit the final Scheduler receipt.
 
 ## Track C — Integration boundary
 
@@ -143,57 +178,50 @@ I4 first real provider adapter
 I5 Temporal composition + failure/recovery proof
 ```
 
-## Track D — Telegram C2
+## Track D — channel evolution
 
-Telegram proceeds independently of Scheduler/Integration implementation.
+Channel work can proceed independently of Scheduler when a concrete product need exists. Channel/provider mechanics must continue to terminate at the canonical compatibility/domain boundary; they must not leak provider-specific branches into Temporal business workflows.
 
-Before physical/manual bot testing, build synthetic deterministic proof:
+The pre-Scheduler certification now guards:
 
 ```text
-TelegramAdapter
-trusted route config
-Telegram update identity
-text + callback normalization
-reuse ChannelExecutionCore
-reuse channel_conversation_bindings
-reuse channel_inbound_events
-bot-process restart recovery
-full synthetic Appointment flow
-WebChat regression
+provider → adapter → compatibility → canonical CTA → router → Temporal
 ```
 
-A real bot token/network test is explicitly deferred until requested.
+and independently re-certifies the real orchestration/persistence composition.
 
 ## Cross-track dependency rules
 
 ```text
-Telegram must not wait for Scheduler.
+Channel work must not wait for Scheduler.
 Scheduler must consume Services snapshots, not channels.
 Integration must not become a prerequisite for core scheduling.
-Appointment may migrate to Scheduler only after Scheduler conflict semantics are certified.
+Appointment may migrate to Scheduler only after G2-S3 conflict correctness is proven.
+Persistence ownership remains explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic Steps 1–7 are sufficiently mature.
 ```
 
-## Immediate design decisions frozen by this roadmap
+## Frozen authority boundaries
 
 ```text
 Services = commercial/catalog semantics
 Scheduler = concrete time/resource allocation
 Integration = external-system adapter/delivery mechanics
-Telegram interactive ingress = CTA, not Integration
-PostgreSQL = Scheduler transactional truth
+Channel interactive ingress = CTA, not Integration
+PostgreSQL = transactional operational truth for the current slice
 Temporal = orchestration authority
-Mongo = audit/semantic evidence
+MongoDB = operational document/audit/semantic evidence
+Object Store = attachment bytes/content integrity
 ```
 
-## Next executable work after design review
+## Next executable work
 
 Recommended sequence:
 
 ```text
-1. Continue Services S6 on its existing Services certification line.
-2. Open a dedicated Scheduler build branch from a documented compatible MK1 head.
-3. Implement G2-S0 contracts/persistence only.
-4. In parallel, implement C2 Telegram synthetic adapter proof on its own channel branch.
-5. Do not integrate Appointment with Scheduler until G2-S3 conflict correctness is proven.
+1. Keep the pre-Scheduler certification PR stacked and unmerged until explicit authorization.
+2. After the authorized merge sequence establishes the certified baseline, open a dedicated Scheduler branch from that exact compatible head.
+3. Implement G2-S0 contracts + PostgreSQL persistence only.
+4. Do not rewrite Appointment availability/reservation against Scheduler before G2-S3 conflict correctness is independently certified.
+5. Preserve the pre-Scheduler node/edge gate as a protected regression boundary while Scheduler evolves.
 ```
