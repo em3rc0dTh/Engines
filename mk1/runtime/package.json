@@ -77,6 +77,7 @@
     "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "probe:webchat:c1b": "tsx scripts/certify-webchat-c1b.ts",
     "probe:cta:poc": "tsx scripts/certify-cta-orchestration-poc.ts",
+    "probe:layer6:v4": "tsx scripts/certify-layer6-v4-persistence.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts"

@@ -6,6 +6,10 @@ import type {
   AppointmentAuditEventInput,
   AppointmentAuditEventType,
 } from '../../orchestration/temporal/activities/appointment-audit.types.js';
+import {
+  closeOperationalInputRepository,
+  projectAppointmentDirectInput,
+} from './operational-input.repository.js';
 
 type AppointmentAuditDocument = Readonly<{
   _id: string;
@@ -74,6 +78,7 @@ export async function persistAppointmentAuditEvents(
   const c = collection();
   let persisted = 0;
   let reused = 0;
+  const completedWorkflows = new Set<string>();
   for (const event of events) {
     const _id = identity(event);
     const hash = payloadHash(event);
@@ -95,12 +100,22 @@ export async function persistAppointmentAuditEvents(
     const result = await c.updateOne({ _id }, { $setOnInsert: document }, { upsert: true });
     if (result.upsertedCount === 1) {
       persisted += 1;
-      continue;
+    } else {
+      const existing = await c.findOne({ _id }, { projection: { payloadHash: 1 } });
+      if (!existing || existing.payloadHash !== hash) throw new Error(`APPOINTMENT_AUDIT_CONFLICT:${_id}`);
+      reused += 1;
     }
-    const existing = await c.findOne({ _id }, { projection: { payloadHash: 1 } });
-    if (!existing || existing.payloadHash !== hash) throw new Error(`APPOINTMENT_AUDIT_CONFLICT:${_id}`);
-    reused += 1;
+    if (event.eventType === 'APPOINTMENT_CREATED') completedWorkflows.add(event.workflowId);
   }
+
+  // v4 augmentation: once the durable appointment exists, project the direct
+  // workflow selections into OperationalDirectInput. The projection is
+  // deterministic and idempotent, so a Temporal activity retry reuses the same
+  // input and stable element ids rather than duplicating operational facts.
+  for (const workflowId of completedWorkflows) {
+    await projectAppointmentDirectInput(workflowId);
+  }
+
   return { persisted, reused };
 }
 
@@ -125,5 +140,6 @@ export async function closeAppointmentAuditRepository(): Promise<void> {
   const current = client;
   client = undefined;
   indexesReady = undefined;
+  await closeOperationalInputRepository();
   if (current) await current.close();
 }

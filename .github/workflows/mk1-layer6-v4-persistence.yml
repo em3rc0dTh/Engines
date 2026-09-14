@@ -1,0 +1,103 @@
+name: MK1 Layer 6 v4 Persistence
+
+on:
+  push:
+    branches:
+      - feature/layer6-v4-persistence-complete
+  pull_request:
+    branches:
+      - feature/cta-orchestration-register-appointment-poc
+
+permissions:
+  contents: read
+
+jobs:
+  layer6-v4-persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: Existing persistence regressions
+        run: |
+          npm run test:b7
+          npm run test:appointment
+
+      - name: Start clean Layer 6 stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d postgres mongo minio temporal
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm minio-init
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d migrate worker cta channel-core
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml ps
+
+      - name: Wait for canonical CTA runtime
+        run: |
+          for attempt in $(seq 1 45); do
+            if curl -fsS http://localhost:8788/health >/tmp/channel-health.json; then break; fi
+            sleep 1
+          done
+          grep -F '"ok":true' /tmp/channel-health.json
+
+      - name: Produce real appointment persistence graph
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/layer6-cta-poc.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/layer6-cta-poc.log
+
+      - name: Certify PostgreSQL + MongoDB v4 + MinIO
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e LAYER6_S3_ENDPOINT=http://minio:9000 \
+            -e LAYER6_S3_REGION=us-east-1 \
+            -e LAYER6_S3_BUCKET=engines-layer6 \
+            -e LAYER6_S3_ACCESS_KEY_ID=engines \
+            -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret \
+            cta npm run probe:layer6:v4 | tee /tmp/layer6-v4-persistence.log
+          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/layer6-v4-persistence.log
+
+      - name: Capture Layer 6 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/layer6-v4-evidence
+          cp /tmp/layer6-cta-poc.log /tmp/layer6-v4-evidence/ 2>/dev/null || true
+          cp /tmp/layer6-v4-persistence.log /tmp/layer6-v4-evidence/ 2>/dev/null || true
+          git rev-parse HEAD > /tmp/layer6-v4-evidence/git-sha.txt
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT workflow_id,case_id,appointment_id,managed_entity_id,resource_reservation_id,status FROM appointments ORDER BY created_at" \
+            > /tmp/layer6-v4-evidence/postgres-appointments.txt 2>&1 || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T mongo mongosh --quiet engines_mk0 --eval \
+            'printjson({directInputs:db.operational_direct_inputs.countDocuments({}),observationInputs:db.operational_observation_inputs.countDocuments({}),attachmentsV4:db.attachments_v4.countDocuments({}),provenance:db.operational_provenance.countDocuments({}),contexts:db.operational_context.countDocuments({})})' \
+            > /tmp/layer6-v4-evidence/mongo-layer6-counts.txt 2>&1 || true
+
+      - name: Upload Layer 6 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer6-v4-persistence-${{ github.run_id }}
+          path: /tmp/layer6-v4-evidence
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
