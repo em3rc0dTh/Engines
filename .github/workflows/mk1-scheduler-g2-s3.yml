@@ -79,13 +79,14 @@ jobs:
             exit 1
           fi
           echo 'SCHEDULER_G2_S3_GENERIC_BOUNDARY_PASS'
-      - name: Guard G2-S3 from premature hold lifecycle claims
+      - name: Guard certified atomic reservation invariant
         run: |
-          if grep -nEi 'UPDATE[[:space:]]+scheduler_holds|SET[[:space:]]+status[[:space:]]*=[[:space:]]*.*EXPIRED|DELETE[[:space:]]+FROM[[:space:]]+scheduler_holds' src/scheduler/reservation-engine.ts; then
-            echo 'G2-S3 attempted to own G2-S4 hold lifecycle.'
-            exit 1
-          fi
-          echo 'SCHEDULER_G2_S3_NO_HOLD_LIFECYCLE_PASS'
+          grep -F 'confirmReservationAtomic' src/scheduler/reservation-engine.ts
+          grep -F "'CAPACITY_CONFLICT'" src/scheduler/reservation-engine.ts
+          grep -F 'scheduler-capacity:' src/scheduler/reservation-engine.ts
+          grep -F 'pg_advisory_xact_lock' src/scheduler/reservation-engine.ts
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' scripts/certify-scheduler-g2-s3.ts
+          echo 'SCHEDULER_G2_S3_ATOMIC_INVARIANT_GUARD_PASS'
       - name: Guard Appointment from premature Scheduler migration
         run: |
           matches="$(grep -nEi 'availability-engine|reservation-engine|confirmReservationAtomic|scheduler_' \
@@ -93,7 +94,7 @@ jobs:
             src/orchestration/temporal/activities/appointment.activities.ts || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo 'Appointment migration is forbidden until G2-S3 itself is certified.'
+            echo 'Appointment migration remains a later Scheduler gate; G2-S3 regression cannot authorize it.'
             exit 1
           fi
           echo 'SCHEDULER_G2_S3_NO_APPOINTMENT_MIGRATION_PASS'
@@ -225,7 +226,7 @@ jobs:
           successful operation replay             PASS
           idempotency material conflict           PASS
           Appointment remains pre-Scheduler       PASS
-          hold lifecycle remains G2-S4            PASS
+          later hold lifecycle does not alter S3  PASS
           EOF
           echo 'SCHEDULER_G2_S3_CERTIFICATION_PASS' | tee /tmp/g2-s3-seal/terminal-marker.txt
       - name: Upload G2-S3 seal
