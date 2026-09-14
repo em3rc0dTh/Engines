@@ -79,6 +79,7 @@
     "probe:scheduler:g2:s0": "tsx scripts/certify-scheduler-g2-s0.ts",
     "probe:scheduler:g2:s3": "tsx scripts/certify-scheduler-g2-s3.ts",
     "probe:scheduler:g2:s4": "tsx scripts/certify-scheduler-g2-s4.ts",
+    "probe:scheduler:g2:s5": "tsx scripts/certify-scheduler-g2-s5.ts",
     "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "probe:webchat:c1b": "tsx scripts/certify-webchat-c1b.ts",
     "probe:cta:poc": "tsx scripts/certify-cta-orchestration-poc.ts",
