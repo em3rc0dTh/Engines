@@ -2,7 +2,7 @@
 
 ## Status
 
-**SCHEDULER G2-S3 CERTIFIED — G2-S4 NEXT**
+**SCHEDULER G2-S4 CERTIFIED — G2-S5 NEXT**
 
 This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
@@ -30,7 +30,8 @@ Step 4 Scheduler Engine
   G2-S1 Resource/schedule management    ✅ CERTIFIED
   G2-S2 Deterministic availability      ✅ CERTIFIED
   G2-S3 Atomic reservation conflict     ✅ CERTIFIED
-  G2-S4 Holds + expiry/replay           ⏭️ NEXT
+  G2-S4 Holds + expiry/replay           ✅ CERTIFIED
+  G2-S5 Multi-business generality       ⏭️ NEXT
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
@@ -39,7 +40,7 @@ Exact heads, runs and artifact digests live in gate receipts/evidence because do
 
 ## Canonical Scheduler branch policy
 
-Scheduler development is now intentionally consolidated:
+Scheduler development is intentionally consolidated:
 
 ```text
 ACTIVE BRANCH  build/g2-scheduler
@@ -96,8 +97,8 @@ G2-S0 Contract + persistence foundation                         ✅ CERTIFIED
 G2-S1 Resource/capability/schedule management                   ✅ CERTIFIED
 G2-S2 Deterministic availability engine                        ✅ CERTIFIED
 G2-S3 Atomic reservation + concurrency conflict                ✅ CERTIFIED
-G2-S4 Holds + expiry + replay                                   ⏭️ NEXT
-G2-S5 Multi-business generality                                 OPEN
+G2-S4 Holds + expiry + replay                                   ✅ CERTIFIED
+G2-S5 Multi-business generality                                 ⏭️ NEXT
 G2-S6 Services snapshot/demand integration                      OPEN
 G2-S7 Appointment Workflow integration                          OPEN
 G2-S8 Multi-resource assignment proof or explicit deferral      OPEN
@@ -135,7 +136,7 @@ weekly schedules
 AVAILABLE / UNAVAILABLE / CAPACITY overrides
 segment-wise effective capacity
 RESERVED allocations
-persisted ACTIVE holds
+persisted ACTIVE unexpired holds
 pre/post buffers
 configurable granularity
 deterministic candidate IDs
@@ -171,34 +172,51 @@ inherited CTA/Temporal regression
 Appointment remains outside Scheduler
 ```
 
-G2-S3 deliberately certifies direct candidate confirmation only. Hold consumption and expiry are not claimed.
+### G2-S4 — CERTIFIED
 
-### G2-S4 — NEXT
-
-Implement on the **same canonical branch** `build/g2-scheduler`.
-
-Required hold lifecycle proof:
+Certified persisted hold lifecycle on the same canonical Scheduler line:
 
 ```text
-CreateHold
-ReleaseHold
-consume hold during reservation confirmation
-persist explicit expiresAt
-logical expiry determined from persisted time
-expired hold becomes non-blocking even before housekeeping mutation
-same-operation replay remains idempotent
-same-operation different-material fails closed
-restart/re-entry does not resurrect expired blocking truth
-hold consumption + reservation commit remain atomic
+CreateHold durable persistence
+ReleaseHold durable transition
+same-operation replay
+same-operation different-material → IDEMPOTENCY_MATERIAL_CONFLICT
+explicit persisted expiresAt
+logical expiry based on persisted time
+expired ACTIVE hold becomes non-blocking before housekeeping
+fresh PostgreSQL Pool preserves expiry truth
+housekeeping may project ACTIVE → EXPIRED after correctness is already true
+valid hold is consumed atomically with reservation
+consumed hold → CONSUMED
+expired hold confirmation → HOLD_EXPIRED
+expired-hold failure → zero reservation / command effect
 ```
 
-Housekeeping may eventually mark rows `EXPIRED`, but correctness must not depend on a cleanup worker running at exactly the right moment.
+Correctness does not depend on `setTimeout`, `setInterval`, cron, in-memory state or a cleanup worker running at a precise instant. Availability evaluates `expires_at` directly against the query `asOf` truth.
 
-G2-S4 does not migrate Appointment.
+G2-S4 preserves the G2-S3 atomic confirmation invariant and does not migrate Appointment.
 
-### G2-S5
+### G2-S5 — NEXT
 
-Run materially different business fixtures through the same Scheduler implementation with zero vertical branches.
+Run materially different businesses through the same Scheduler implementation with zero vertical/provider branches.
+
+Minimum executable proof:
+
+```text
+at least two distinct business slugs
+materially different resource kinds / capabilities / schedules
+distinct immutable SchedulingDemand fixtures
+availability isolation per business
+hold isolation per business
+reservation isolation per business
+same operationId may safely exist in different businesses
+cross-business resource/schedule/hold/reservation references fail closed
+one business reaching capacity does not affect the other
+no provider/vertical names or branching in Scheduler core
+G2-S0..G2-S4 predecessor regressions remain green
+```
+
+G2-S5 proves generality/isolation of the already-certified Scheduler semantics. It must not add customer-specific special cases merely to make fixtures pass.
 
 ### G2-S6
 
@@ -274,12 +292,12 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Re-certify G2-S3 on the exact final documentation/ledger/evidence head.
+1. Final-seal G2-S4 on the exact receipt/evidence/roadmap/ledger head.
 2. Keep PR #32 draft/unmerged; certification does not authorize merge.
-3. Do NOT create a G2-S4 branch.
-4. Continue G2-S4 directly on build/g2-scheduler.
-5. Prove logical persisted-time expiry makes an expired hold non-blocking before cleanup.
-6. Prove hold replay/restart/consumption atomicity.
-7. Preserve G2-S0/S1/S2/S3 regressions.
+3. Do NOT create a G2-S5 branch.
+4. Continue G2-S5 directly on build/g2-scheduler.
+5. Prove two materially different businesses with strict data/operation isolation.
+6. Prove capacity/hold/reservation state cannot bleed across business scope.
+7. Preserve G2-S0/S1/S2/S3/S4 regressions.
 8. Do not migrate Appointment before G2-S7.
 ```
