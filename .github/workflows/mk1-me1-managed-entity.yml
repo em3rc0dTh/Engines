@@ -50,6 +50,13 @@ jobs:
           docker compose up --build -d postgres mongo temporal migrate worker cta channel-core
           docker compose ps
 
+      - name: Prepare deterministic physical fixtures
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run fixture:me1:physical | tee /tmp/managed-entity-me1-physical-fixtures.log
+          grep -F 'ME1_PHYSICAL_FIXTURES_READY' /tmp/managed-entity-me1-physical-fixtures.log
+
       - name: Certify Managed Entity persistence semantics
         run: |
           docker compose run --rm --no-deps -T \
@@ -63,6 +70,7 @@ jobs:
           mkdir -p /tmp/managed-entity-me1-evidence
           cp /tmp/managed-entity-me1-tsc.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
           cp /tmp/managed-entity-me1.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
+          cp /tmp/managed-entity-me1-physical-fixtures.log /tmp/managed-entity-me1-evidence/ 2>/dev/null || true
           docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
             "SELECT managed_entity_id,business_slug,customer_id,entity_type,display_name,external_ref,status FROM managed_entities ORDER BY created_at" \
             > /tmp/managed-entity-me1-evidence/managed-entities.txt 2>&1 || true
