@@ -42,16 +42,39 @@ PR      34880461850  SUCCESS
 marker  PRE_SCHEDULER_NODE_EDGE_CERTIFICATION_PASS
 ```
 
-Current Scheduler G2-S0 executable seal:
+Current Scheduler certification is branch-head based. The active Scheduler branch must pass its dedicated gate workflow after any implementation, contract, receipt, roadmap, ledger, policy or workflow change. The exact current head/run/artifact digests are recorded in the active PR; this committed roadmap intentionally does not pin a mutable branch head and thereby make itself stale on the next documentation commit.
+
+## Mandatory Scheduler certification rule
+
+Scheduler is now governed by a sequential hard-gate policy:
 
 ```text
-branch  build/g2-s0-scheduler-contract-persistence
-head    eb278eb5b10d6b129c3801c934570e1f787571eb
-push    34883086249  SUCCESS
-marker  SCHEDULER_G2_S0_CERTIFICATION_PASS
+IMPLEMENT
+→ DEDICATED GATE CI
+→ PREDECESSOR REGRESSIONS
+→ GATE-SPECIFIC TERMINAL MARKER
+→ EVIDENCE ARTIFACT + DIGEST
+→ TEST RECEIPT + NON-CLAIMS
+→ MACHINE LEDGER UPDATE
+→ SAME GATE RE-RUN ON FINAL BRANCH HEAD
+→ ONLY THEN ADVANCE THE NEXT GATE
 ```
 
-Documentation-only commits after a certified implementation candidate must pass the same G2-S0 workflow before replacing the branch head.
+No Scheduler step may be skipped, inferred from a later step, or batch-certified retroactively.
+
+Canonical policy:
+
+`mk1/Test/g2-scheduler-certification-policy.md`
+
+Machine-readable state:
+
+`mk1/Test/g2-scheduler-certification-ledger.json`
+
+Executable verifier:
+
+`mk1/runtime/scripts/verify-scheduler-certification-ledger.ts`
+
+The ledger must always represent a contiguous `CERTIFIED` prefix, at most one `NEXT` gate immediately after that prefix, and only `OPEN` gates after it. Every certified gate must have its own workflow, receipt and terminal marker.
 
 ## Track A — Services completion
 
@@ -105,6 +128,7 @@ PostgreSQL Scheduler schema
 Scheduler command identity ledger foundation
 contract tests
 persistence certification
+sequential certification ledger/policy guard
 ```
 
 Foundation invariants now frozen:
@@ -118,15 +142,33 @@ All persisted instants are offset-aware; time zones are explicit.
 Cross-business resource references are rejected.
 Persistence supports multiple assignments without claiming multi-resource search.
 Appointment is not rewritten against Scheduler yet.
+Every later G2 gate must be independently certified before advancement.
 ```
 
 ### G2-S1 — NEXT
 
 Certify versioned/idempotent management of resources and schedule definitions. This is the first gate allowed to add executable management operations such as Create/Update Resource, SetResourceStatus, SetScheduleTemplate and schedule-override lifecycle behavior. It must preserve the G2-S0 contracts and command identity foundation.
 
+Minimum certification requirement before G2-S2 may become NEXT:
+
+```text
+Dedicated G2-S1 workflow                         PASS
+G2-S0 ledger + contract regression               PASS
+resource CRUD/version semantics                  PASS
+capability management                            PASS
+schedule-template management                     PASS
+override lifecycle                               PASS
+same operation replay                            PASS
+same operation id + different material conflict  PASS
+business isolation                               PASS
+artifact + digest                                PRESENT
+SCHEDULER_G2_S1_CERTIFICATION_PASS                PRESENT
+final branch head                                RE-CERTIFIED
+```
+
 ### G2-S2
 
-Certify deterministic read-only availability generation from schedules, overrides, capabilities, capacity and existing allocations.
+Certify deterministic read-only availability generation from schedules, overrides, capabilities, capacity and existing allocations. It may become NEXT only after G2-S1 is certified.
 
 ### G2-S3
 
@@ -226,6 +268,7 @@ Integration must not become a prerequisite for core scheduling.
 Appointment may migrate to Scheduler only after G2-S3 conflict correctness is proven.
 Persistence ownership remains explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic Steps 1–7 are sufficiently mature.
+No Scheduler gate advances until its predecessor is independently certified.
 ```
 
 ## Frozen authority boundaries
@@ -247,9 +290,10 @@ Recommended sequence:
 
 ```text
 1. Keep the stacked PR chain unmerged until explicit authorization.
-2. Treat G2-S0 contract/schema as frozen regression surface.
+2. Treat G2-S0 contract/schema/policy/ledger as frozen regression surface.
 3. Implement G2-S1 management operations over SchedulerResource, capabilities, ScheduleTemplate and ScheduleOverride.
 4. Prove version/replay/material-conflict semantics through scheduler_commands.
-5. Do not implement availability generation until G2-S1 is certified.
-6. Do not migrate Appointment reservation logic until G2-S3 is independently certified.
+5. Certify G2-S1 on its exact final head before changing the ledger to G2-S2 NEXT.
+6. Do not implement availability generation until G2-S1 is certified.
+7. Do not migrate Appointment reservation logic until G2-S3 is independently certified.
 ```
