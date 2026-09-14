@@ -2,9 +2,9 @@
 
 ## Status
 
-**SCHEDULER G2-S2 CERTIFIED — G2-S3 NEXT**
+**SCHEDULER G2-S3 CERTIFIED — G2-S4 NEXT**
 
-This roadmap advances the platform while preserving already certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims simply because an earlier schema or contract exists.
+This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
 ## Current certified baseline
 
@@ -29,12 +29,32 @@ Step 4 Scheduler Engine
   G2-S0 Contract + persistence          ✅ CERTIFIED
   G2-S1 Resource/schedule management    ✅ CERTIFIED
   G2-S2 Deterministic availability      ✅ CERTIFIED
-  G2-S3 Atomic reservation conflict     ⏭️ NEXT
+  G2-S3 Atomic reservation conflict     ✅ CERTIFIED
+  G2-S4 Holds + expiry/replay           ⏭️ NEXT
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
 
-Exact branch heads, workflow runs and artifact digests live in gate receipts/evidence because documentation commits themselves change the head and therefore must be re-certified.
+Exact heads, runs and artifact digests live in gate receipts/evidence because documentation commits change the branch head and therefore require exact-final-head recertification.
+
+## Canonical Scheduler branch policy
+
+Scheduler development is now intentionally consolidated:
+
+```text
+ACTIVE BRANCH  build/g2-scheduler
+ACTIVE PR      #32 — Scheduler G2 canonical track
+BASE           feature/pre-scheduler-node-edge-certification
+
+Historical per-gate PRs
+  #29 G2-S0   CLOSED / UNMERGED / evidence preserved
+  #30 G2-S1   CLOSED / UNMERGED / evidence preserved
+  #31 G2-S2   CLOSED / UNMERGED / evidence preserved
+```
+
+From G2-S3 onward, the normal rule is **no new per-gate Scheduler branch**. G2-S4 through G2-S9 continue as sequential commits on `build/g2-scheduler`. Each gate still receives its own dedicated workflow, receipt, ledger transition, evidence artifacts and exact-final-head rerun. A new branch is allowed only for exceptional recovery/isolation, not as the default gate mechanism.
+
+This keeps certification granular without fragmenting implementation history.
 
 ## Mandatory Scheduler certification rule
 
@@ -75,8 +95,8 @@ Scheduler owns concrete time/resource allocation; it does not own catalog/commer
 G2-S0 Contract + persistence foundation                         ✅ CERTIFIED
 G2-S1 Resource/capability/schedule management                   ✅ CERTIFIED
 G2-S2 Deterministic availability engine                        ✅ CERTIFIED
-G2-S3 Atomic reservation + concurrency conflict                ⏭️ NEXT
-G2-S4 Holds + expiry + replay                                   OPEN
+G2-S3 Atomic reservation + concurrency conflict                ✅ CERTIFIED
+G2-S4 Holds + expiry + replay                                   ⏭️ NEXT
 G2-S5 Multi-business generality                                 OPEN
 G2-S6 Services snapshot/demand integration                      OPEN
 G2-S7 Appointment Workflow integration                          OPEN
@@ -105,7 +125,7 @@ Same operation + same material replays; same operation + different material fail
 
 ### G2-S2 — CERTIFIED
 
-Certified deterministic read-only availability for the first one-resource demand slice:
+Certified deterministic read-only one-resource availability over current Scheduler truth:
 
 ```text
 business scope
@@ -123,50 +143,58 @@ stable candidate ordering
 SlotCandidate advisory/non-persisted
 ```
 
-Stable ordering:
+### G2-S3 — CERTIFIED
+
+Certified direct one-resource `ConfirmReservation` with commit-time revalidation and atomic concurrency control.
+
+Critical executable invariant:
 
 ```text
-startAt ASC
-endAt ASC
-assignment resource IDs ASC
-candidateId ASC
-```
-
-G2-S2 deliberately does not claim logical hold expiry or atomic commit-time conflict correctness.
-
-### G2-S3 — NEXT
-
-Certify `ConfirmReservation` as the first atomic allocation mutation and prove the critical invariant:
-
-```text
-two concurrent confirmations for last capacity
-→ exactly one success
-→ exactly one typed conflict
+two concurrent confirmations for the final unit of capacity
+→ exactly one RESERVED success
+→ exactly one typed CAPACITY_CONFLICT
 → exactly one persisted reservation
-→ no partial second business effect
+→ exactly one persisted assignment
+→ exactly one successful ConfirmReservation command result
+→ loser commits zero reservation / assignment / command effect
 ```
 
-Required G2-S3 properties:
+Also certified:
 
 ```text
-business-scoped reservation command
-same-operation replay idempotency
-same-operation different-material rejection
-commit-time resource/status/schedule/override revalidation
-commit-time capacity revalidation
-stale SlotCandidate cannot be trusted as authority
-deterministic lock ordering / serialization for resource capacity
-reservation + assignment atomic insert
-typed SCHEDULER_CAPACITY_CONFLICT race loser
+same successful operation + same material replay
+same operation + changed material → IDEMPOTENCY_MATERIAL_CONFLICT
+stale candidate after schedule/override mutation → SLOT_NO_LONGER_AVAILABLE
+resource-scoped deterministic transaction serialization
 G2-S0/S1/S2 predecessor regressions
-Appointment remains outside Scheduler during the gate
+inherited CTA/Temporal regression
+Appointment remains outside Scheduler
 ```
 
-Passing G2-S3 establishes conflict correctness but does not itself migrate Appointment; Appointment migration remains G2-S7.
+G2-S3 deliberately certifies direct candidate confirmation only. Hold consumption and expiry are not claimed.
 
-### G2-S4
+### G2-S4 — NEXT
 
-Add expiring holds and prove logical expiry, replay and restart semantics. Cleanup is housekeeping; expired holds must not remain blocking truth.
+Implement on the **same canonical branch** `build/g2-scheduler`.
+
+Required hold lifecycle proof:
+
+```text
+CreateHold
+ReleaseHold
+consume hold during reservation confirmation
+persist explicit expiresAt
+logical expiry determined from persisted time
+expired hold becomes non-blocking even before housekeeping mutation
+same-operation replay remains idempotent
+same-operation different-material fails closed
+restart/re-entry does not resurrect expired blocking truth
+hold consumption + reservation commit remain atomic
+```
+
+Housekeeping may eventually mark rows `EXPIRED`, but correctness must not depend on a cleanup worker running at exactly the right moment.
+
+G2-S4 does not migrate Appointment.
 
 ### G2-S5
 
@@ -224,7 +252,7 @@ Channel work can proceed independently of Scheduler. Provider mechanics terminat
 Channel work must not wait for Scheduler.
 Scheduler consumes Services snapshots, not channels.
 Integration is not a prerequisite for core scheduling.
-Appointment migration remains a later dedicated gate.
+Appointment migration remains G2-S7.
 Persistence ownership stays explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic core gates are sufficiently mature.
 No Scheduler gate advances until its predecessor is independently certified.
@@ -246,12 +274,12 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Re-certify G2-S2 on the exact final documentation/ledger head.
-2. Keep PR #31 draft/unmerged; certification does not authorize merge.
-3. Only after exact-head G2-S2 PASS, branch G2-S3 from that head.
-4. Implement atomic one-resource ConfirmReservation.
-5. Revalidate scheduling truth inside the reservation transaction.
-6. Prove concurrent last-capacity winner/loser behavior.
-7. Preserve operation-id replay and material-conflict semantics.
-8. Do not migrate Appointment in G2-S3.
+1. Re-certify G2-S3 on the exact final documentation/ledger/evidence head.
+2. Keep PR #32 draft/unmerged; certification does not authorize merge.
+3. Do NOT create a G2-S4 branch.
+4. Continue G2-S4 directly on build/g2-scheduler.
+5. Prove logical persisted-time expiry makes an expired hold non-blocking before cleanup.
+6. Prove hold replay/restart/consumption atomicity.
+7. Preserve G2-S0/S1/S2/S3 regressions.
+8. Do not migrate Appointment before G2-S7.
 ```
