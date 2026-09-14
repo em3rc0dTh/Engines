@@ -2,9 +2,9 @@
 
 ## Status
 
-**G2-S0 + G2-S1 + G2-S2 + G2-S3 CERTIFIED — G2-S4 NEXT**
+**G2-S0 + G2-S1 + G2-S2 + G2-S3 + G2-S4 CERTIFIED — G2-S5 NEXT**
 
-The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle. G2-S0 freezes contracts and PostgreSQL foundation; G2-S1 certifies versioned/idempotent management; G2-S2 certifies deterministic one-resource availability; G2-S3 certifies atomic direct reservation confirmation under concurrent last-capacity contention.
+The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle. G2-S0 freezes contracts and PostgreSQL foundation; G2-S1 certifies versioned/idempotent management; G2-S2 certifies deterministic one-resource availability; G2-S3 certifies atomic direct reservation confirmation under concurrent last-capacity contention; G2-S4 certifies persisted hold creation/release/consumption plus logical expiry that remains correct across process re-entry.
 
 ## 1. Responsibility
 
@@ -29,6 +29,10 @@ Recurring weekly schedules and exceptional `AVAILABLE`, `UNAVAILABLE`, `CAPACITY
 ### SlotCandidate
 
 `SlotCandidate` is advisory and deterministic. It is never persisted as reservation truth.
+
+### Hold
+
+A `SchedulerHold` is durable PostgreSQL allocation truth with explicit assignments, an occupancy interval and persisted `expiresAt`. An `ACTIVE` physical row blocks capacity only while it is logically unexpired at the evaluation `asOf` instant.
 
 ### Reservation
 
@@ -61,7 +65,7 @@ optional resource-kind constraints
 weekly schedule windows
 AVAILABLE / UNAVAILABLE / CAPACITY overrides
 RESERVED allocations
-persisted ACTIVE holds
+persisted ACTIVE and logically-unexpired holds
 pre/post buffers
 segment-wise effective capacity
 configurable granularity
@@ -140,20 +144,58 @@ remains an enforced invariant.
 
 ```text
 same successful operationId + same material
-→ return same reservation identity
+→ return same durable result identity
 → replayed = true
-→ no duplicate reservation
+→ no duplicate mutation
 
 same operationId + different material
 → IDEMPOTENCY_MATERIAL_CONFLICT
 → no second mutation
 ```
 
-## 9. Capacity/time semantics
+The operation identity boundary is business-scoped.
+
+## 9. G2-S4 — certified hold lifecycle
+
+G2-S4 adds durable one-resource hold semantics without weakening G2-S3 atomic reservation correctness.
+
+### CreateHold
+
+A hold is created only from a currently feasible advisory candidate. Its persisted occupied interval includes the demand's before/after buffers. The command ledger and hold mutation commit atomically.
+
+### ReleaseHold
+
+Explicit release transitions an eligible hold to `RELEASED` durably. Same operation + same material replays; operation identity reuse with different material fails closed.
+
+### Logical expiry
+
+Expiry correctness is defined from persisted time:
+
+```text
+hold.status = ACTIVE
+AND hold.expires_at > asOf
+→ blocking allocation
+
+hold.status = ACTIVE
+AND hold.expires_at <= asOf
+→ logically expired, non-blocking allocation
+```
+
+A cleanup process may later persist `EXPIRED`, but cleanup timing is not part of the free/busy correctness boundary.
+
+Executable evidence proves the same logical expiry through a newly created PostgreSQL Pool, so restart/re-entry cannot resurrect an expired blocking hold.
+
+### Hold consumption
+
+A valid unexpired hold may be consumed by reservation confirmation. Hold validation, capacity serialization, reservation/assignment persistence, `ACTIVE → CONSUMED`, and successful command-ledger result share one transactional boundary. An expired hold returns typed `HOLD_EXPIRED` and commits zero reservation/command effect.
+
+## 10. Capacity/time semantics
 
 Capacity feasibility applies to the occupied interval, including demand buffers. Persisted instants remain explicit offset/UTC values; Scheduler receives canonical instants and explicit IANA timezones. No implicit server-local time is permitted.
 
-## 10. PostgreSQL authority
+Availability and hold correctness accept an explicit logical evaluation instant for deterministic certification and restart-safe semantics.
+
+## 11. PostgreSQL authority
 
 Canonical Scheduler truth remains:
 
@@ -173,18 +215,17 @@ scheduler_commands
 
 MongoDB may hold semantic/audit evidence but never active free/busy truth.
 
-## 11. G2-S3 truth boundary
+## 12. G2-S4 truth boundary
 
-G2-S3 certifies **direct candidate confirmation only**. It does not implement or certify hold creation, hold consumption, logical expiry, restart recovery or cleanup semantics. `holdId` consumption belongs to G2-S4.
+G2-S4 certifies one-resource hold creation, release, persisted-time logical expiry, housekeeping projection, replay/idempotency and atomic held reservation consumption.
 
-It also does not certify reservation cancellation/completion lifecycle, general multi-business behavior, runtime Services→SchedulingDemand creation, Appointment→Scheduler migration, multi-resource search/optimization, or final production readiness.
+It does **not** certify general multi-business behavior, runtime Services→SchedulingDemand creation, Appointment→Scheduler migration, multi-resource search/optimization, reservation cancel/complete lifecycle, Integration Engine behavior or final production readiness.
 
-Passing G2-S3 removes the conflict-correctness blocker for later Appointment work but does not migrate Appointment automatically. Appointment integration remains G2-S7.
+Passing G2-S4 advances the Scheduler correctness prefix but does not migrate Appointment. Appointment integration remains G2-S7.
 
-## 12. Later gates
+## 13. Later gates
 
 ```text
-G2-S4  holds + logical expiry + replay/restart
 G2-S5  multi-business generality
 G2-S6  Services runtime SchedulingDemand integration
 G2-S7  Appointment Workflow integration
@@ -192,15 +233,15 @@ G2-S8  multi-resource assignment proof or explicit deferral
 G2-S9  final clean Scheduler certification
 ```
 
-## 13. Certification path
+## 14. Certification path
 
 ```text
 G2-S0 contract + persistence foundation                       ✅ CERTIFIED
 G2-S1 resource/capability/schedule management                ✅ CERTIFIED
 G2-S2 deterministic availability reads                      ✅ CERTIFIED
 G2-S3 atomic single-resource reservation conflict           ✅ CERTIFIED
-G2-S4 holds + expiry/replay                                  ⏭️ NEXT
-G2-S5 multi-business generality                              OPEN
+G2-S4 holds + expiry/replay                                  ✅ CERTIFIED
+G2-S5 multi-business generality                              ⏭️ NEXT
 G2-S6 Services snapshot integration                         OPEN
 G2-S7 Appointment Workflow integration                      OPEN
 G2-S8 multi-resource assignment or explicit deferral proof  OPEN
@@ -209,8 +250,25 @@ G2-S9 final clean certification                             OPEN
 
 No gate advances without dedicated CI, predecessor regressions, terminal marker, artifact digest, receipt/non-claims, machine-ledger transition and exact-final-head rerun.
 
-## 14. Bounded claim
+## 15. G2-S5 frozen proof target
 
-The Scheduler Engine is now certified to deterministically compute one-resource availability and to atomically commit a direct one-resource reservation under concurrent last-capacity contention with typed conflict, replay/idempotency and zero partial loser effects.
+G2-S5 must prove the same Scheduler implementation handles materially different business fixtures without provider/vertical forks and without state bleed:
 
-Logical hold lifecycle and later orchestration integrations remain explicitly unclaimed until their own gates pass.
+```text
+business-scoped resource/capability/schedule truth
+business-scoped availability
+business-scoped holds
+business-scoped reservations
+business-scoped command idempotency
+same operationId reusable across different businesses
+cross-business references fail closed
+capacity consumption in business A cannot affect business B
+```
+
+This gate proves generality of the existing semantics; it must not introduce customer-specific runtime branches merely to satisfy fixtures.
+
+## 16. Bounded claim
+
+The Scheduler Engine is certified to deterministically compute one-resource availability, atomically commit a direct one-resource reservation under concurrent last-capacity contention, and manage durable one-resource holds with restart-safe persisted-time expiry, replay/idempotency and atomic held-reservation consumption.
+
+General multi-business proof and later orchestration integrations remain explicitly unclaimed until their own gates pass.
