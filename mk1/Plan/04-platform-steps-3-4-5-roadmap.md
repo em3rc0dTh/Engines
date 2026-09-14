@@ -2,7 +2,7 @@
 
 ## Status
 
-**SCHEDULER G2-S1 CERTIFIED — G2-S2 NEXT**
+**SCHEDULER G2-S2 CERTIFIED — G2-S3 NEXT**
 
 This roadmap advances the platform while preserving already certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims simply because an earlier schema or contract exists.
 
@@ -28,16 +28,15 @@ Pre-Scheduler node/edge closure         ✅ CERTIFIED
 Step 4 Scheduler Engine
   G2-S0 Contract + persistence          ✅ CERTIFIED
   G2-S1 Resource/schedule management    ✅ CERTIFIED
-  G2-S2 Deterministic availability      ⏭️ NEXT
+  G2-S2 Deterministic availability      ✅ CERTIFIED
+  G2-S3 Atomic reservation conflict     ⏭️ NEXT
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
 
-The exact current Scheduler branch head, workflow runs and artifact digests are recorded in the active PR and gate evidence receipt rather than pinned here, because documentation commits themselves change the branch head and must be re-certified.
+Exact branch heads, workflow runs and artifact digests live in gate receipts/evidence because documentation commits themselves change the head and therefore must be re-certified.
 
 ## Mandatory Scheduler certification rule
-
-Scheduler is governed by a sequential hard-gate policy:
 
 ```text
 IMPLEMENT
@@ -57,8 +56,6 @@ Machine state: `mk1/Test/g2-scheduler-certification-ledger.json`
 
 Executable verifier: `mk1/runtime/scripts/verify-scheduler-certification-ledger.ts`
 
-The ledger must always expose a contiguous `CERTIFIED` prefix, at most one `NEXT` gate immediately after it, and only `OPEN` gates after that. Every certified gate must retain its own workflow, receipt and terminal marker.
-
 ## Track A — Services completion
 
 **CLOSED.**
@@ -70,8 +67,6 @@ S8 Final clean G1 certification                  ✅ CERTIFIED
 G1 Services Engine                               ✅ CERTIFIED
 ```
 
-The Appointment flow consumes canonical Services snapshots rather than bypassing Services authority.
-
 ## Track B — Scheduler design/build
 
 Scheduler owns concrete time/resource allocation; it does not own catalog/commercial semantics.
@@ -79,8 +74,8 @@ Scheduler owns concrete time/resource allocation; it does not own catalog/commer
 ```text
 G2-S0 Contract + persistence foundation                         ✅ CERTIFIED
 G2-S1 Resource/capability/schedule management                   ✅ CERTIFIED
-G2-S2 Deterministic availability engine                        ⏭️ NEXT
-G2-S3 Atomic reservation + concurrency conflict                OPEN
+G2-S2 Deterministic availability engine                        ✅ CERTIFIED
+G2-S3 Atomic reservation + concurrency conflict                ⏭️ NEXT
 G2-S4 Holds + expiry + replay                                   OPEN
 G2-S5 Multi-business generality                                 OPEN
 G2-S6 Services snapshot/demand integration                      OPEN
@@ -91,22 +86,11 @@ G2-S9 Final clean Scheduler certification                       OPEN
 
 ### G2-S0 — CERTIFIED
 
-Frozen foundation:
-
-```text
-Scheduler contracts and validation
-PostgreSQL Scheduler schema
-immutable SchedulingDemand persistence
-resource/capability/schedule/override persistence
-hold/reservation assignment schema
-scheduler_commands operation identity ledger
-provider-agnostic boundary guards
-Appointment remains outside Scheduler
-```
+Frozen contracts, validation, PostgreSQL Scheduler schema, immutable `SchedulingDemand`, resource/schedule/override persistence, hold/reservation assignment schema, operation identity ledger, provider-agnostic boundaries and explicit non-integration with Appointment.
 
 ### G2-S1 — CERTIFIED
 
-Executable management surface:
+Certified versioned/idempotent management:
 
 ```text
 CreateResource
@@ -117,46 +101,29 @@ PutScheduleOverride
 DeleteScheduleOverride
 ```
 
-Certified semantics:
+Same operation + same material replays; same operation + different material fails closed; stale revisions and cross-business mutations fail without partial effects.
+
+### G2-S2 — CERTIFIED
+
+Certified deterministic read-only availability for the first one-resource demand slice:
 
 ```text
-resource revision control                       PASS
-capability replacement management               PASS
-schedule template revision control              PASS
-override create/update/delete lifecycle          PASS
-same operation + same material replay           PASS
-same operation + different material rejection   PASS
-cross-business mutation isolation               PASS
-G2-S0 predecessor regression                    PASS
-inherited CTA/Temporal path regression           PASS
-SCHEDULER_G2_S1_CERTIFICATION_PASS               PRESENT
-```
-
-A failed first candidate exposed an order-sensitive capability round-trip assertion; the gate was not promoted. The probe was corrected to use canonical capability ordering and the replacement candidate passed from a clean lab. This failure remains part of the evidence history.
-
-### G2-S2 — NEXT
-
-Certify **deterministic read-only availability generation** from immutable `SchedulingDemand` plus current Scheduler truth.
-
-Required first slice:
-
-```text
-one-resource demand first
 business scope
 ACTIVE resource filtering
 capability + resource-kind matching
 weekly schedules
-schedule overrides
-capacity constraints
-active reservations
-active holds as current persisted blocking truth
+AVAILABLE / UNAVAILABLE / CAPACITY overrides
+segment-wise effective capacity
+RESERVED allocations
+persisted ACTIVE holds
 pre/post buffers
+configurable granularity
 deterministic candidate IDs
-deterministic stable ordering
-SlotCandidate remains advisory/non-persisted
+stable candidate ordering
+SlotCandidate advisory/non-persisted
 ```
 
-Stable ordering remains:
+Stable ordering:
 
 ```text
 startAt ASC
@@ -165,20 +132,37 @@ assignment resource IDs ASC
 candidateId ASC
 ```
 
-G2-S2 must not claim reservation atomicity, stale-candidate revalidation at commit time, or logical hold-expiry semantics; those belong to G2-S3/G2-S4.
+G2-S2 deliberately does not claim logical hold expiry or atomic commit-time conflict correctness.
 
-### G2-S3
+### G2-S3 — NEXT
 
-Certify the critical conflict invariant:
+Certify `ConfirmReservation` as the first atomic allocation mutation and prove the critical invariant:
 
 ```text
 two concurrent confirmations for last capacity
 → exactly one success
 → exactly one typed conflict
+→ exactly one persisted reservation
 → no partial second business effect
 ```
 
-Only after G2-S3 may Appointment reservation logic migrate to Scheduler.
+Required G2-S3 properties:
+
+```text
+business-scoped reservation command
+same-operation replay idempotency
+same-operation different-material rejection
+commit-time resource/status/schedule/override revalidation
+commit-time capacity revalidation
+stale SlotCandidate cannot be trusted as authority
+deterministic lock ordering / serialization for resource capacity
+reservation + assignment atomic insert
+typed SCHEDULER_CAPACITY_CONFLICT race loser
+G2-S0/S1/S2 predecessor regressions
+Appointment remains outside Scheduler during the gate
+```
+
+Passing G2-S3 establishes conflict correctness but does not itself migrate Appointment; Appointment migration remains G2-S7.
 
 ### G2-S4
 
@@ -194,7 +178,7 @@ Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Of
 
 ### G2-S7
 
-Migrate `RegisterNewAppointment` only after G2-S3 conflict correctness is certified:
+Only after prior Scheduler correctness gates are certified, migrate `RegisterNewAppointment`:
 
 ```text
 Services selection
@@ -207,23 +191,19 @@ Services selection
 → Appointment result references Scheduler reservation
 ```
 
-Preserve the invariant:
-
-```text
-availability shown != reservation persisted
-```
+Preserve `availability shown != reservation persisted`.
 
 ### G2-S8
 
-Prove multi-resource assignment if required by the first product slice; otherwise record an explicit testable deferral instead of implying support.
+Prove multi-resource assignment if required by the first product slice; otherwise record an explicit, testable deferral rather than implying support.
 
 ### G2-S9
 
-Run one clean Scheduler closure suite over G2-S0–G2-S8 plus protected CTA/Temporal/Services/Persistence regressions and emit the final Scheduler receipt.
+Run one clean Scheduler closure over G2-S0–G2-S8 plus protected CTA/Temporal/Services/Persistence regressions and emit the final Scheduler receipt.
 
 ## Track C — Integration boundary
 
-Do not build a broad provider platform yet. Prepare common contracts, then choose the first concrete integration from product need.
+Do not build a broad provider platform yet. Prepare common contracts, then choose the first concrete provider from product need.
 
 ```text
 I0 Integration command/event contracts
@@ -236,7 +216,7 @@ I5 Temporal composition + failure/recovery proof
 
 ## Track D — channel evolution
 
-Channel work can proceed independently of Scheduler. Channel/provider mechanics terminate at the canonical compatibility/domain boundary and must not leak provider-specific branches into Temporal business workflows or Scheduler.
+Channel work can proceed independently of Scheduler. Provider mechanics terminate at the canonical compatibility/domain boundary and must not leak provider branches into Temporal workflows or Scheduler.
 
 ## Cross-track dependency rules
 
@@ -244,8 +224,8 @@ Channel work can proceed independently of Scheduler. Channel/provider mechanics 
 Channel work must not wait for Scheduler.
 Scheduler consumes Services snapshots, not channels.
 Integration is not a prerequisite for core scheduling.
-Appointment may migrate to Scheduler only after G2-S3 conflict correctness.
-Persistence ownership remains explicit across PostgreSQL / MongoDB / Object Store.
+Appointment migration remains a later dedicated gate.
+Persistence ownership stays explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic core gates are sufficiently mature.
 No Scheduler gate advances until its predecessor is independently certified.
 ```
@@ -266,12 +246,12 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Re-certify G2-S1 on the exact final documentation/ledger head.
-2. Keep PR #30 draft/unmerged; certification does not authorize merge.
-3. Only after exact-head G2-S1 PASS, branch G2-S2 from that head.
-4. Build deterministic read-only availability for the one-resource baseline.
-5. Prove schedules + overrides + capabilities + capacity + allocations + buffers.
-6. Preserve SlotCandidate as advisory and non-persisted.
-7. Do not build reservation confirmation until G2-S2 is independently certified.
-8. Do not migrate Appointment until G2-S3 is independently certified.
+1. Re-certify G2-S2 on the exact final documentation/ledger head.
+2. Keep PR #31 draft/unmerged; certification does not authorize merge.
+3. Only after exact-head G2-S2 PASS, branch G2-S3 from that head.
+4. Implement atomic one-resource ConfirmReservation.
+5. Revalidate scheduling truth inside the reservation transaction.
+6. Prove concurrent last-capacity winner/loser behavior.
+7. Preserve operation-id replay and material-conflict semantics.
+8. Do not migrate Appointment in G2-S3.
 ```
