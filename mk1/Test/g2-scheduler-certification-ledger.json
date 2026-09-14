@@ -3,7 +3,7 @@
   "engine": "Scheduler",
   "track": "G2",
   "policy": "sequential-hard-gates",
-  "currentNext": "G2-S5",
+  "currentNext": "G2-S6",
   "gates": [
     {
       "id": "G2-S0",
@@ -47,7 +47,7 @@
     },
     {
       "id": "G2-S5",
-      "status": "NEXT",
+      "status": "CERTIFIED",
       "predecessor": "G2-S4",
       "expectedReceipt": "mk1/Test/g2-scheduler-engine-s5.md",
       "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s5.yml",
@@ -55,7 +55,7 @@
     },
     {
       "id": "G2-S6",
-      "status": "OPEN",
+      "status": "NEXT",
       "predecessor": "G2-S5",
       "expectedReceipt": "mk1/Test/g2-scheduler-engine-s6.md",
       "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s6.yml",
