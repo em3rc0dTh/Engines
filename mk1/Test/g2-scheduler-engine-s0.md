@@ -17,6 +17,8 @@ G2-S8 Multi-resource proof/deferral        OPEN
 G2-S9 Final clean Scheduler certification  OPEN
 ```
 
+The active execution roadmap is aligned to this receipt: G2-S0 is closed and G2-S1 is the next Scheduler gate.
+
 ## Certified scope
 
 G2-S0 freezes and persists the Scheduler foundation without claiming availability or concurrency semantics that belong to later gates.
