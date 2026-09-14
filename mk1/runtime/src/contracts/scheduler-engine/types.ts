@@ -1,143 +1,180 @@
 export type SchedulerResourceStatus = 'ACTIVE' | 'INACTIVE';
-export type ScheduleStatus = 'ACTIVE' | 'INACTIVE';
-export type ScheduleOverrideMode = 'CLOSED' | 'REPLACE';
-export type HoldStatus = 'ACTIVE' | 'EXPIRED' | 'RELEASED' | 'CONSUMED';
-export type ReservationStatus = 'RESERVED' | 'COMPLETED' | 'CANCELLED';
+export type SchedulerHoldStatus = 'ACTIVE' | 'EXPIRED' | 'RELEASED' | 'CONSUMED';
+export type SchedulerReservationStatus = 'RESERVED' | 'CANCELLED' | 'COMPLETED';
+export type ScheduleOverrideKind = 'AVAILABLE' | 'UNAVAILABLE' | 'CAPACITY';
+
+export type ResourceCapability = Readonly<{
+  code: string;
+  capacityUnits?: number;
+  metadata?: Readonly<Record<string, unknown>>;
+}>;
 
 export type SchedulerResource = Readonly<{
   resourceId: string;
   businessSlug: string;
+  code: string;
   kind: string;
   name: string;
   status: SchedulerResourceStatus;
-  capacityUnits: number;
   timeZone: string;
+  capacity: number;
+  capabilities: readonly ResourceCapability[];
   revision: number;
 }>;
 
-export type ResourceCapability = Readonly<{
-  resourceCapabilityId: string;
-  resourceId: string;
-  businessSlug: string;
-  capabilityCode: string;
-  capacityUnits: number;
-  revision: number;
-}>;
-
-export type ScheduleWindow = Readonly<{
+/**
+ * G2-S0 implementation decision: the pre-build design names this type but does
+ * not freeze its field shape. These canonical local-time fields intentionally
+ * model recurring weekly availability only; bookings remain separate truth.
+ */
+export type WeeklyAvailabilityWindow = Readonly<{
   weekday: number;
   startLocal: string;
   endLocal: string;
-  capacityUnits?: number;
+  capacity?: number;
 }>;
 
 export type ScheduleTemplate = Readonly<{
-  scheduleTemplateId: string;
-  resourceId: string;
+  scheduleId: string;
   businessSlug: string;
+  resourceId: string;
   timeZone: string;
-  status: ScheduleStatus;
+  weeklyWindows: readonly WeeklyAvailabilityWindow[];
   revision: number;
-  windows: readonly ScheduleWindow[];
-}>;
-
-export type ScheduleOverrideWindow = Readonly<{
-  startLocal: string;
-  endLocal: string;
-  capacityUnits?: number;
 }>;
 
 export type ScheduleOverride = Readonly<{
-  scheduleOverrideId: string;
-  resourceId: string;
+  overrideId: string;
   businessSlug: string;
-  localDate: string;
-  timeZone: string;
-  mode: ScheduleOverrideMode;
+  resourceId: string;
+  startAt: string;
+  endAt: string;
+  kind: ScheduleOverrideKind;
+  capacity?: number;
+  reasonCode?: string;
   revision: number;
-  windows: readonly ScheduleOverrideWindow[];
 }>;
 
 export type CapabilityDemand = Readonly<{
-  capabilityCode: string;
-  units: number;
+  code: string;
+  quantity: number;
+  resourceKinds?: readonly string[];
 }>;
 
 export type SchedulingDemand = Readonly<{
-  schedulingDemandId: string;
+  schemaVersion: 1;
   businessSlug: string;
-  operationId: string;
-  offeringSnapshot: Readonly<{
-    offeringId: string;
-    offeringRevision: number;
+  demandId: string;
+  service: Readonly<{
     serviceId: string;
-    serviceRevision: number;
+    revision: number;
+  }>;
+  offering: Readonly<{
+    offeringId: string;
+    revision: number;
     durationMinutes: number;
   }>;
-  requiredCapabilities: readonly CapabilityDemand[];
   capacityUnits: number;
-  buffers?: Readonly<{
-    beforeMinutes?: number;
-    afterMinutes?: number;
+  requiredCapabilities: readonly CapabilityDemand[];
+  buffers: Readonly<{
+    beforeMinutes: number;
+    afterMinutes: number;
   }>;
 }>;
 
 export type ResourceAssignmentCandidate = Readonly<{
   resourceId: string;
   capacityUnits: number;
-  capabilityCodes: readonly string[];
 }>;
 
-/** Advisory only: availability shown is not a persisted reservation. */
+/** Advisory only. Availability shown is not a persisted reservation. */
 export type SlotCandidate = Readonly<{
   candidateId: string;
-  businessSlug: string;
-  schedulingDemandId: string;
   startAt: string;
   endAt: string;
   timeZone: string;
-  schedulerRevision: number;
-  assignmentCandidates: readonly ResourceAssignmentCandidate[];
+  assignments: readonly ResourceAssignmentCandidate[];
 }>;
 
 export type ResourceAssignment = Readonly<{
   resourceId: string;
   capacityUnits: number;
-  capabilityCodes: readonly string[];
 }>;
 
-export type Hold = Readonly<{
+export type QueryAvailabilityInput = Readonly<{
+  businessSlug: string;
+  requestId: string;
+  demand: SchedulingDemand;
+  window: Readonly<{
+    startAt: string;
+    endAt: string;
+    timeZone: string;
+  }>;
+  preferredResourceIds?: readonly string[];
+  limit?: number;
+}>;
+
+export type AvailabilityResult = Readonly<{
+  requestId: string;
+  generatedAt: string;
+  slots: readonly SlotCandidate[];
+}>;
+
+export type CreateHoldInput = Readonly<{
+  businessSlug: string;
+  operationId: string;
+  demandId: string;
+  candidateId: string;
+  expiresInSeconds: number;
+}>;
+
+export type SchedulerHold = Readonly<{
   holdId: string;
   businessSlug: string;
-  schedulingDemandId: string;
-  candidateId: string;
-  idempotencyKey: string;
+  demandId: string;
   startAt: string;
   endAt: string;
-  expiresAt: string;
-  status: HoldStatus;
   assignments: readonly ResourceAssignment[];
+  expiresAt: string;
+  status: SchedulerHoldStatus;
 }>;
 
-export type Reservation = Readonly<{
+export type ConfirmReservationInput = Readonly<{
+  businessSlug: string;
+  operationId: string;
+  demand: SchedulingDemand;
+  candidateId?: string;
+  holdId?: string;
+  requestedStartAt: string;
+}>;
+
+export type SchedulerReservation = Readonly<{
   reservationId: string;
   businessSlug: string;
-  schedulingDemandId: string;
-  candidateId: string;
-  holdId?: string;
-  idempotencyKey: string;
+  demandId: string;
   startAt: string;
   endAt: string;
-  status: ReservationStatus;
+  timeZone: string;
   assignments: readonly ResourceAssignment[];
+  status: SchedulerReservationStatus;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
 }>;
 
-export type SchedulerConflictCode =
+export type SchedulerFailureCode =
+  | 'BUSINESS_SCOPE_NOT_FOUND'
+  | 'SCHEDULING_DEMAND_INVALID'
+  | 'CAPABILITY_UNSATISFIED'
+  | 'NO_AVAILABILITY'
   | 'SLOT_NO_LONGER_AVAILABLE'
   | 'CAPACITY_CONFLICT'
   | 'RESOURCE_INACTIVE'
+  | 'HOLD_NOT_FOUND'
   | 'HOLD_EXPIRED'
-  | 'RESERVATION_ALREADY_EXISTS';
+  | 'RESERVATION_NOT_FOUND'
+  | 'RESERVATION_REVISION_CONFLICT'
+  | 'IDEMPOTENCY_MATERIAL_CONFLICT';
 
 export type SchedulerValidationIssueCode =
   | 'INVALID_BUSINESS_SCOPE'
@@ -147,13 +184,12 @@ export type SchedulerValidationIssueCode =
   | 'INVALID_CAPABILITY'
   | 'INVALID_CAPACITY'
   | 'INVALID_TIME_ZONE'
-  | 'INVALID_LOCAL_DATE'
   | 'INVALID_LOCAL_TIME'
   | 'INVALID_INTERVAL'
   | 'INVALID_SCHEDULE'
   | 'INVALID_DEMAND'
   | 'INVALID_ASSIGNMENT'
-  | 'INVALID_IDEMPOTENCY_KEY';
+  | 'INVALID_OPERATION';
 
 export type SchedulerValidationIssue = Readonly<{
   code: SchedulerValidationIssueCode;
