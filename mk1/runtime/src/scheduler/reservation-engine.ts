@@ -18,6 +18,10 @@ export type ConfirmReservationResult = Readonly<{
   replayed: boolean;
 }>;
 
+export type ConfirmReservationOptions = Readonly<{
+  now?: string;
+}>;
+
 export class SchedulerReservationError extends Error {
   readonly code: SchedulerFailureCode;
 
@@ -41,6 +45,20 @@ type AllocationRow = Readonly<{
   capacity_units: number;
 }>;
 
+type HoldRow = Readonly<{
+  hold_id: string;
+  demand_id: string;
+  start_at: Date | string;
+  end_at: Date | string;
+  expires_at: Date | string;
+  status: 'ACTIVE' | 'EXPIRED' | 'RELEASED' | 'CONSUMED';
+}>;
+
+type HoldAssignmentRow = Readonly<{
+  resource_id: string;
+  capacity_units: number;
+}>;
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -54,6 +72,14 @@ function stableJson(value: unknown): string {
 
 function asMs(value: Date | string): number {
   return value instanceof Date ? value.getTime() : Date.parse(value);
+}
+
+function parseNow(options: ConfirmReservationOptions): string {
+  const now = options.now ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(now))) {
+    throw new SchedulerReservationError('SCHEDULING_DEMAND_INVALID', 'confirmation now must be an unambiguous instant');
+  }
+  return new Date(Date.parse(now)).toISOString();
 }
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -175,7 +201,7 @@ async function loadReservation(
   };
   const issues = validateSchedulerReservation(reservation);
   if (issues.length > 0) {
-    throw new Error(`SCHEDULER_G2_S3_PERSISTED_RESERVATION_INVALID:${JSON.stringify(issues)}`);
+    throw new Error(`SCHEDULER_PERSISTED_RESERVATION_INVALID:${JSON.stringify(issues)}`);
   }
   return reservation;
 }
@@ -230,6 +256,8 @@ async function currentBlockingUsage(
   resourceId: string,
   occupancyStart: number,
   occupancyEnd: number,
+  asOf: string,
+  excludeHoldId?: string,
 ): Promise<number> {
   const [reservations, holds] = await Promise.all([
     client.query<AllocationRow>(
@@ -252,26 +280,87 @@ async function currentBlockingUsage(
         WHERE h.business_slug = $1
           AND a.resource_id = $2
           AND h.status = 'ACTIVE'
+          AND h.expires_at > $5::timestamptz
+          AND ($6::text IS NULL OR h.hold_id <> $6::text)
           AND h.start_at < $4::timestamptz
           AND h.end_at > $3::timestamptz`,
-      [businessSlug, resourceId, new Date(occupancyStart).toISOString(), new Date(occupancyEnd).toISOString()],
+      [
+        businessSlug,
+        resourceId,
+        new Date(occupancyStart).toISOString(),
+        new Date(occupancyEnd).toISOString(),
+        asOf,
+        excludeHoldId ?? null,
+      ],
     ),
   ]);
   return maximumConcurrentUsage([...reservations.rows, ...holds.rows], occupancyStart, occupancyEnd);
 }
 
+async function lockHoldForConsumption(
+  client: PoolClient,
+  input: ConfirmReservationInput,
+  now: string,
+): Promise<{ row: HoldRow; assignment: HoldAssignmentRow }> {
+  if (!input.holdId) throw new SchedulerReservationError('HOLD_NOT_FOUND', 'holdId is required');
+  const holdResult = await client.query<HoldRow>(
+    `SELECT hold_id, demand_id, start_at, end_at, expires_at, status
+       FROM scheduler_holds
+      WHERE business_slug = $1 AND hold_id = $2
+      FOR UPDATE`,
+    [input.businessSlug, input.holdId],
+  );
+  const row = holdResult.rows[0];
+  if (!row) throw new SchedulerReservationError('HOLD_NOT_FOUND', `hold ${input.holdId} not found`);
+  if (row.demand_id !== input.demand.demandId) {
+    throw new SchedulerReservationError('HOLD_NOT_FOUND', 'hold demand identity does not match reservation demand');
+  }
+  if (row.status === 'EXPIRED' || (row.status === 'ACTIVE' && asMs(row.expires_at) <= Date.parse(now))) {
+    throw new SchedulerReservationError('HOLD_EXPIRED', `hold ${input.holdId} is logically expired`);
+  }
+  if (row.status !== 'ACTIVE') {
+    throw new SchedulerReservationError('HOLD_NOT_FOUND', `hold ${input.holdId} is not active`);
+  }
+
+  const assignments = await client.query<HoldAssignmentRow>(
+    `SELECT resource_id, capacity_units
+       FROM scheduler_hold_assignments
+      WHERE business_slug = $1 AND hold_id = $2
+      ORDER BY resource_id ASC`,
+    [input.businessSlug, input.holdId],
+  );
+  if (assignments.rows.length !== 1) {
+    throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'G2-S4 hold consumption certifies one resource only');
+  }
+  const assignment = assignments.rows[0]!;
+  if (assignment.capacity_units !== input.demand.capacityUnits) {
+    throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'hold capacity material no longer matches demand');
+  }
+
+  const startMs = Date.parse(input.requestedStartAt);
+  const serviceEnd = startMs + input.demand.offering.durationMinutes * MINUTE_MS;
+  const expectedOccupiedStart = startMs - input.demand.buffers.beforeMinutes * MINUTE_MS;
+  const expectedOccupiedEnd = serviceEnd + input.demand.buffers.afterMinutes * MINUTE_MS;
+  if (asMs(row.start_at) !== expectedOccupiedStart || asMs(row.end_at) !== expectedOccupiedEnd) {
+    throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'hold occupied interval no longer matches requested demand interval');
+  }
+  return { row, assignment };
+}
+
 /**
- * G2-S3 certified slice: atomic direct confirmation of one advisory SlotCandidate.
- * Hold consumption/expiry is deliberately not implemented here; that belongs to G2-S4.
+ * G2-S3 direct confirmation remains certified. G2-S4 extends the same transaction
+ * to consume one unexpired persisted hold atomically when holdId is supplied.
  */
 export async function confirmReservationAtomic(
   pool: Pool,
   input: ConfirmReservationInput,
+  options: ConfirmReservationOptions = {},
 ): Promise<ConfirmReservationResult> {
   const issues = validateConfirmReservationInput(input);
   if (issues.length > 0) {
     throw new SchedulerReservationError('SCHEDULING_DEMAND_INVALID', JSON.stringify(issues));
   }
+  const now = parseNow(options);
 
   const material = commandMaterial(input);
   const materialHash = sha256(stableJson(material));
@@ -313,14 +402,11 @@ export async function confirmReservationAtomic(
       };
     }
 
-    if (input.holdId !== undefined) {
-      throw new SchedulerReservationError(
-        'SCHEDULING_DEMAND_INVALID',
-        'G2-S3 certifies direct candidate confirmation only; hold consumption/expiry belongs to G2-S4',
-      );
-    }
-    if (!input.candidateId) {
-      throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'candidateId is required for G2-S3 direct confirmation');
+    const lockedHold = input.holdId
+      ? await lockHoldForConsumption(client, input, now)
+      : undefined;
+    if (!lockedHold && !input.candidateId) {
+      throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'candidateId or holdId is required for confirmation');
     }
 
     const resources = await client.query<ResourceRow>(
@@ -333,14 +419,22 @@ export async function confirmReservationAtomic(
     if (resources.rows.length === 0) {
       throw new SchedulerReservationError('BUSINESS_SCOPE_NOT_FOUND', `no Scheduler resources exist for ${input.businessSlug}`);
     }
-    const selected = resources.rows.find((resource) =>
-      canonicalCandidateId(input, resource.resource_id, resource.time_zone) === input.candidateId,
-    );
+
+    const selected = lockedHold
+      ? resources.rows.find((resource) => resource.resource_id === lockedHold.assignment.resource_id)
+      : resources.rows.find((resource) =>
+          canonicalCandidateId(input, resource.resource_id, resource.time_zone) === input.candidateId,
+        );
     if (!selected) {
       throw new SchedulerReservationError(
         'SLOT_NO_LONGER_AVAILABLE',
-        'candidate identity no longer resolves against current business/resource timezone truth',
+        'candidate/hold resource identity no longer resolves against current business truth',
       );
+    }
+
+    const expectedCandidateId = canonicalCandidateId(input, selected.resource_id, selected.time_zone);
+    if (input.candidateId !== undefined && input.candidateId !== expectedCandidateId) {
+      throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', 'candidate identity does not match current hold/resource material');
     }
 
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
@@ -380,11 +474,13 @@ export async function confirmReservationAtomic(
       preferredResourceIds: [lockedResource.resource_id],
     }, {
       granularityMinutes: 1,
-      generatedAt: '1970-01-01T00:00:00.000Z',
+      generatedAt: now,
+      asOf: now,
+      ...(input.holdId ? { excludeHoldId: input.holdId } : {}),
     });
 
     const stillAvailable = currentAvailability.slots.some((slot) =>
-      slot.candidateId === input.candidateId
+      slot.candidateId === expectedCandidateId
       && slot.startAt === canonicalStart
       && slot.endAt === canonicalEnd
       && slot.assignments.length === 1
@@ -401,6 +497,8 @@ export async function confirmReservationAtomic(
         lockedResource.resource_id,
         occupancyStart,
         occupancyEnd,
+        now,
+        input.holdId,
       );
       if (usedCapacity + input.demand.capacityUnits > lockedResource.capacity) {
         throw new SchedulerReservationError(
@@ -410,7 +508,7 @@ export async function confirmReservationAtomic(
       }
       throw new SchedulerReservationError(
         'SLOT_NO_LONGER_AVAILABLE',
-        `candidate ${input.candidateId} failed commit-time schedule/capability/override revalidation`,
+        `candidate ${expectedCandidateId} failed commit-time schedule/capability/override revalidation`,
       );
     }
 
@@ -436,6 +534,18 @@ export async function confirmReservationAtomic(
        ) VALUES ($1,$2,$3,$4)`,
       [input.businessSlug, reservationId, lockedResource.resource_id, input.demand.capacityUnits],
     );
+
+    if (lockedHold && input.holdId) {
+      const consumed = await client.query(
+        `UPDATE scheduler_holds
+            SET status = 'CONSUMED', updated_at = NOW()
+          WHERE business_slug = $1 AND hold_id = $2 AND status = 'ACTIVE'`,
+        [input.businessSlug, input.holdId],
+      );
+      if (consumed.rowCount !== 1) {
+        throw new SchedulerReservationError('HOLD_NOT_FOUND', `hold ${input.holdId} could not be consumed atomically`);
+      }
+    }
 
     const commandId = `schedcmd_${sha256(`${input.businessSlug}:${input.operationId}`).slice(0, 32)}`;
     await client.query(
