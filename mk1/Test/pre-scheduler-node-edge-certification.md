@@ -67,6 +67,18 @@ Only after all three are green may the terminal marker be emitted:
 PRE_SCHEDULER_NODE_EDGE_CERTIFICATION_PASS
 ```
 
+## Canonical receipts
+
+After a successful gate, current certification status is recorded in:
+
+```text
+mk1/Test/g1-services-engine-s0-s8.md
+mk1/Build/evidence/pre-scheduler-node-edge-certification-2026-09-14.md
+mk1/Plan/04-platform-steps-3-4-5-roadmap.md
+```
+
+The certification contract, final receipt and roadmap must agree before the candidate is treated as sealed. Any documentation-only head that changes these receipts must itself rerun this gate before replacing the prior certified head.
+
 ## Truth boundary
 
 This gate certifies the platform slice that exists before Scheduler Engine work begins. It does not certify Scheduler availability/capacity/holds as a standalone engine, Integration Engine providers, production HA/backup/restore, production cloud credentials, Agent/MCP, or general production readiness.
