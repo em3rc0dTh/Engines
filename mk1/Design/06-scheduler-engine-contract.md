@@ -2,9 +2,11 @@
 
 ## Status
 
-**DESIGN CANDIDATE — PRE-BUILD**
+**G2-S0 CONTRACT + PERSISTENCE CERTIFIED — G2-S1 THROUGH G2-S9 OPEN**
 
 The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle.
+
+The executable G2-S0 implementation now freezes the contract surface and PostgreSQL persistence foundation described by this design. It does not advance availability, concurrency, expiry, Services runtime integration or Appointment migration claims beyond their later gates.
 
 ## 1. Responsibility
 
@@ -295,6 +297,8 @@ scheduler_reservation_assignments
 scheduler_commands
 ```
 
+G2-S0 additionally persists `scheduler_demands` as the immutable Services → Scheduler handoff snapshot so a later mutable Services catalog head cannot silently alter an active scheduling demand. This table intentionally stores the selected revisions by value/hash instead of foreign-keying them to mutable catalog heads.
+
 MongoDB may hold semantic/audit events but never active free/busy truth.
 
 ## 13. Expiry model
@@ -342,22 +346,20 @@ Temporal workflow correlation when supplied
 
 Secrets/provider credentials do not belong in Scheduler audit.
 
-## 18. Certification path proposal
+## 18. Certification path
 
 ```text
-G2-S0 Scheduler contract + persistence
-G2-S1 resource/schedule management
-G2-S2 deterministic availability reads
-G2-S3 atomic single-resource reservation conflict
-G2-S4 holds + expiry/replay
-G2-S5 multi-business generality
-G2-S6 Services snapshot integration
-G2-S7 Appointment Workflow integration
-G2-S8 multi-resource assignment or explicit deferral proof
-G2-S9 final clean certification
+G2-S0 Scheduler contract + persistence                       ✅ CERTIFIED
+G2-S1 resource/schedule management                           ⏭️ NEXT
+G2-S2 deterministic availability reads                      OPEN
+G2-S3 atomic single-resource reservation conflict           OPEN
+G2-S4 holds + expiry/replay                                  OPEN
+G2-S5 multi-business generality                              OPEN
+G2-S6 Services snapshot integration                         OPEN
+G2-S7 Appointment Workflow integration                      OPEN
+G2-S8 multi-resource assignment or explicit deferral proof  OPEN
+G2-S9 final clean certification                             OPEN
 ```
-
-The exact gate numbering can be finalized in Plan before build.
 
 ## 19. Required negative cases
 
@@ -380,8 +382,12 @@ cancel unknown reservation
 stale reservation revision
 ```
 
+G2-S0 currently certifies the contract/schema-level subset appropriate to the foundation gate, including invalid timezone/capacity/schedule material, cross-business reference rejection, duplicate operation identity rejection and non-persistence of advisory candidates. Runtime availability/conflict/expiry cases remain assigned to later gates rather than being claimed early.
+
 ## 20. Bounded future claim
 
 Only executable evidence may eventually support:
 
 > The Scheduler Engine deterministically computes business-scoped resource availability and safely manages holds/reservations under explicit time, capability and capacity constraints, preserving idempotency, isolation and atomic conflict semantics independently of channel/provider presentation.
+
+G2-S0 alone does not yet support that full bounded claim; it establishes the certified contract and persistence foundation required to earn it through G2-S1–G2-S9.
