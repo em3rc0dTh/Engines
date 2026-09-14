@@ -67,9 +67,10 @@ test('materializes exactly the frozen Services revisions and scheduling profile'
 
 test('fails closed when the frozen selection has no scheduling profile', () => {
   const source = snapshot();
+  const { scheduling: _scheduling, ...offeringWithoutScheduling } = source.offering;
   const withoutScheduling: ServicesSelectionSnapshot = {
     service: source.service,
-    offering: { ...source.offering, scheduling: undefined },
+    offering: offeringWithoutScheduling,
   };
 
   assert.throws(
