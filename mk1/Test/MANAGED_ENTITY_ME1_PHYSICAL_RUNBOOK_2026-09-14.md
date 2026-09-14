@@ -49,11 +49,11 @@ CTA          http://127.0.0.1:8787/health
 Channel Core http://127.0.0.1:8788/health
 ```
 
-Check the stack:
+Check the stack. The retry is intentional because Docker may report the WebChat container as started a moment before its HTTP listener is ready:
 
 ```bash
 docker compose --profile webchat ps
-curl -fsS http://127.0.0.1:8790/health
+curl --retry 20 --retry-delay 1 --retry-all-errors -fsS http://127.0.0.1:8790/health
 ```
 
 The WebChat health response must report `ok=true`, `agent=false`, and `mcp=false`.
