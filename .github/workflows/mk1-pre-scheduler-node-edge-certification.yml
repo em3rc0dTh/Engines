@@ -1,0 +1,397 @@
+name: MK1 Pre-Scheduler Node + Edge Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+    paths:
+      - 'mk1/runtime/**'
+      - 'mk1/Test/pre-scheduler-node-edge-certification.md'
+      - '.github/workflows/mk1-pre-scheduler-node-edge-certification.yml'
+  pull_request:
+    branches:
+      - feature/layer6-v4-persistence-complete
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-pre-scheduler-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-nodes-and-edges:
+    name: static-frozen-channel-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: Frozen foundation regressions
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:appointment
+
+      - name: Services contract regressions
+        run: |
+          npm run test:services:s1
+          npm run test:services:s2
+          npm run test:services:s3
+          npm run test:services:s4
+
+      - name: Channel core and adapter regressions
+        run: |
+          npm run test:channel:c0
+          npm run test:channel:c1b
+          npx tsx --test src/cta/telegram/telegram.adapter.test.ts src/cta/whatsapp/whatsapp.adapter.test.ts
+          npm run test:cta:poc
+
+      - name: Guard Services authority boundary
+        run: |
+          if grep -nE 'listAppointmentServices|listAppointmentProducts' src/orchestration/temporal/activities/appointment.activities.ts \
+            | grep -q 'persistence/postgres/appointment.repository'; then
+            echo 'Appointment catalog authority still points directly at appointment.repository.'
+            exit 1
+          fi
+          grep -q 'servicesReadActivities.listServices' src/orchestration/temporal/activities/appointment.activities.ts
+          grep -q 'servicesReadActivities.listOfferings' src/orchestration/temporal/activities/appointment.activities.ts
+          echo 'PRE_SCHEDULER_SERVICES_AUTHORITY_BOUNDARY_PASS'
+
+      - name: Guard against vertical fixture branching
+        run: |
+          matches="$(find src -type f -name '*.ts' ! -name '*.test.ts' -print0 \
+            | xargs -0 grep -nE 's6-golden-auto|s6-golden-vet|golden-auto|golden-vet' || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Vertical fixture identity leaked into runtime implementation.'
+            exit 1
+          fi
+          echo 'PRE_SCHEDULER_NO_VERTICAL_BRANCHING_PASS'
+
+      - name: Guard provider logic out of Appointment Workflow
+        run: |
+          matches="$(grep -nEi 'telegram|whatsapp|messenger|facebook|tiktok|webchat|kapso' \
+            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Provider-specific logic leaked into RegisterNewAppointment Workflow.'
+            exit 1
+          fi
+          echo 'PRE_SCHEDULER_TEMPORAL_PROVIDER_AGNOSTIC_PASS'
+
+      - name: Guard adapters from Appointment persistence ownership
+        run: |
+          matches="$(find src/cta -type f -name '*.adapter.ts' -print0 \
+            | xargs -0 grep -nE 'bookAppointment|reserveAppointmentCommand|INSERT[[:space:]]+INTO[[:space:]]+appointments' || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Provider adapter acquired Appointment persistence/orchestration ownership.'
+            exit 1
+          fi
+          echo 'PRE_SCHEDULER_ADAPTER_OWNERSHIP_BOUNDARY_PASS'
+
+      - name: Emit static boundary marker
+        run: echo 'PRE_SCHEDULER_STATIC_NODE_EDGE_PASS'
+
+  services-g1-s8:
+    name: services-g1-s8-clean-closure
+    needs: static-nodes-and-edges
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Execute S8 pristine closure over S1-S7
+        run: |
+          set -euo pipefail
+          exec > >(tee /tmp/services-s8.log) 2>&1
+
+          wait_lab() {
+            for attempt in $(seq 1 75); do
+              if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+                && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+                return 0
+              fi
+              sleep 1
+            done
+            docker compose ps -a
+            docker compose logs worker cta temporal migrate
+            return 1
+          }
+
+          reset_lab() {
+            docker compose down -v --remove-orphans || true
+            docker compose up --build -d
+            wait_lab
+          }
+
+          echo '=== S8 FOUNDATION APPOINTMENT LAB ==='
+          reset_lab
+          ENGINES_CTA_URL=http://127.0.0.1:8787 npx tsx scripts/certify-register-new-appointment.ts
+
+          echo '=== S8 S1 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s1
+
+          echo '=== S8 S2 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s2
+
+          echo '=== S8 S3 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s3
+
+          echo '=== S8 S4 + S5 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s4
+          docker compose exec -T worker npm run probe:services:s4:safety
+          docker compose exec -T worker npm run probe:services:s5:prepare
+          before="$(docker compose exec -T worker cat /tmp/engines-mk0-worker-ready | tr -d '\r')"
+          test -n "$before"
+          docker compose restart worker
+          after="$before"
+          for attempt in $(seq 1 75); do
+            if docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              after="$(docker compose exec -T worker cat /tmp/engines-mk0-worker-ready | tr -d '\r')"
+              if [ -n "$after" ] && [ "$after" != "$before" ]; then
+                break
+              fi
+            fi
+            sleep 1
+          done
+          if [ "$after" = "$before" ]; then
+            echo 'S5 worker identity did not change after restart.'
+            docker compose logs worker
+            exit 1
+          fi
+          printf '%s\n' "$before" > /tmp/services-s8-worker-before.txt
+          printf '%s\n' "$after" > /tmp/services-s8-worker-after.txt
+          docker compose exec -T worker npm run probe:services:s5:complete
+
+          echo '=== S8 S6 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s4
+          docker compose exec -T worker npm run probe:services:s4:safety
+          docker compose exec -T worker npm run probe:services:s6
+
+          echo '=== S8 S7 LAB ==='
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s6
+          ENGINES_CTA_URL=http://127.0.0.1:8787 npm run probe:services:s7
+
+          echo 'SERVICES_S8_G1_CERTIFICATION_PASS'
+
+      - name: Capture S8 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/services-s8-evidence
+          git rev-parse HEAD > /tmp/services-s8-evidence/git-sha.txt
+          cp /tmp/services-s8.log /tmp/services-s8-evidence/ 2>/dev/null || true
+          cp /tmp/services-s8-worker-before.txt /tmp/services-s8-evidence/worker-before.txt 2>/dev/null || true
+          cp /tmp/services-s8-worker-after.txt /tmp/services-s8-evidence/worker-after.txt 2>/dev/null || true
+          cd mk1/runtime
+          docker compose ps -a > /tmp/services-s8-evidence/compose-ps.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,service_id,service_code,revision,status FROM service_catalog ORDER BY business_slug,service_id;" \
+            > /tmp/services-s8-evidence/postgres-services.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT appointment_id,workflow_id,service_id,product_id,status FROM appointments ORDER BY created_at;" \
+            > /tmp/services-s8-evidence/postgres-appointments.txt 2>&1 || true
+          docker compose exec -T mongo mongosh --quiet engines_mk0 --eval \
+            'printjson({servicesAudit:db.services_mutation_audit.countDocuments({}),appointmentAudit:db.appointment_audit.countDocuments({})})' \
+            > /tmp/services-s8-evidence/mongo-audit-counts.txt 2>&1 || true
+
+      - name: Upload S8 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: services-g1-s8-${{ github.run_id }}
+          path: /tmp/services-s8-evidence
+          if-no-files-found: error
+
+      - name: Cleanup S8 laboratory
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  orchestration-persistence-axis:
+    name: cta-temporal-postgres-mongo-objectstore
+    needs: static-nodes-and-edges
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Start pristine composed persistence stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d postgres mongo minio temporal
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm minio-init
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d migrate worker cta channel-core
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml ps
+
+      - name: Wait for canonical CTA runtime
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8788/health >/tmp/pre-scheduler-channel-health.json; then
+              if grep -Fq '"ok":true' /tmp/pre-scheduler-channel-health.json; then
+                exit 0
+              fi
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml ps -a
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml logs worker cta channel-core temporal migrate
+          exit 1
+
+      - name: Certify CTA ingress through Temporal operational graph including replay and compensation
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/pre-scheduler-cta-poc.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/pre-scheduler-cta-poc.log
+
+      - name: Certify PostgreSQL + MongoDB v4 + S3-compatible object store
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e LAYER6_S3_ENDPOINT=http://minio:9000 \
+            -e LAYER6_S3_REGION=us-east-1 \
+            -e LAYER6_S3_BUCKET=engines-layer6 \
+            -e LAYER6_S3_ACCESS_KEY_ID=engines \
+            -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret \
+            cta npm run probe:layer6:v4 | tee /tmp/pre-scheduler-layer6-v4.log
+          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/pre-scheduler-layer6-v4.log
+          echo 'PRE_SCHEDULER_ORCHESTRATION_PERSISTENCE_AXIS_PASS'
+
+      - name: Capture orchestration/persistence evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/pre-scheduler-persistence-evidence
+          git rev-parse HEAD > /tmp/pre-scheduler-persistence-evidence/git-sha.txt
+          cp /tmp/pre-scheduler-channel-health.json /tmp/pre-scheduler-persistence-evidence/ 2>/dev/null || true
+          cp /tmp/pre-scheduler-cta-poc.log /tmp/pre-scheduler-persistence-evidence/ 2>/dev/null || true
+          cp /tmp/pre-scheduler-layer6-v4.log /tmp/pre-scheduler-persistence-evidence/ 2>/dev/null || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT workflow_id,case_id,appointment_id,managed_entity_id,resource_reservation_id,status FROM appointments ORDER BY created_at" \
+            > /tmp/pre-scheduler-persistence-evidence/postgres-appointments.txt 2>&1 || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT resource_reservation_id,status FROM resource_reservations ORDER BY created_at" \
+            > /tmp/pre-scheduler-persistence-evidence/postgres-reservations.txt 2>&1 || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T mongo mongosh --quiet engines_mk0 --eval \
+            'printjson({directInputs:db.operational_direct_inputs.countDocuments({}),observationInputs:db.operational_observation_inputs.countDocuments({}),attachmentsV4:db.attachments_v4.countDocuments({}),provenance:db.operational_provenance.countDocuments({}),contexts:db.operational_context.countDocuments({})})' \
+            > /tmp/pre-scheduler-persistence-evidence/mongo-layer6-counts.txt 2>&1 || true
+
+      - name: Upload orchestration/persistence evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-scheduler-orchestration-persistence-${{ github.run_id }}
+          path: /tmp/pre-scheduler-persistence-evidence
+          if-no-files-found: error
+
+      - name: Cleanup composed persistence stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+
+  pre-scheduler-seal:
+    name: aggregate-pre-scheduler-seal
+    needs:
+      - static-nodes-and-edges
+      - services-g1-s8
+      - orchestration-persistence-axis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build aggregate certification receipt
+        run: |
+          mkdir -p /tmp/pre-scheduler-seal
+          git rev-parse HEAD | tee /tmp/pre-scheduler-seal/git-sha.txt
+          cat > /tmp/pre-scheduler-seal/certification-matrix.txt <<'EOF'
+          N0 Foundation contracts                         PASS
+          N1 Provider adapter deterministic boundary      PASS
+          N2 Compatibility layer                          PASS
+          N3 Canonical CTA ingress/router                 PASS
+          N4 Temporal Appointment orchestration           PASS
+          N5 Services Engine G1 / S8 closure              PASS
+          N6 PostgreSQL operational graph                 PASS
+          N7 MongoDB v4 operational document layer        PASS
+          N8 S3-compatible object storage                 PASS
+          E1 Provider -> Adapter                          PASS
+          E2 Adapter -> Compatibility                     PASS
+          E3 Compatibility -> Canonical CTA               PASS
+          E4 Canonical CTA -> Router/Dispatcher           PASS
+          E5 Router/Dispatcher -> Temporal                PASS
+          E6 Temporal Appointment -> Services             PASS
+          E7 Temporal -> PostgreSQL                       PASS
+          E8 Workflow/Audit -> MongoDB                    PASS
+          E9 Observation -> Attachment/Object Store       PASS
+          E10 Replay -> Idempotency                       PASS
+          E11 HELD failure -> RELEASED compensation       PASS
+          EOF
+          printf '%s\n' \
+            'PRE_SCHEDULER_STATIC_NODE_EDGE_PASS' \
+            'SERVICES_S8_G1_CERTIFICATION_PASS' \
+            'CTA_ORCHESTRATION_POC_PASS' \
+            'LAYER6_V4_PERSISTENCE_PASS' \
+            'PRE_SCHEDULER_ORCHESTRATION_PERSISTENCE_AXIS_PASS' \
+            'PRE_SCHEDULER_NODE_EDGE_CERTIFICATION_PASS' \
+            | tee /tmp/pre-scheduler-seal/terminal-markers.txt
+
+      - name: Upload aggregate pre-Scheduler seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-scheduler-node-edge-seal-${{ github.run_id }}
+          path: /tmp/pre-scheduler-seal
+          if-no-files-found: error
+
+      - name: Terminal certification marker
+        run: echo 'PRE_SCHEDULER_NODE_EDGE_CERTIFICATION_PASS'
