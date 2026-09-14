@@ -19,6 +19,8 @@ G2-S9 Final clean Scheduler certification  OPEN
 
 The active execution roadmap is aligned to this receipt: G2-S0 is closed and G2-S1 is the next Scheduler gate.
 
+G2 is now governed by the mandatory sequential certification policy at `mk1/Test/g2-scheduler-certification-policy.md` and the machine-readable ledger at `mk1/Test/g2-scheduler-certification-ledger.json`. No later Scheduler gate may become `NEXT` until its predecessor has an independent executable certification receipt.
+
 ## Certified scope
 
 G2-S0 freezes and persists the Scheduler foundation without claiming availability or concurrency semantics that belong to later gates.
@@ -68,10 +70,11 @@ scheduler_commands
 - cross-business relational references are rejected.
 - contracts/schema support multiple resource assignments without claiming the multi-resource search algorithm yet.
 - Appointment is not migrated to Scheduler in G2-S0.
+- every later G2 step requires its own workflow, terminal marker, evidence artifact, receipt, predecessor regression and exact-final-head rerun before the roadmap may advance.
 
 ## Executable certification
 
-Initial executable candidate:
+Initial executable implementation candidate:
 
 ```text
 branch   build/g2-s0-scheduler-contract-persistence
@@ -80,10 +83,13 @@ run      34883086249
 result   SUCCESS
 ```
 
-The successful workflow proved:
+A later exact-head certification on `4c993b1ab169f9d65263466895c47a1e2fbf254a` also passed both push and PR workflows before the sequential certification governance was added. Any later governance/documentation commit changes the branch head and therefore must pass the same G2-S0 workflow again before the new head is treated as certified. The live PR records the exact current branch-head run and artifact digests.
+
+The successful workflow proves:
 
 ```text
 TypeScript                                        PASS
+Scheduler sequential certification ledger        PASS
 Scheduler G2-S0 contract tests                    PASS
 protected Appointment/Services/CTA regressions    PASS
 provider-agnostic Scheduler boundary              PASS
@@ -101,12 +107,29 @@ aggregate G2-S0 seal                              PASS
 Terminal markers:
 
 ```text
+SCHEDULER_G2_CERTIFICATION_LEDGER_PASS
 SCHEDULER_G2_S0_CONTRACTS_PASS
 SCHEDULER_G2_S0_POSTGRES_MIGRATION_OK
 SCHEDULER_G2_S0_CONTRACT_PERSISTENCE_PASS
 SCHEDULER_G2_S0_PRE_SCHEDULER_REGRESSION_PASS
 SCHEDULER_G2_S0_CERTIFICATION_PASS
 ```
+
+## Advancement rule
+
+G2-S1 may remain `NEXT`, but G2-S2 must remain `OPEN` until G2-S1 has:
+
+```text
+dedicated workflow                PASS
+G2-S0 regression                  PASS
+terminal certification marker     PRESENT
+evidence artifact + digest        PRESENT
+Test receipt + non-claims         PRESENT
+ledger update                     VALID
+exact final branch head           RE-CERTIFIED
+```
+
+The same rule applies recursively through G2-S9.
 
 ## Non-claims
 
