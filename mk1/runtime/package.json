@@ -77,6 +77,7 @@
     "probe:services:s6": "tsx scripts/certify-services-s6-multibusiness.ts",
     "probe:services:s7": "tsx scripts/certify-services-s7-appointment-integration.ts",
     "probe:scheduler:g2:s0": "tsx scripts/certify-scheduler-g2-s0.ts",
+    "probe:scheduler:g2:s3": "tsx scripts/certify-scheduler-g2-s3.ts",
     "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "probe:webchat:c1b": "tsx scripts/certify-webchat-c1b.ts",
     "probe:cta:poc": "tsx scripts/certify-cta-orchestration-poc.ts",
