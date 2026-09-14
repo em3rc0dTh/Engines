@@ -9,6 +9,8 @@ import {
   workflowInfo,
 } from '@temporalio/workflow';
 import {
+  decideManagedEntityResolution,
+  managedEntityPolicyForBusiness,
   type AppointmentIssue,
   type AppointmentProduct,
   type AppointmentResult,
@@ -16,10 +18,13 @@ import {
   type AppointmentSlot,
   type AppointmentStateProjection,
   type AppointmentUpdateResult,
+  type CreateAppointmentManagedEntityInput,
   type FinalizeAppointmentInput,
+  type ManagedEntityCandidate,
   type ProvideAppointmentCustomerInput,
   type RegisterNewAppointmentStartEnvelope,
   type ResolveAppointmentCustomerInput,
+  type SelectAppointmentManagedEntityInput,
   type SelectAppointmentProductInput,
   type SelectAppointmentServiceInput,
   type SelectAppointmentSlotInput,
@@ -60,6 +65,8 @@ export const getAppointmentStateQuery = defineQuery<AppointmentStateProjection>(
 export const getAppointmentInitialFingerprintQuery = defineQuery<string>('GetAppointmentInitialFingerprint');
 export const provideAppointmentCustomerUpdate = defineUpdate<AppointmentUpdateResult, [ProvideAppointmentCustomerInput]>('ProvideAppointmentCustomer');
 export const resolveAppointmentCustomerUpdate = defineUpdate<AppointmentUpdateResult, [ResolveAppointmentCustomerInput]>('ResolveAppointmentCustomer');
+export const selectAppointmentManagedEntityUpdate = defineUpdate<AppointmentUpdateResult, [SelectAppointmentManagedEntityInput]>('SelectAppointmentManagedEntity');
+export const createAppointmentManagedEntityUpdate = defineUpdate<AppointmentUpdateResult, [CreateAppointmentManagedEntityInput]>('CreateAppointmentManagedEntity');
 export const selectAppointmentServiceUpdate = defineUpdate<AppointmentUpdateResult, [SelectAppointmentServiceInput]>('SelectAppointmentService');
 export const selectAppointmentProductUpdate = defineUpdate<AppointmentUpdateResult, [SelectAppointmentProductInput]>('SelectAppointmentProduct');
 export const setAppointmentDateUpdate = defineUpdate<AppointmentUpdateResult, [SetAppointmentDateInput]>('SetAppointmentDate');
@@ -90,11 +97,26 @@ function validIsoDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day;
 }
 
+function candidateFromRecord(record: Readonly<{
+  managedEntityId: string;
+  type: string;
+  displayName: string;
+  summary?: string;
+}>): ManagedEntityCandidate {
+  return {
+    managedEntityId: record.managedEntityId,
+    type: record.type,
+    displayName: record.displayName,
+    ...(record.summary ? { summary: record.summary } : {}),
+  };
+}
+
 export async function registerNewAppointmentWorkflow(
   start: RegisterNewAppointmentStartEnvelope,
 ): Promise<AppointmentResult> {
   const info = workflowInfo();
   const fingerprint = canonicalStartFingerprint(start);
+  const managedEntityPolicy = managedEntityPolicyForBusiness(start.businessSlug);
 
   let workflowStatus: AppointmentStateProjection['workflowStatus'] = 'RUNNING';
   let phase: AppointmentStateProjection['phase'] = 'STARTED';
@@ -105,6 +127,12 @@ export async function registerNewAppointmentWorkflow(
   let customerStatus: AppointmentStateProjection['customer']['status'] =
     requestedCustomerId || Object.keys(customerDraft).length > 0 ? 'DRAFT' : 'EMPTY';
   let candidateCustomerIds: readonly string[] | undefined;
+
+  let managedEntityStatus: AppointmentStateProjection['managedEntity']['status'] = 'PENDING';
+  let managedEntityCandidates: readonly ManagedEntityCandidate[] = [];
+  let selectedManagedEntity: ManagedEntityCandidate | undefined;
+  let requestedManagedEntityId = start.draft?.managedEntityId;
+  let createManagedEntityRequest: CreateAppointmentManagedEntityInput | undefined;
 
   let services: readonly AppointmentService[] = [];
   let selectedService: AppointmentService | undefined;
@@ -130,6 +158,8 @@ export async function registerNewAppointmentWorkflow(
         return requestedCustomerId || Object.keys(customerDraft).length > 0
           ? 'RESOLVE_CUSTOMER'
           : 'PROVIDE_CUSTOMER';
+      case 'WAITING_FOR_MANAGED_ENTITY':
+        return managedEntityStatus === 'NEEDS_CREATION' ? 'CREATE_MANAGED_ENTITY' : 'SELECT_MANAGED_ENTITY';
       case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
       case 'WAITING_FOR_PRODUCT': return 'SELECT_PRODUCT';
       case 'WAITING_FOR_DATE': return 'PROVIDE_DATE';
@@ -149,6 +179,12 @@ export async function registerNewAppointmentWorkflow(
         ...(customerId ? { customerId } : {}),
         ...(Object.keys(customerDraft).length > 0 ? { customer: customerDraft } : {}),
         ...(candidateCustomerIds ? { candidateCustomerIds } : {}),
+      },
+      managedEntity: {
+        status: managedEntityStatus,
+        policy: managedEntityPolicy,
+        candidates: managedEntityCandidates,
+        ...(selectedManagedEntity ? { selected: selectedManagedEntity } : {}),
       },
       services,
       ...(selectedService ? { selectedService } : {}),
@@ -213,6 +249,41 @@ export async function registerNewAppointmentWorkflow(
     return accepted(input.inputId);
   });
 
+  setHandler(selectAppointmentManagedEntityUpdate, (input) => {
+    if (!input.inputId?.trim()) return rejected([issue('INVALID_INPUT', 'inputId', 'inputId is required')]);
+    if (acceptedInputIds.has(input.inputId)) return { ok: true, duplicateInput: true, state: state() };
+    if (phase !== 'WAITING_FOR_MANAGED_ENTITY' || managedEntityStatus !== 'NEEDS_SELECTION') {
+      return rejected([issue('INVALID_INPUT', 'managedEntityId', 'managed entity is not selectable in the current phase')]);
+    }
+    const match = managedEntityCandidates.find((item) => item.managedEntityId === input.managedEntityId);
+    if (!match) {
+      return rejected([issue('MANAGED_ENTITY_NOT_FOUND', 'managedEntityId', `managed entity ${input.managedEntityId} is not an active compatible subject for this customer`)]);
+    }
+    selectedManagedEntity = match;
+    managedEntityStatus = 'SELECTED';
+    issues = [];
+    return accepted(input.inputId);
+  });
+
+  setHandler(createAppointmentManagedEntityUpdate, (input) => {
+    if (!input.inputId?.trim()) return rejected([issue('INVALID_INPUT', 'inputId', 'inputId is required')]);
+    if (acceptedInputIds.has(input.inputId)) return { ok: true, duplicateInput: true, state: state() };
+    if (phase !== 'WAITING_FOR_MANAGED_ENTITY' || managedEntityStatus !== 'NEEDS_CREATION') {
+      return rejected([issue('INVALID_INPUT', 'managedEntity', 'managed entity cannot be created in the current phase')]);
+    }
+    if (!input.displayName?.trim() || !input.externalRef?.trim()) {
+      return rejected([issue('MANAGED_ENTITY_INVALID', 'managedEntity', 'displayName and externalRef are required')]);
+    }
+    createManagedEntityRequest = {
+      ...input,
+      displayName: input.displayName.trim(),
+      externalRef: input.externalRef.trim(),
+      ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
+    };
+    issues = [];
+    return accepted(input.inputId);
+  });
+
   setHandler(selectAppointmentServiceUpdate, (input) => {
     if (!input.inputId?.trim()) return rejected([issue('INVALID_INPUT', 'inputId', 'inputId is required')]);
     if (acceptedInputIds.has(input.inputId)) return { ok: true, duplicateInput: true, state: state() };
@@ -259,7 +330,7 @@ export async function registerNewAppointmentWorkflow(
   setHandler(finalizeAppointmentUpdate, (input) => {
     if (!input.inputId?.trim()) return rejected([issue('INVALID_INPUT', 'inputId', 'inputId is required')]);
     if (acceptedInputIds.has(input.inputId)) return { ok: true, duplicateInput: true, state: state() };
-    if (phase !== 'READY_TO_FINALIZE') return rejected([issue('NOT_READY_TO_FINALIZE', 'appointment', 'complete customer, service, product, date and slot first')]);
+    if (phase !== 'READY_TO_FINALIZE') return rejected([issue('NOT_READY_TO_FINALIZE', 'appointment', 'complete customer, managed entity, service, product, date and slot first')]);
     finalizeRequested = true;
     issues = [];
     return accepted(input.inputId);
@@ -280,6 +351,7 @@ export async function registerNewAppointmentWorkflow(
       occurredAt: timestamp(),
       ...(start.request.correlationId ? { correlationId: start.request.correlationId } : {}),
       ...(customerId ? { customerId } : {}),
+      ...(selectedManagedEntity ? { managedEntityId: selectedManagedEntity.managedEntityId } : {}),
       ...(appointmentId ? { appointmentId } : {}),
       ...(metadata ? { metadata } : {}),
     };
@@ -303,6 +375,18 @@ export async function registerNewAppointmentWorkflow(
     result = existing;
     customerId = existing.customerId;
     customerStatus = 'EXISTING';
+    if (existing.managedEntityId) {
+      const existingManagedEntity = await appointment.getAppointmentManagedEntity({
+        businessSlug: start.businessSlug,
+        customerId: existing.customerId,
+        managedEntityId: existing.managedEntityId,
+      });
+      if (existingManagedEntity) {
+        selectedManagedEntity = candidateFromRecord(existingManagedEntity);
+        managedEntityCandidates = [selectedManagedEntity];
+        managedEntityStatus = 'SELECTED';
+      }
+    }
     phase = 'CREATED';
     workflowStatus = 'COMPLETED';
     return existing;
@@ -380,6 +464,92 @@ export async function registerNewAppointmentWorkflow(
   phase = 'CUSTOMER_READY';
   await persistAuditEvent('APPOINTMENT_CUSTOMER_RESOLVED', 'customer', { customerStatus });
 
+  while (!selectedManagedEntity) {
+    phase = 'LOADING_MANAGED_ENTITIES';
+    managedEntityStatus = 'LOADING';
+    managedEntityCandidates = await appointment.listAppointmentManagedEntities({
+      businessSlug: start.businessSlug,
+      customerId: customerId!,
+      type: managedEntityPolicy.type,
+    });
+
+    const decision = decideManagedEntityResolution(managedEntityPolicy, managedEntityCandidates);
+    if (decision.kind === 'NOT_REQUIRED') {
+      failure = {
+        code: 'MANAGED_ENTITY_REQUIRED',
+        message: 'RegisterNewAppointment currently requires an operational subject before booking',
+      };
+      phase = 'FAILED';
+      workflowStatus = 'FAILED';
+      throw ApplicationFailure.nonRetryable(failure.message, failure.code);
+    }
+
+    if (decision.kind === 'SELECTED') {
+      selectedManagedEntity = decision.managedEntity;
+      managedEntityStatus = 'SELECTED';
+      issues = [];
+      break;
+    }
+
+    if (decision.kind === 'SELECT') {
+      if (requestedManagedEntityId) {
+        const requested = decision.candidates.find((candidate) => candidate.managedEntityId === requestedManagedEntityId);
+        if (requested) {
+          selectedManagedEntity = requested;
+          managedEntityStatus = 'SELECTED';
+          issues = [];
+          break;
+        }
+        issues = [issue('MANAGED_ENTITY_NOT_FOUND', 'managedEntityId', `managed entity ${requestedManagedEntityId} is not an active compatible subject for this customer`)];
+        requestedManagedEntityId = undefined;
+      }
+      managedEntityStatus = 'NEEDS_SELECTION';
+      phase = 'WAITING_FOR_MANAGED_ENTITY';
+      await condition(() => Boolean(selectedManagedEntity));
+      continue;
+    }
+
+    managedEntityStatus = 'NEEDS_CREATION';
+    createManagedEntityRequest = undefined;
+    phase = 'WAITING_FOR_MANAGED_ENTITY';
+    await condition(() => Boolean(createManagedEntityRequest));
+    phase = 'CREATING_MANAGED_ENTITY';
+    const request = createManagedEntityRequest!;
+    const externalRef = managedEntityPolicy.lifecycle === 'REQUEST_SCOPED'
+      ? `workflow:${info.workflowId}:${request.externalRef}`
+      : request.externalRef;
+    const created = await appointment.createAppointmentManagedEntity({
+      businessSlug: start.businessSlug,
+      customerId: customerId!,
+      type: managedEntityPolicy.type,
+      displayName: request.displayName,
+      externalRef,
+      ...(request.summary ? { summary: request.summary } : {}),
+      ...(request.data ? { data: request.data } : {}),
+    });
+    if (created.kind === 'CONFLICT') {
+      issues = [issue('MANAGED_ENTITY_CONFLICT', 'managedEntity', `external reference already belongs to different material: ${created.managedEntityId}`)];
+      managedEntityStatus = 'NEEDS_CREATION';
+      createManagedEntityRequest = undefined;
+      continue;
+    }
+    selectedManagedEntity = candidateFromRecord(created.managedEntity);
+    managedEntityCandidates = [selectedManagedEntity];
+    managedEntityStatus = created.kind === 'CREATED' ? 'CREATED' : 'SELECTED';
+    issues = [];
+  }
+
+  phase = 'MANAGED_ENTITY_READY';
+  await persistAuditEvent(
+    'APPOINTMENT_MANAGED_ENTITY_RESOLVED',
+    selectedManagedEntity.managedEntityId,
+    {
+      managedEntity: selectedManagedEntity,
+      policy: managedEntityPolicy,
+      status: managedEntityStatus,
+    },
+  );
+
   phase = 'LOADING_SERVICES';
   services = await appointment.listAppointmentServices({ businessSlug: start.businessSlug });
   if (services.length === 0) {
@@ -450,6 +620,7 @@ export async function registerNewAppointmentWorkflow(
       workflowId: info.workflowId,
       businessSlug: start.businessSlug,
       customerId: customerId!,
+      managedEntityId: selectedManagedEntity.managedEntityId,
       serviceId: selectedService!.serviceId,
       productId: selectedProduct!.productId,
       appointmentDate: appointmentDate!,
@@ -519,6 +690,7 @@ export async function registerNewAppointmentWorkflow(
       workflowId: info.workflowId,
       businessSlug: start.businessSlug,
       customerId: customerId!,
+      managedEntityId: selectedManagedEntity.managedEntityId,
       serviceId: selectedService!.serviceId,
       productId: selectedProduct!.productId,
       appointmentDate: appointmentDate!,

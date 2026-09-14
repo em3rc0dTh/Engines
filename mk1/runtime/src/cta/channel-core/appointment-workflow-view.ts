@@ -8,6 +8,7 @@ export type AppointmentWorkflowStepId =
   | 'CUSTOMER_EMAIL'
   | 'CUSTOMER_PHONE'
   | 'CUSTOMER_RESOLUTION'
+  | 'MANAGED_ENTITY_RESOLUTION'
   | 'SERVICE_SELECTION'
   | 'OFFERING_SELECTION'
   | 'DATE_SELECTION'
@@ -36,7 +37,14 @@ export type AppointmentWorkflowView = Readonly<{
 }>;
 
 const RESOLVED_CUSTOMER_STATUSES = new Set(['EXISTING', 'CREATED']);
-const SERVICE_ACTIVE_PHASES = new Set(['CUSTOMER_READY', 'LOADING_SERVICES', 'WAITING_FOR_SERVICE']);
+const MANAGED_ENTITY_ACTIVE_PHASES = new Set([
+  'CUSTOMER_READY',
+  'LOADING_MANAGED_ENTITIES',
+  'WAITING_FOR_MANAGED_ENTITY',
+  'CREATING_MANAGED_ENTITY',
+  'MANAGED_ENTITY_READY',
+]);
+const SERVICE_ACTIVE_PHASES = new Set(['MANAGED_ENTITY_READY', 'LOADING_SERVICES', 'WAITING_FOR_SERVICE']);
 const OFFERING_ACTIVE_PHASES = new Set(['LOADING_PRODUCTS', 'WAITING_FOR_PRODUCT']);
 const DATE_ACTIVE_PHASES = new Set(['WAITING_FOR_DATE']);
 const SLOTS_ACTIVE_PHASES = new Set(['LOADING_SLOTS']);
@@ -92,6 +100,16 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
         ? 'ACTIVE'
         : 'PENDING';
 
+  const managedEntitySelected = Boolean(state.managedEntity.selected?.managedEntityId);
+  const managedEntitySkipped = state.managedEntity.status === 'NOT_REQUIRED';
+  const managedEntityStatus: ChannelWorkflowStepStatus = managedEntitySelected
+    ? 'COMPLETE'
+    : managedEntitySkipped
+      ? 'SKIPPED'
+      : MANAGED_ENTITY_ACTIVE_PHASES.has(state.phase) && customerResolved
+        ? 'ACTIVE'
+        : 'PENDING';
+
   const created = state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED';
   const failed = state.phase === 'FAILED' || state.workflowStatus === 'FAILED';
 
@@ -108,19 +126,26 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
       ...(state.customer.customerId ? { value: state.customer.customerId } : {}),
     },
     {
-      id: 'SERVICE_SELECTION',
+      id: 'MANAGED_ENTITY_RESOLUTION',
       number: 6,
+      label: `Resolve ${state.managedEntity.policy.label}`,
+      status: managedEntityStatus,
+      ...(state.managedEntity.selected ? { value: state.managedEntity.selected.displayName } : {}),
+    },
+    {
+      id: 'SERVICE_SELECTION',
+      number: 7,
       label: 'Select Service',
       status: state.selectedService
         ? 'COMPLETE'
-        : SERVICE_ACTIVE_PHASES.has(state.phase) && customerResolved
+        : SERVICE_ACTIVE_PHASES.has(state.phase) && (managedEntitySelected || managedEntitySkipped)
           ? 'ACTIVE'
           : 'PENDING',
       ...(state.selectedService ? { value: state.selectedService.name } : {}),
     },
     {
       id: 'OFFERING_SELECTION',
-      number: 7,
+      number: 8,
       label: 'Select Offering / Product',
       status: state.selectedProduct
         ? 'COMPLETE'
@@ -131,7 +156,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     },
     {
       id: 'DATE_SELECTION',
-      number: 8,
+      number: 9,
       label: 'Set Date',
       status: state.appointmentDate
         ? 'COMPLETE'
@@ -142,7 +167,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     },
     {
       id: 'SLOTS_LOADING',
-      number: 9,
+      number: 10,
       label: 'Load Available Slots',
       status: state.availableSlots.length > 0 || state.selectedSlot
         ? 'COMPLETE'
@@ -153,7 +178,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     },
     {
       id: 'SLOT_SELECTION',
-      number: 10,
+      number: 11,
       label: 'Select Slot',
       status: state.selectedSlot
         ? 'COMPLETE'
@@ -164,7 +189,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     },
     {
       id: 'FINALIZE_APPOINTMENT',
-      number: 11,
+      number: 12,
       label: 'Finalize Appointment',
       status: created
         ? 'COMPLETE'
@@ -174,7 +199,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     },
     {
       id: 'APPOINTMENT_CREATED',
-      number: 12,
+      number: 13,
       label: 'Appointment Created',
       status: failed ? 'FAILED' : created ? 'COMPLETE' : 'PENDING',
       ...(state.result?.appointmentId ? { value: state.result.appointmentId } : {}),

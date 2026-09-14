@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import { GALLO_VEHICLE_MANAGED_ENTITY_POLICY } from '../../contracts/register-new-appointment/index.js';
 import { projectAppointmentWorkflow } from './appointment-workflow-view.js';
 
 function baseState(overrides: Partial<AppointmentStateProjection> = {}): AppointmentStateProjection {
@@ -9,6 +10,11 @@ function baseState(overrides: Partial<AppointmentStateProjection> = {}): Appoint
     workflowStatus: 'RUNNING',
     phase: 'WAITING_FOR_CUSTOMER',
     customer: { status: 'EMPTY' },
+    managedEntity: {
+      status: 'PENDING',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [],
+    },
     services: [],
     products: [],
     availableSlots: [],
@@ -51,10 +57,34 @@ test('C0 view advances deterministic customer data checkpoints from durable draf
   assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'PENDING');
 });
 
+test('ME1 view stops at ManagedEntity before service selection', () => {
+  const view = projectAppointmentWorkflow(baseState({
+    phase: 'WAITING_FOR_MANAGED_ENTITY',
+    customer: { status: 'EXISTING', customerId: 'cus-1' },
+    managedEntity: {
+      status: 'NEEDS_SELECTION',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [{ managedEntityId: 'men-logan', type: 'vehicle', displayName: 'Renault Logan' }],
+    },
+    nextAction: 'SELECT_MANAGED_ENTITY',
+  }));
+  assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'COMPLETE');
+  assert.equal(step(view, 'MANAGED_ENTITY_RESOLUTION').status, 'ACTIVE');
+  assert.equal(step(view, 'SERVICE_SELECTION').status, 'PENDING');
+  assert.equal(view.currentStepId, 'MANAGED_ENTITY_RESOLUTION');
+});
+
 test('C0 view marks provider-independent business selections from Workflow state', () => {
+  const managedEntity = { managedEntityId: 'men-logan', type: 'vehicle', displayName: 'Renault Logan' } as const;
   const view = projectAppointmentWorkflow(baseState({
     phase: 'WAITING_FOR_SLOT',
     customer: { status: 'EXISTING', customerId: 'cus-1' },
+    managedEntity: {
+      status: 'SELECTED',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [managedEntity],
+      selected: managedEntity,
+    },
     services: [{ serviceId: 'svc-1', code: 'WASH', name: 'Car Wash' }],
     selectedService: { serviceId: 'svc-1', code: 'WASH', name: 'Car Wash' },
     products: [{ productId: 'prd-1', serviceId: 'svc-1', code: 'BASIC', name: 'Basic', durationMinutes: 30 }],
@@ -65,6 +95,8 @@ test('C0 view marks provider-independent business selections from Workflow state
   }));
   assert.equal(step(view, 'CUSTOMER_NAME').status, 'SKIPPED');
   assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'COMPLETE');
+  assert.equal(step(view, 'MANAGED_ENTITY_RESOLUTION').status, 'COMPLETE');
+  assert.equal(step(view, 'MANAGED_ENTITY_RESOLUTION').value, 'Renault Logan');
   assert.equal(step(view, 'SERVICE_SELECTION').status, 'COMPLETE');
   assert.equal(step(view, 'OFFERING_SELECTION').status, 'COMPLETE');
   assert.equal(step(view, 'DATE_SELECTION').status, 'COMPLETE');
@@ -74,10 +106,17 @@ test('C0 view marks provider-independent business selections from Workflow state
 });
 
 test('C0 view exposes terminal completion and failure explicitly', () => {
+  const managedEntity = { managedEntityId: 'men-logan', type: 'vehicle', displayName: 'Renault Logan' } as const;
   const completed = projectAppointmentWorkflow(baseState({
     workflowStatus: 'COMPLETED',
     phase: 'CREATED',
     customer: { status: 'EXISTING', customerId: 'cus-1' },
+    managedEntity: {
+      status: 'SELECTED',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [managedEntity],
+      selected: managedEntity,
+    },
     selectedService: { serviceId: 'svc-1', code: 'WASH', name: 'Car Wash' },
     selectedProduct: { productId: 'prd-1', serviceId: 'svc-1', code: 'BASIC', name: 'Basic', durationMinutes: 30 },
     appointmentDate: '2026-09-04',
@@ -85,6 +124,7 @@ test('C0 view exposes terminal completion and failure explicitly', () => {
     result: {
       appointmentId: 'apt-1',
       customerId: 'cus-1',
+      managedEntityId: 'men-logan',
       serviceId: 'svc-1',
       productId: 'prd-1',
       appointmentDate: '2026-09-04',
