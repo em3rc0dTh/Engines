@@ -2,7 +2,7 @@
 
 ## Status
 
-**CERTIFIED — G2-S7 NEXT**
+**✅ CERTIFIED — G2-S7 NEXT**
 
 Predecessor: **G2-S5 CERTIFIED**.
 
