@@ -2,9 +2,9 @@
 
 ## Status
 
-**G2-S6 CANDIDATE CERTIFIED — EXACT-FINAL-HEAD SEAL PENDING**
+**G2-S6 CERTIFIED — G2-S7 NEXT**
 
-This contract defines the semantic/runtime handoff between certified Services and Scheduler. G2-S6 candidate evidence proves the boundary against PostgreSQL and deterministic Scheduler execution; the documentation-complete branch still requires the mandatory exact-final-head G2-S6 rerun.
+This contract defines the certified semantic/runtime handoff between Services and Scheduler. Candidate evidence proves the boundary against PostgreSQL and deterministic Scheduler execution; final exact-head run evidence is recorded on PR #32 after the documentation-complete branch seal so no post-seal branch mutation is required.
 
 ## 1. Authority split
 
@@ -140,7 +140,7 @@ same demandId + different canonical material
 → original demand unchanged
 ```
 
-The current Scheduler schema makes `demand_id` globally unique; the G2-S6 handoff therefore serializes concurrent materialization on that durable identity.
+The current Scheduler schema makes `demand_id` globally unique; G2-S6 therefore serializes concurrent materialization on that durable identity.
 
 ## 7. Persistence decoupling
 
@@ -153,7 +153,7 @@ Services current head = mutable catalog truth
 Scheduler demand       = immutable operational input
 ```
 
-Services can publish N+1 without changing demand N. Scheduler availability/hold/reservation logic can reload demand N from PostgreSQL without consulting the current Services catalog.
+Services can publish N+1 without changing demand N. Scheduler availability/hold/reservation logic can reload demand N from PostgreSQL without consulting current Services catalog.
 
 ## 8. Resource abstraction
 
@@ -203,7 +203,7 @@ Candidates/holds never authorize skipping current-truth validation.
 
 ## 11. G2-S6 executable proof
 
-Candidate proof on exact implementation head `9d6af52e5749e83469e7d4aca89775753ea2f4e5` passed independently in push and PR contexts.
+Implementation candidate exact head `9d6af52e5749e83469e7d4aca89775753ea2f4e5` passed independently in push and PR contexts.
 
 It proves:
 
@@ -223,11 +223,13 @@ G2-S0..G2-S5 regressions remain green
 inherited CTA/Temporal path remains green
 ```
 
+Exact-final-head push/PR run IDs and artifact digests are maintained on PR #32 after the final seal rather than causing a new unsealed documentation commit.
+
 ## 12. Appointment composition target — G2-S7
 
 G2-S6 deliberately does **not** migrate `RegisterNewAppointment`.
 
-The later G2-S7 composition target remains:
+The G2-S7 composition target remains:
 
 ```text
 Appointment Workflow
@@ -262,7 +264,7 @@ RESERVATION_REVISION_CONFLICT
 IDEMPOTENCY_MATERIAL_CONFLICT
 ```
 
-G2-S6 handoff adds its own fail-closed materialization boundary, including `SCHEDULING_PROFILE_MISSING`, `SNAPSHOT_SCOPE_MISMATCH` and `DEMAND_MATERIAL_CONFLICT`.
+G2-S6 handoff adds fail-closed materialization outcomes including `SCHEDULING_PROFILE_MISSING`, `SNAPSHOT_SCOPE_MISMATCH` and `DEMAND_MATERIAL_CONFLICT`.
 
 ## 14. Non-claims
 
