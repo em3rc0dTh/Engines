@@ -135,6 +135,31 @@ services:
       retries: 30
       start_period: 2s
 
+  webchat:
+    profiles: ["webchat"]
+    build:
+      context: .
+    environment:
+      ENGINES_CTA_URL: http://cta:8787
+      ENGINES_CHANNEL_URL: http://channel-core:8788
+      ENGINES_WEBCHAT_BUSINESS_SLUG: golden-business
+      ENGINES_WEBCHAT_HOST: 0.0.0.0
+      ENGINES_WEBCHAT_PORT: "8790"
+    depends_on:
+      cta:
+        condition: service_healthy
+      channel-core:
+        condition: service_healthy
+    ports:
+      - "8790:8790"
+    command: ["npm", "run", "webchat:server"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8790/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
   messaging-lab:
     profiles: ["manual"]
     build:
