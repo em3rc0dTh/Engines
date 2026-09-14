@@ -94,6 +94,14 @@ function hash(value: unknown): string {
   return createHash('sha256').update(stableJson(value)).digest('hex');
 }
 
+function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
+  return startA < endB && endA > startB;
+}
+
+function fullyContained(start: number, end: number, containerStart: number, containerEnd: number): boolean {
+  return start >= containerStart && end <= containerEnd;
+}
+
 function localProjection(instantMs: number, timeZone: string): LocalProjection {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -106,30 +114,22 @@ function localProjection(instantMs: number, timeZone: string): LocalProjection {
     hourCycle: 'h23',
   });
   const parts = Object.fromEntries(
-    formatter.formatToParts(new Date(instantMs)).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]),
+    formatter.formatToParts(new Date(instantMs))
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
   );
   const weekday = WEEKDAY[parts.weekday ?? ''];
   if (weekday === undefined) throw new Error(`SCHEDULER_TIME_PROJECTION_FAILED:${timeZone}`);
-  const hour = Number(parts.hour);
-  const minute = Number(parts.minute);
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     weekday,
-    minuteOfDay: hour * 60 + minute,
+    minuteOfDay: Number(parts.hour) * 60 + Number(parts.minute),
   };
 }
 
 function localTimeToMinute(value: string): number {
   const [hour, minute] = value.slice(0, 5).split(':').map(Number);
   return hour! * 60 + minute!;
-}
-
-function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
-  return startA < endB && endA > startB;
-}
-
-function fullyContained(start: number, end: number, containerStart: number, containerEnd: number): boolean {
-  return start >= containerStart && end <= containerEnd;
 }
 
 function capabilitySatisfied(
@@ -142,85 +142,102 @@ function capabilitySatisfied(
   }
   const capability = capabilities.find((entry) => entry.capability_code === demand.code);
   if (!capability) return false;
-  const capabilityCapacity = capability.capacity_units ?? resource.capacity;
-  return capabilityCapacity >= demand.quantity;
+  return (capability.capacity_units ?? resource.capacity) >= demand.quantity;
 }
 
-function scheduleCapacity(
+function baseScheduleCapacity(
   resource: ResourceRow,
   windows: readonly WindowRow[],
   overrides: readonly OverrideRow[],
   occupancyStart: number,
   occupancyEnd: number,
 ): number | undefined {
+  const relevantOverrides = overrides.filter((override) =>
+    overlaps(occupancyStart, occupancyEnd, asMs(override.start_at), asMs(override.end_at)),
+  );
+  if (relevantOverrides.some((override) => override.override_kind === 'UNAVAILABLE')) return undefined;
+
   const startLocal = localProjection(occupancyStart, resource.time_zone);
   const endLocal = localProjection(occupancyEnd, resource.time_zone);
+  const windowCapacities: number[] = [];
 
-  const matchingWindowCapacities: number[] = [];
   if (startLocal.date === endLocal.date) {
     for (const window of windows) {
       if (window.weekday !== startLocal.weekday) continue;
       const windowStart = localTimeToMinute(window.start_local);
       const windowEnd = localTimeToMinute(window.end_local);
       if (startLocal.minuteOfDay >= windowStart && endLocal.minuteOfDay <= windowEnd) {
-        matchingWindowCapacities.push(window.capacity ?? resource.capacity);
+        windowCapacities.push(window.capacity ?? resource.capacity);
       }
     }
   }
 
-  const relevantOverrides = overrides.filter((override) =>
-    overlaps(occupancyStart, occupancyEnd, asMs(override.start_at), asMs(override.end_at)),
-  );
-  if (relevantOverrides.some((override) => override.override_kind === 'UNAVAILABLE')) return undefined;
-
-  const availableOverride = relevantOverrides.some((override) =>
+  const exceptionalOpen = relevantOverrides.some((override) =>
     override.override_kind === 'AVAILABLE'
       && fullyContained(occupancyStart, occupancyEnd, asMs(override.start_at), asMs(override.end_at)),
   );
+  if (windowCapacities.length === 0 && !exceptionalOpen) return undefined;
 
-  if (matchingWindowCapacities.length === 0 && !availableOverride) return undefined;
-
-  let capacity = matchingWindowCapacities.length > 0
-    ? Math.min(resource.capacity, Math.max(...matchingWindowCapacities))
+  return windowCapacities.length > 0
+    ? Math.min(resource.capacity, Math.max(...windowCapacities))
     : resource.capacity;
-
-  const capacityOverrides = relevantOverrides
-    .filter((override) => override.override_kind === 'CAPACITY' && override.capacity !== null)
-    .map((override) => override.capacity!);
-  if (capacityOverrides.length > 0) capacity = Math.min(capacity, ...capacityOverrides);
-  return capacity;
 }
 
-function maximumConcurrentUsage(
+function capacityFeasible(
+  baseCapacity: number,
+  overrides: readonly OverrideRow[],
   allocations: readonly AllocationRow[],
   resourceId: string,
-  start: number,
-  end: number,
-): number {
-  const events: { at: number; delta: number }[] = [];
-  for (const allocation of allocations) {
-    if (allocation.resource_id !== resourceId) continue;
-    const allocationStart = Math.max(start, asMs(allocation.start_at));
-    const allocationEnd = Math.min(end, asMs(allocation.end_at));
-    if (allocationStart >= allocationEnd) continue;
-    events.push({ at: allocationStart, delta: allocation.capacity_units });
-    events.push({ at: allocationEnd, delta: -allocation.capacity_units });
+  occupancyStart: number,
+  occupancyEnd: number,
+  requestedUnits: number,
+): boolean {
+  const resourceOverrides = overrides.filter((override) =>
+    override.resource_id === resourceId
+      && override.override_kind === 'CAPACITY'
+      && overlaps(occupancyStart, occupancyEnd, asMs(override.start_at), asMs(override.end_at)),
+  );
+  const resourceAllocations = allocations.filter((allocation) =>
+    allocation.resource_id === resourceId
+      && overlaps(occupancyStart, occupancyEnd, asMs(allocation.start_at), asMs(allocation.end_at)),
+  );
+
+  const boundarySet = new Set<number>([occupancyStart, occupancyEnd]);
+  for (const override of resourceOverrides) {
+    boundarySet.add(Math.max(occupancyStart, asMs(override.start_at)));
+    boundarySet.add(Math.min(occupancyEnd, asMs(override.end_at)));
   }
-  events.sort((a, b) => a.at - b.at || a.delta - b.delta);
-  let current = 0;
-  let maximum = 0;
-  for (const event of events) {
-    current += event.delta;
-    maximum = Math.max(maximum, current);
+  for (const allocation of resourceAllocations) {
+    boundarySet.add(Math.max(occupancyStart, asMs(allocation.start_at)));
+    boundarySet.add(Math.min(occupancyEnd, asMs(allocation.end_at)));
   }
-  return maximum;
+  const boundaries = [...boundarySet].sort((a, b) => a - b);
+
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const segmentStart = boundaries[index]!;
+    const segmentEnd = boundaries[index + 1]!;
+    if (segmentStart >= segmentEnd) continue;
+    const midpoint = segmentStart + Math.floor((segmentEnd - segmentStart) / 2);
+
+    let effectiveCapacity = baseCapacity;
+    for (const override of resourceOverrides) {
+      if (midpoint >= asMs(override.start_at) && midpoint < asMs(override.end_at) && override.capacity !== null) {
+        effectiveCapacity = Math.min(effectiveCapacity, override.capacity);
+      }
+    }
+
+    let used = 0;
+    for (const allocation of resourceAllocations) {
+      if (midpoint >= asMs(allocation.start_at) && midpoint < asMs(allocation.end_at)) {
+        used += allocation.capacity_units;
+      }
+    }
+    if (used + requestedUnits > effectiveCapacity) return false;
+  }
+  return true;
 }
 
-function canonicalCandidate(
-  input: QueryAvailabilityInput,
-  startMs: number,
-  resourceId: string,
-): SlotCandidate {
+function canonicalCandidate(input: QueryAvailabilityInput, startMs: number, resourceId: string): SlotCandidate {
   const endMs = startMs + input.demand.offering.durationMinutes * MINUTE_MS;
   const assignments: readonly ResourceAssignmentCandidate[] = [{
     resourceId,
@@ -254,7 +271,7 @@ function validateQuery(input: QueryAvailabilityInput, granularityMinutes: number
   const start = Date.parse(input.window.startAt);
   const end = Date.parse(input.window.endAt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-    throw new SchedulerAvailabilityError('SCHEDULING_DEMAND_INVALID', 'availability window must be an increasing offset-aware interval');
+    throw new SchedulerAvailabilityError('SCHEDULING_DEMAND_INVALID', 'availability window must be increasing and offset-aware');
   }
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: input.window.timeZone }).format(new Date(0));
@@ -276,9 +293,9 @@ export async function queryDeterministicAvailability(
 
   const queryStart = Date.parse(input.window.startAt);
   const queryEnd = Date.parse(input.window.endAt);
-  const occupancyPadding = Math.max(input.demand.buffers.beforeMinutes, input.demand.buffers.afterMinutes) * MINUTE_MS;
-  const loadStart = new Date(queryStart - occupancyPadding).toISOString();
-  const loadEnd = new Date(queryEnd + occupancyPadding).toISOString();
+  const paddingMs = Math.max(input.demand.buffers.beforeMinutes, input.demand.buffers.afterMinutes) * MINUTE_MS;
+  const loadStart = new Date(queryStart - paddingMs).toISOString();
+  const loadEnd = new Date(queryEnd + paddingMs).toISOString();
 
   const [resourcesResult, capabilitiesResult, windowsResult, overridesResult, reservationsResult, holdsResult] = await Promise.all([
     pool.query<ResourceRow>(
@@ -359,10 +376,17 @@ export async function queryDeterministicAvailability(
     for (const resource of eligibleResources) {
       const windows = windowsResult.rows.filter((entry) => entry.resource_id === resource.resource_id);
       const overrides = overridesResult.rows.filter((entry) => entry.resource_id === resource.resource_id);
-      const effectiveCapacity = scheduleCapacity(resource, windows, overrides, occupancyStart, occupancyEnd);
-      if (effectiveCapacity === undefined) continue;
-      const usedCapacity = maximumConcurrentUsage(allocations, resource.resource_id, occupancyStart, occupancyEnd);
-      if (usedCapacity + input.demand.capacityUnits > effectiveCapacity) continue;
+      const baseCapacity = baseScheduleCapacity(resource, windows, overrides, occupancyStart, occupancyEnd);
+      if (baseCapacity === undefined) continue;
+      if (!capacityFeasible(
+        baseCapacity,
+        overrides,
+        allocations,
+        resource.resource_id,
+        occupancyStart,
+        occupancyEnd,
+        input.demand.capacityUnits,
+      )) continue;
 
       const candidate = canonicalCandidate(input, serviceStart, resource.resource_id);
       const issues = validateSlotCandidate(candidate);
@@ -378,10 +402,9 @@ export async function queryDeterministicAvailability(
       || a.candidateId.localeCompare(b.candidateId),
   );
 
-  const limited = input.limit === undefined ? slots : slots.slice(0, Math.max(0, input.limit));
   return {
     requestId: input.requestId,
     generatedAt: options.generatedAt ?? new Date().toISOString(),
-    slots: limited,
+    slots: input.limit === undefined ? slots : slots.slice(0, Math.max(0, input.limit)),
   };
 }
