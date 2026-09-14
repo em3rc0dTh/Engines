@@ -13,6 +13,8 @@ on:
       - 'mk1/Test/g2-scheduler-engine-s1.md'
       - 'mk1/Test/g2-scheduler-certification-ledger.json'
       - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s1-certification-2026-09-14.md'
       - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
       - '.github/workflows/mk1-scheduler-g2-s1.yml'
   pull_request:
