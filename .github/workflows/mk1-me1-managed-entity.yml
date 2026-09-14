@@ -49,7 +49,8 @@ jobs:
           docker compose --profile webchat down -v --remove-orphans || true
           docker compose --profile webchat up --build -d
           docker compose --profile webchat ps
-          curl -fsS http://127.0.0.1:8790/health | tee /tmp/managed-entity-me1-webchat-health.json
+          curl --retry 20 --retry-delay 1 --retry-all-errors -fsS \
+            http://127.0.0.1:8790/health | tee /tmp/managed-entity-me1-webchat-health.json
           grep -F '"ok":true' /tmp/managed-entity-me1-webchat-health.json
           grep -F '"agent":false' /tmp/managed-entity-me1-webchat-health.json
           grep -F '"mcp":false' /tmp/managed-entity-me1-webchat-health.json
