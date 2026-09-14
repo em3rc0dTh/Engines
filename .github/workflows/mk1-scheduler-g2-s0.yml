@@ -11,11 +11,15 @@ on:
       - 'mk1/runtime/migrations/009_scheduler_engine_foundation.sql'
       - 'mk1/runtime/scripts/migrate-postgres-scheduler.ts'
       - 'mk1/runtime/scripts/certify-scheduler-g2-s0.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
       - 'mk1/runtime/package.json'
       - 'mk1/runtime/docker-compose.yml'
       - 'mk1/Test/g2-scheduler-engine-s0.md'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
       - 'mk1/Build/evidence/scheduler-g2-s0-certification-2026-09-14.md'
       - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
       - '.github/workflows/mk1-scheduler-g2-s0.yml'
   pull_request:
     branches:
@@ -50,6 +54,9 @@ jobs:
 
       - name: TypeScript
         run: npm run check
+
+      - name: Scheduler sequential certification policy
+        run: npx tsx scripts/verify-scheduler-certification-ledger.ts | tee /tmp/g2-s0-ledger.log
 
       - name: Scheduler G2-S0 contract tests
         run: npm run test:scheduler:g2:s0
@@ -170,6 +177,7 @@ jobs:
         run: |
           mkdir -p /tmp/g2-s0-evidence
           git rev-parse HEAD > /tmp/g2-s0-evidence/git-sha.txt
+          cp /tmp/g2-s0-ledger.log /tmp/g2-s0-evidence/ 2>/dev/null || true
           cp /tmp/g2-s0-migrate.log /tmp/g2-s0-evidence/ 2>/dev/null || true
           cp /tmp/g2-s0-migrate-replay.log /tmp/g2-s0-evidence/ 2>/dev/null || true
           cp /tmp/g2-s0-persistence.log /tmp/g2-s0-evidence/ 2>/dev/null || true
@@ -216,6 +224,7 @@ jobs:
           mkdir -p /tmp/g2-s0-seal
           git rev-parse HEAD | tee /tmp/g2-s0-seal/git-sha.txt
           cat > /tmp/g2-s0-seal/certification.txt <<'EOF'
+          Sequential certification ledger             PASS
           Scheduler contract surface                  PASS
           Services -> Scheduler immutable demand      PASS
           Resource/capability persistence foundation  PASS
