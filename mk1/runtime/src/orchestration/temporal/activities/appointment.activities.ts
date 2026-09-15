@@ -6,6 +6,10 @@ import {
   resolveAppointmentCustomer,
 } from '../../../persistence/postgres/appointment.repository.js';
 import {
+  closeAppointmentSchedulerCompensation,
+  compensateFailedAppointmentSchedulerReservation,
+} from '../../../persistence/postgres/appointment-scheduler-compensation.js';
+import {
   bookAppointmentViaScheduler,
   closeAppointmentSchedulerRepository,
   freezeAppointmentSchedulingDemands,
@@ -18,6 +22,8 @@ import {
 } from '../../../services/appointment-catalog.compat.js';
 import type { AppointmentActivities } from './appointment.types.js';
 import { servicesReadActivities } from './services-read.activities.js';
+
+const APPOINTMENT_ACTIVITY_MAX_ATTEMPTS = 3;
 
 function currentWorkflowId(): string {
   const workflowExecution = Context.current().info.workflowExecution;
@@ -74,7 +80,29 @@ export const appointmentActivities: AppointmentActivities = {
       productId: input.productId,
       appointmentDate: input.appointmentDate,
     }),
-  bookAppointment: (input) => bookAppointmentViaScheduler(input),
+  async bookAppointment(input) {
+    try {
+      return await bookAppointmentViaScheduler(input);
+    } catch (error) {
+      // Keep the durable Scheduler confirmation available for ordinary Temporal
+      // Activity retries. Only when the configured retry budget is exhausted do
+      // we compensate a reservation that never acquired an Appointment record.
+      if (Context.current().info.attempt >= APPOINTMENT_ACTIVITY_MAX_ATTEMPTS) {
+        try {
+          await compensateFailedAppointmentSchedulerReservation({
+            businessSlug: input.businessSlug,
+            workflowId: input.workflowId,
+          });
+        } catch (compensationError) {
+          const detail = compensationError instanceof Error
+            ? compensationError.message
+            : String(compensationError);
+          throw new Error(`APPOINTMENT_SCHEDULER_COMPENSATION_FAILED:${detail}`);
+        }
+      }
+      throw error;
+    }
+  },
   getAppointment: (input) => getSchedulerBackedAppointmentById(input.appointmentId),
 };
 
@@ -82,5 +110,6 @@ export async function closeAppointmentActivities(): Promise<void> {
   await Promise.all([
     closeAppointmentRepository(),
     closeAppointmentSchedulerRepository(),
+    closeAppointmentSchedulerCompensation(),
   ]);
 }
