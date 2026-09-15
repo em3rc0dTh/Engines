@@ -1,17 +1,19 @@
 import type {
   AppointmentProduct,
+  AppointmentResult,
   AppointmentService,
   AppointmentSlot,
   RegisterNewAppointmentStartEnvelope,
 } from '../../../contracts/register-new-appointment/index.js';
 import type { CustomerDraft } from '../../../contracts/register-new-customer/index.js';
 import type {
-  AppointmentRecord,
-  BookAppointmentInput,
-  BookAppointmentResult,
   ReserveAppointmentCommandResult,
   ResolveAppointmentCustomerResult,
 } from '../../../persistence/postgres/appointment.repository.js';
+import type {
+  SchedulerBackedBookAppointmentInput,
+  SchedulerBackedBookAppointmentResult,
+} from '../../../persistence/postgres/appointment-scheduler.repository.js';
 
 export type AppointmentActivities = Readonly<{
   reserveAppointmentCommand(input: Readonly<{
@@ -40,7 +42,7 @@ export type AppointmentActivities = Readonly<{
     appointmentDate: string;
   }>): Promise<readonly AppointmentSlot[]>;
 
-  bookAppointment(input: BookAppointmentInput): Promise<BookAppointmentResult>;
+  bookAppointment(input: SchedulerBackedBookAppointmentInput): Promise<SchedulerBackedBookAppointmentResult>;
 
-  getAppointment(input: Readonly<{ appointmentId: string }>): Promise<AppointmentRecord | undefined>;
+  getAppointment(input: Readonly<{ appointmentId: string }>): Promise<AppointmentResult | undefined>;
 }>;
