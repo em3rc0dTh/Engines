@@ -209,7 +209,9 @@ jobs:
           grep -F 'SERVICES_S7_APPOINTMENT_INTEGRATION_PASS' /tmp/g2-s7-services-s7.log
       - name: Certify Scheduler-backed Appointment persistence and replay
         run: |
-          npm run probe:scheduler:g2:s7 | tee /tmp/g2-s7-orchestration.log
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s7 | tee /tmp/g2-s7-orchestration.log
           grep -F 'SCHEDULER_G2_S7_APPOINTMENT_SCHEDULER_LINK_PASS' /tmp/g2-s7-orchestration.log
           grep -F 'SCHEDULER_G2_S7_FROZEN_SELECTION_PASS' /tmp/g2-s7-orchestration.log
           grep -F 'SCHEDULER_G2_S7_REPLAY_PASS' /tmp/g2-s7-orchestration.log
