@@ -99,17 +99,17 @@ jobs:
             exit 1
           fi
           echo 'SCHEDULER_G2_S5_GENERIC_BOUNDARY_PASS'
-      - name: Guard Appointment from premature Scheduler migration
+      - name: Guard G2-S5 core from Appointment coupling
         run: |
-          matches="$(grep -nEi 'availability-engine|hold-engine|reservation-engine|confirmReservationAtomic|createHoldAtomic|scheduler_' \
-            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts \
-            src/orchestration/temporal/activities/appointment.activities.ts || true)"
+          matches="$(grep -RniE 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler src/persistence/postgres/scheduler-management.repository.ts \
+            src/contracts/scheduler-engine || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo 'Appointment migration remains G2-S7.'
+            echo 'Appointment-specific orchestration leaked backward into the G2-S5 Scheduler core.'
             exit 1
           fi
-          echo 'SCHEDULER_G2_S5_NO_APPOINTMENT_MIGRATION_PASS'
+          echo 'SCHEDULER_G2_S5_APPOINTMENT_DECOUPLING_PASS'
       - name: Terminal contract marker
         run: echo 'SCHEDULER_G2_S5_CONTRACTS_PASS'
 
@@ -259,7 +259,7 @@ jobs:
           cross-business hold reference rejected        PASS
           capacity exhaustion does not bleed businesses PASS
           zero fixture/provider branches in core        PASS
-          Appointment remains pre-Scheduler             PASS
+          G2-S5 core remains Appointment-decoupled      PASS
           EOF
           echo 'SCHEDULER_G2_S5_CERTIFICATION_PASS' | tee /tmp/g2-s5-seal/terminal-marker.txt
       - name: Upload G2-S5 seal
