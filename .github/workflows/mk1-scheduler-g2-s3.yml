@@ -87,17 +87,16 @@ jobs:
           grep -F 'pg_advisory_xact_lock' src/scheduler/reservation-engine.ts
           grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' scripts/certify-scheduler-g2-s3.ts
           echo 'SCHEDULER_G2_S3_ATOMIC_INVARIANT_GUARD_PASS'
-      - name: Guard Appointment from premature Scheduler migration
+      - name: Guard G2-S3 engine from Appointment coupling
         run: |
-          matches="$(grep -nEi 'availability-engine|reservation-engine|confirmReservationAtomic|scheduler_' \
-            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts \
-            src/orchestration/temporal/activities/appointment.activities.ts || true)"
+          matches="$(grep -nEi 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler/reservation-engine.ts || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo 'Appointment migration remains a later Scheduler gate; G2-S3 regression cannot authorize it.'
+            echo 'Appointment-specific orchestration leaked backward into the G2-S3 reservation engine.'
             exit 1
           fi
-          echo 'SCHEDULER_G2_S3_NO_APPOINTMENT_MIGRATION_PASS'
+          echo 'SCHEDULER_G2_S3_APPOINTMENT_DECOUPLING_PASS'
       - name: Terminal contract marker
         run: echo 'SCHEDULER_G2_S3_CONTRACTS_PASS'
 
@@ -225,8 +224,8 @@ jobs:
           zero loser command-ledger effect        PASS
           successful operation replay             PASS
           idempotency material conflict           PASS
-          Appointment remains pre-Scheduler       PASS
-          later hold lifecycle does not alter S3  PASS
+          G2-S3 engine remains Appointment-decoupled PASS
+          later hold/Appointment lifecycle does not alter S3 PASS
           EOF
           echo 'SCHEDULER_G2_S3_CERTIFICATION_PASS' | tee /tmp/g2-s3-seal/terminal-marker.txt
       - name: Upload G2-S3 seal
