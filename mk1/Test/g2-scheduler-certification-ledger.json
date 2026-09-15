@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "engine": "Scheduler",
+  "track": "G2",
+  "policy": "sequential-hard-gates",
+  "currentNext": "G2-S8",
+  "gates": [
+    {
+      "id": "G2-S0",
+      "status": "CERTIFIED",
+      "predecessor": null,
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s0.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s0.yml",
+      "terminalMarker": "SCHEDULER_G2_S0_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S1",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S0",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s1.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s1.yml",
+      "terminalMarker": "SCHEDULER_G2_S1_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S2",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S1",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s2.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s2.yml",
+      "terminalMarker": "SCHEDULER_G2_S2_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S3",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S2",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s3.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s3.yml",
+      "terminalMarker": "SCHEDULER_G2_S3_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S4",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S3",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s4.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s4.yml",
+      "terminalMarker": "SCHEDULER_G2_S4_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S5",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S4",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s5.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s5.yml",
+      "terminalMarker": "SCHEDULER_G2_S5_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S6",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S5",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s6.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s6.yml",
+      "terminalMarker": "SCHEDULER_G2_S6_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S7",
+      "status": "CERTIFIED",
+      "predecessor": "G2-S6",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s7.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s7.yml",
+      "terminalMarker": "SCHEDULER_G2_S7_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S8",
+      "status": "NEXT",
+      "predecessor": "G2-S7",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s8.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s8.yml",
+      "terminalMarker": "SCHEDULER_G2_S8_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G2-S9",
+      "status": "OPEN",
+      "predecessor": "G2-S8",
+      "expectedReceipt": "mk1/Test/g2-scheduler-engine-s9.md",
+      "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s9.yml",
+      "terminalMarker": "SCHEDULER_G2_S9_CERTIFICATION_PASS"
+    }
+  ]
+}

@@ -3,16 +3,18 @@ import { Pool, type PoolClient } from 'pg';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import { canonicalJson } from '../../contracts/register-new-customer/index.js';
 import type {
+  EligibilityRuleSet,
   PricingDescriptor,
   ServiceDefinition,
+  ServiceDependency,
   ServiceOffering,
   ServiceRequirement,
-  ServiceDependency,
-  EligibilityRuleSet,
+  ServiceSchedulingProfile,
   ServicesMutationCommand,
   ServicesMutationOutcome,
   ServicesMutationRejected,
 } from '../../contracts/services-engine/index.js';
+import { validateServiceSchedulingProfile } from '../../contracts/services-engine/index.js';
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -28,9 +30,7 @@ function asRecord(value: unknown): Readonly<Record<string, unknown>> {
 }
 
 function pricingColumns(pricing: PricingDescriptor): readonly [string, number | null, string | null] {
-  if (pricing.kind === 'FREE' || pricing.kind === 'QUOTE_REQUIRED') {
-    return [pricing.kind, null, null];
-  }
+  if (pricing.kind === 'FREE' || pricing.kind === 'QUOTE_REQUIRED') return [pricing.kind, null, null];
   return [pricing.kind, pricing.amountMinor, pricing.currency];
 }
 
@@ -49,6 +49,15 @@ function pricingFromRow(row: {
     return { kind: row.price_kind, amountMinor, currency: row.price_currency };
   }
   throw new Error(`SERVICES_PRICE_KIND_UNKNOWN:${row.price_kind}`);
+}
+
+function schedulingFromRow(value: unknown): ServiceSchedulingProfile | undefined {
+  if (value === null || value === undefined) return undefined;
+  const issues = validateServiceSchedulingProfile(value);
+  if (issues.length > 0) {
+    throw new Error(`SERVICES_SCHEDULING_PROFILE_PROJECTION_INVALID:${JSON.stringify(issues)}`);
+  }
+  return value as ServiceSchedulingProfile;
 }
 
 function rejected(
@@ -131,6 +140,7 @@ type OfferingBaseRow = Readonly<{
   price_kind: string;
   price_amount_minor: string | number | null;
   price_currency: string | null;
+  scheduling_profile: unknown;
 }>;
 
 async function loadOffering(
@@ -141,7 +151,7 @@ async function loadOffering(
   const base = await client.query<OfferingBaseRow>(
     `SELECT product_id, service_id, business_slug, product_code, product_name,
             description, status, revision, duration_minutes, priority, tags,
-            price_kind, price_amount_minor, price_currency
+            price_kind, price_amount_minor, price_currency, scheduling_profile
        FROM service_products
       WHERE business_slug = $1 AND product_id = $2`,
     [businessSlug, offeringId],
@@ -194,6 +204,7 @@ async function loadOffering(
         failureCode: eligibilityRow.failure_code,
       }
     : undefined;
+  const scheduling = schedulingFromRow(row.scheduling_profile);
 
   return {
     offeringId: row.product_id,
@@ -219,6 +230,7 @@ async function loadOffering(
       targetOfferingId: item.target_product_id,
     })),
     ...(eligibilityRuleSet ? { eligibilityRuleSet } : {}),
+    ...(scheduling ? { scheduling } : {}),
   };
 }
 
@@ -467,8 +479,8 @@ async function applyOperation(
         `INSERT INTO service_products (
            product_id, service_id, business_slug, product_code, product_name, description,
            duration_minutes, active, revision, priority, tags,
-           price_kind, price_amount_minor, price_currency
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,1,$8,$9::jsonb,$10,$11,$12)`,
+           price_kind, price_amount_minor, price_currency, scheduling_profile
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,1,$8,$9::jsonb,$10,$11,$12,$13::jsonb)`,
         [
           command.offering.offeringId,
           command.offering.serviceId,
@@ -482,6 +494,7 @@ async function applyOperation(
           kind,
           amountMinor,
           currency,
+          command.offering.scheduling ? JSON.stringify(command.offering.scheduling) : null,
         ],
       );
       await replaceOfferingRequirements(client, command.businessSlug, command.offering.offeringId, command.offering.requirements);
@@ -521,16 +534,33 @@ async function applyOperation(
       const nextPricing = command.patch.pricing ?? current.pricing;
       const nextPriority = command.patch.priority ?? current.priority;
       const nextTags = command.patch.tags ?? current.tags;
+      const nextScheduling = Object.hasOwn(command.patch, 'scheduling')
+        ? command.patch.scheduling ?? null
+        : current.scheduling ?? null;
       const [kind, amountMinor, currency] = pricingColumns(nextPricing);
       await client.query(
         `UPDATE service_products
             SET service_id = $3, product_code = $4, product_name = $5, description = $6,
                 duration_minutes = $7, priority = $8, tags = $9::jsonb,
                 price_kind = $10, price_amount_minor = $11, price_currency = $12,
+                scheduling_profile = $13::jsonb,
                 revision = revision + 1, updated_at = NOW()
           WHERE business_slug = $1 AND product_id = $2`,
-        [command.businessSlug, command.offeringId, nextServiceId, nextCode, nextName, nextDescription,
-          nextDuration, nextPriority, JSON.stringify(nextTags), kind, amountMinor, currency],
+        [
+          command.businessSlug,
+          command.offeringId,
+          nextServiceId,
+          nextCode,
+          nextName,
+          nextDescription,
+          nextDuration,
+          nextPriority,
+          JSON.stringify(nextTags),
+          kind,
+          amountMinor,
+          currency,
+          nextScheduling ? JSON.stringify(nextScheduling) : null,
+        ],
       );
       if (command.patch.requirements !== undefined) {
         await replaceOfferingRequirements(client, command.businessSlug, command.offeringId, command.patch.requirements);
@@ -626,8 +656,16 @@ export class PostgresServicesManagementRepository {
              command_id, operation, business_slug, idempotency_key_hash,
              command_fingerprint, workflow_id, entity_type, entity_id, status
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'RESERVED')`,
-          [commandId, command.operation, command.businessSlug, idempotencyKeyHash,
-            commandFingerprint, workflowId, info.entityType, info.entityId],
+          [
+            commandId,
+            command.operation,
+            command.businessSlug,
+            idempotencyKeyHash,
+            commandFingerprint,
+            workflowId,
+            info.entityType,
+            info.entityId,
+          ],
         );
       }
 
@@ -636,8 +674,13 @@ export class PostgresServicesManagementRepository {
         `UPDATE service_mutation_commands
             SET status = $4, result_payload = $5::jsonb, updated_at = NOW()
           WHERE operation = $1 AND business_slug = $2 AND idempotency_key_hash = $3`,
-        [command.operation, command.businessSlug, idempotencyKeyHash,
-          outcome.status === 'APPLIED' ? 'APPLIED' : 'REJECTED', JSON.stringify(outcome)],
+        [
+          command.operation,
+          command.businessSlug,
+          idempotencyKeyHash,
+          outcome.status === 'APPLIED' ? 'APPLIED' : 'REJECTED',
+          JSON.stringify(outcome),
+        ],
       );
       await client.query('COMMIT');
       return outcome;

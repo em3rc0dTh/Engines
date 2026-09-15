@@ -4,6 +4,7 @@ import type {
   PricingDescriptor,
   ServiceDependency,
   ServiceRequirement,
+  ServiceSchedulingProfile,
   ServicesValidationIssue,
 } from './types.js';
 
@@ -17,6 +18,8 @@ const REQUIREMENT_KINDS = new Set([
 ]);
 
 const ELIGIBILITY_OPERATORS = new Set(['EXISTS', 'EQ', 'IN', 'GTE', 'LTE']);
+const SCHEDULING_CAPACITY_MAX = 1_000_000;
+const SCHEDULING_BUFFER_MAX = 1440;
 
 function issue(
   code: ServicesValidationIssue['code'],
@@ -165,6 +168,87 @@ export function validateEligibilityRuleSet(value: unknown): readonly ServicesVal
   return value.predicates.flatMap((predicate, index) => validatePredicate(predicate, index));
 }
 
+export function validateServiceSchedulingProfile(value: unknown): readonly ServicesValidationIssue[] {
+  if (!isRecord(value)) {
+    return [issue('INVALID_SCHEDULING_PROFILE', 'scheduling', 'scheduling profile must be an object')];
+  }
+
+  const issues: ServicesValidationIssue[] = [];
+  if (!Number.isSafeInteger(value.capacityUnits)
+      || Number(value.capacityUnits) <= 0
+      || Number(value.capacityUnits) > SCHEDULING_CAPACITY_MAX) {
+    issues.push(issue(
+      'INVALID_SCHEDULING_PROFILE',
+      'scheduling.capacityUnits',
+      `capacityUnits must be an integer from 1 to ${SCHEDULING_CAPACITY_MAX}`,
+    ));
+  }
+
+  if (!Array.isArray(value.requiredCapabilities)) {
+    issues.push(issue(
+      'INVALID_SCHEDULING_PROFILE',
+      'scheduling.requiredCapabilities',
+      'requiredCapabilities must be an array',
+    ));
+  } else {
+    const codes = new Set<string>();
+    value.requiredCapabilities.forEach((capability, index) => {
+      const path = `scheduling.requiredCapabilities[${index}]`;
+      if (!isRecord(capability)) {
+        issues.push(issue('INVALID_SCHEDULING_PROFILE', path, 'capability demand must be an object'));
+        return;
+      }
+      if (typeof capability.code !== 'string' || capability.code.trim().length === 0) {
+        issues.push(issue('INVALID_SCHEDULING_PROFILE', `${path}.code`, 'capability code is required'));
+      } else if (codes.has(capability.code)) {
+        issues.push(issue('INVALID_SCHEDULING_PROFILE', `${path}.code`, 'capability codes must be unique'));
+      } else {
+        codes.add(capability.code);
+      }
+      if (!Number.isSafeInteger(capability.quantity)
+          || Number(capability.quantity) <= 0
+          || Number(capability.quantity) > SCHEDULING_CAPACITY_MAX) {
+        issues.push(issue('INVALID_SCHEDULING_PROFILE', `${path}.quantity`, 'quantity must be a positive integer'));
+      }
+      if (capability.resourceKinds !== undefined) {
+        if (!Array.isArray(capability.resourceKinds) || capability.resourceKinds.length === 0) {
+          issues.push(issue('INVALID_SCHEDULING_PROFILE', `${path}.resourceKinds`, 'resourceKinds must be a non-empty array when provided'));
+        } else {
+          const kinds = new Set<string>();
+          capability.resourceKinds.forEach((kind, kindIndex) => {
+            if (typeof kind !== 'string' || kind.trim().length === 0 || kinds.has(kind)) {
+              issues.push(issue(
+                'INVALID_SCHEDULING_PROFILE',
+                `${path}.resourceKinds[${kindIndex}]`,
+                'resource kinds must be non-empty and unique',
+              ));
+            } else {
+              kinds.add(kind);
+            }
+          });
+        }
+      }
+    });
+  }
+
+  if (!isRecord(value.buffers)) {
+    issues.push(issue('INVALID_SCHEDULING_PROFILE', 'scheduling.buffers', 'buffers must be an object'));
+  } else {
+    for (const key of ['beforeMinutes', 'afterMinutes'] as const) {
+      const minutes = value.buffers[key];
+      if (!Number.isSafeInteger(minutes) || Number(minutes) < 0 || Number(minutes) > SCHEDULING_BUFFER_MAX) {
+        issues.push(issue(
+          'INVALID_SCHEDULING_PROFILE',
+          `scheduling.buffers.${key}`,
+          `${key} must be an integer from 0 to ${SCHEDULING_BUFFER_MAX}`,
+        ));
+      }
+    }
+  }
+
+  return issues;
+}
+
 export function assertPricingDescriptor(value: unknown): asserts value is PricingDescriptor {
   const issues = validatePricingDescriptor(value);
   if (issues.length > 0) throw new Error(`${issues[0]!.code}:${issues[0]!.path}:${issues[0]!.message}`);
@@ -185,6 +269,11 @@ export function assertServiceDependency(
 
 export function assertEligibilityRuleSet(value: unknown): asserts value is EligibilityRuleSet {
   const issues = validateEligibilityRuleSet(value);
+  if (issues.length > 0) throw new Error(`${issues[0]!.code}:${issues[0]!.path}:${issues[0]!.message}`);
+}
+
+export function assertServiceSchedulingProfile(value: unknown): asserts value is ServiceSchedulingProfile {
+  const issues = validateServiceSchedulingProfile(value);
   if (issues.length > 0) throw new Error(`${issues[0]!.code}:${issues[0]!.path}:${issues[0]!.message}`);
 }
 

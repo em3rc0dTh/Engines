@@ -5,6 +5,7 @@ import type {
   ServiceDependency,
   ServiceOffering,
   ServiceRequirement,
+  ServiceSchedulingProfile,
   ServiceStatus,
   ServicesValidationIssue,
 } from './types.js';
@@ -17,6 +18,7 @@ import {
   validateRevision,
   validateServiceDependency,
   validateServiceRequirement,
+  validateServiceSchedulingProfile,
   validateTags,
 } from './validation.js';
 
@@ -81,6 +83,7 @@ export type CreateOfferingCommand = Readonly<{
     requirements: readonly ServiceRequirement[];
     dependencies: readonly ServiceDependency[];
     eligibilityRuleSet?: EligibilityRuleSet;
+    scheduling?: ServiceSchedulingProfile;
   }>;
 }>;
 
@@ -102,6 +105,7 @@ export type UpdateOfferingCommand = Readonly<{
     requirements?: readonly ServiceRequirement[];
     dependencies?: readonly ServiceDependency[];
     eligibilityRuleSet?: EligibilityRuleSet | null;
+    scheduling?: ServiceSchedulingProfile | null;
   }>;
 }>;
 
@@ -210,6 +214,9 @@ function validateOfferingBody(
     ...(offering.eligibilityRuleSet
       ? validateEligibilityRuleSet(offering.eligibilityRuleSet)
       : []),
+    ...(offering.scheduling
+      ? validateServiceSchedulingProfile(offering.scheduling)
+      : []),
   ];
 }
 
@@ -271,6 +278,9 @@ export function validateServicesMutationCommand(
           : []),
         ...(command.patch.eligibilityRuleSet
           ? validateEligibilityRuleSet(command.patch.eligibilityRuleSet)
+          : []),
+        ...(command.patch.scheduling
+          ? validateServiceSchedulingProfile(command.patch.scheduling)
           : []),
       ];
     }

@@ -1,0 +1,248 @@
+name: MK1 Scheduler G2-S4 Hold Lifecycle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g2-scheduler
+    paths:
+      - 'mk1/runtime/src/scheduler/availability-engine.ts'
+      - 'mk1/runtime/src/scheduler/hold-engine.ts'
+      - 'mk1/runtime/src/scheduler/reservation-engine.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s4.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g2-scheduler-engine-s4.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s4-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s4.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+    paths:
+      - 'mk1/runtime/src/scheduler/availability-engine.ts'
+      - 'mk1/runtime/src/scheduler/hold-engine.ts'
+      - 'mk1/runtime/src/scheduler/reservation-engine.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s4.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g2-scheduler-engine-s4.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s4-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s4.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-scheduler-g2-s4-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-and-boundaries:
+    name: g2-s4-contracts-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run check
+      - name: Scheduler sequential certification policy
+        run: npx tsx scripts/verify-scheduler-certification-ledger.ts
+      - name: G2-S0 contract regression
+        run: npm run test:scheduler:g2:s0
+      - name: Protected platform regressions
+        run: |
+          npm run test:appointment
+          npm run test:services:s4
+          npm run test:cta:poc
+      - name: Guard hold lifecycle from provider or vertical branches
+        run: |
+          matches="$(grep -nEi 'telegram|whatsapp|tiktok|webchat|kapso|messenger|facebook|golden-auto|golden-vet' \
+            src/scheduler/hold-engine.ts src/scheduler/reservation-engine.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Provider/vertical logic leaked into Scheduler G2-S4.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S4_GENERIC_BOUNDARY_PASS'
+      - name: Guard logical expiry from process-memory timers
+        run: |
+          if grep -nEi 'setTimeout|setInterval|node-cron|cron.schedule' src/scheduler/hold-engine.ts src/scheduler/availability-engine.ts; then
+            echo 'Logical hold correctness must not depend on process-memory timers.'
+            exit 1
+          fi
+          grep -F 'h.expires_at >' src/scheduler/availability-engine.ts
+          echo 'SCHEDULER_G2_S4_PERSISTED_TIME_EXPIRY_PASS'
+      - name: Guard G2-S4 engines from Appointment coupling
+        run: |
+          matches="$(grep -nEi 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler/hold-engine.ts src/scheduler/availability-engine.ts src/scheduler/reservation-engine.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Appointment-specific orchestration leaked backward into the G2-S4 Scheduler engines.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S4_APPOINTMENT_DECOUPLING_PASS'
+      - name: Terminal contract marker
+        run: echo 'SCHEDULER_G2_S4_CONTRACTS_PASS'
+
+  postgres-hold-lifecycle:
+    name: g2-s4-postgres-hold-lifecycle
+    needs: contracts-and-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start clean PostgreSQL + MongoDB
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo
+      - name: Apply full migration chain
+        run: docker compose run --rm migrate | tee /tmp/g2-s4-migrate.log
+      - name: Re-certify G2-S0 persistence predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s0 | tee /tmp/g2-s4-s0.log
+          grep -F 'SCHEDULER_G2_S0_CONTRACT_PERSISTENCE_PASS' /tmp/g2-s4-s0.log
+      - name: Re-certify G2-S1 management predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s1.ts | tee /tmp/g2-s4-s1.log
+          grep -F 'SCHEDULER_G2_S1_MANAGEMENT_PASS' /tmp/g2-s4-s1.log
+      - name: Re-certify G2-S2 deterministic availability predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s2.ts | tee /tmp/g2-s4-s2.log
+          grep -F 'SCHEDULER_G2_S2_AVAILABILITY_PASS' /tmp/g2-s4-s2.log
+      - name: Re-certify G2-S3 atomic reservation predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s3 | tee /tmp/g2-s4-s3.log
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' /tmp/g2-s4-s3.log
+          echo 'SCHEDULER_G2_S4_PREDECESSOR_REGRESSION_PASS'
+      - name: Certify hold lifecycle, logical expiry, replay and consumption
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s4 | tee /tmp/g2-s4-holds.log
+          grep -F 'SCHEDULER_G2_S4_HOLD_LIFECYCLE_PASS' /tmp/g2-s4-holds.log
+      - name: Start inherited runtime
+        run: |
+          docker compose up --build -d temporal worker cta channel-core
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://localhost:8788/health >/tmp/g2-s4-channel-health.json; then
+              if grep -Fq '"ok":true' /tmp/g2-s4-channel-health.json; then
+                exit 0
+              fi
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta channel-core temporal migrate
+          exit 1
+      - name: Re-certify inherited CTA orchestration path
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/g2-s4-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/g2-s4-cta.log
+          echo 'SCHEDULER_G2_S4_PLATFORM_REGRESSION_PASS'
+      - name: Capture G2-S4 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g2-s4-evidence
+          git rev-parse HEAD > /tmp/g2-s4-evidence/git-sha.txt
+          cp /tmp/g2-s4-migrate.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-s0.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-s1.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-s2.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-s3.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-holds.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-cta.log /tmp/g2-s4-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s4-channel-health.json /tmp/g2-s4-evidence/ 2>/dev/null || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,hold_id,demand_id,start_at,end_at,expires_at,status FROM scheduler_holds ORDER BY business_slug,hold_id;" \
+            > /tmp/g2-s4-evidence/holds.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,operation_id,command_type,result_type,result_id FROM scheduler_commands WHERE command_type IN ('CreateHold','ReleaseHold','ConfirmReservation') ORDER BY business_slug,operation_id;" \
+            > /tmp/g2-s4-evidence/hold-commands.txt 2>&1 || true
+      - name: Upload G2-S4 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s4-${{ github.run_id }}
+          path: /tmp/g2-s4-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  scheduler-g2-s4-seal:
+    name: scheduler-g2-s4-seal
+    needs:
+      - contracts-and-boundaries
+      - postgres-hold-lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G2-S4 receipt
+        run: |
+          mkdir -p /tmp/g2-s4-seal
+          git rev-parse HEAD | tee /tmp/g2-s4-seal/git-sha.txt
+          cat > /tmp/g2-s4-seal/certification.txt <<'EOF'
+          G2-S0/S1/S2/S3 regressions                    PASS
+          hold create + durable operation replay        PASS
+          hold release + replay                         PASS
+          persisted-time logical expiry                 PASS
+          expired ACTIVE hold non-blocking pre-cleanup  PASS
+          fresh-pool re-entry preserves expiry truth    PASS
+          housekeeping physical EXPIRED projection     PASS
+          held reservation atomic consumption           PASS
+          expired hold consumption rejection            PASS
+          idempotency material conflict                 PASS
+          G2-S4 engines remain Appointment-decoupled    PASS
+          EOF
+          echo 'SCHEDULER_G2_S4_CERTIFICATION_PASS' | tee /tmp/g2-s4-seal/terminal-marker.txt
+      - name: Upload G2-S4 seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s4-seal-${{ github.run_id }}
+          path: /tmp/g2-s4-seal
+          if-no-files-found: error
+      - name: Terminal certification marker
+        run: echo 'SCHEDULER_G2_S4_CERTIFICATION_PASS'

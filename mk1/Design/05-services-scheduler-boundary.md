@@ -2,9 +2,9 @@
 
 ## Status
 
-**DESIGN CANDIDATE — PRE-BUILD**
+**G2-S6 CERTIFIED — G2-S7 NEXT**
 
-This contract freezes the semantic handoff between Step 3 Services and Step 4 Scheduler.
+This contract defines the certified semantic/runtime handoff between Services and Scheduler. Candidate evidence proves the boundary against PostgreSQL and deterministic Scheduler execution; final exact-head run evidence is recorded on PR #32 after the documentation-complete branch seal so no post-seal branch mutation is required.
 
 ## 1. Authority split
 
@@ -16,7 +16,7 @@ Services Engine owns
 - requirements/dependencies
 - eligibility/recommendation
 - immutable selected revision snapshot
-- abstract resource/capacity demand
+- abstract scheduling profile
 
 Scheduler Engine owns
 - concrete resources
@@ -29,11 +29,34 @@ Scheduler Engine owns
 - assignment/conflict lifecycle
 ```
 
-Neither engine owns channel presentation.
+Neither engine owns channel/provider presentation or transport mechanics.
 
-## 2. Immutable handoff
+## 2. Services scheduling profile
 
-Scheduler must receive immutable material derived from the selected Offering snapshot rather than looking up mutable catalog head.
+A schedulable Offering may carry versioned abstract scheduling semantics:
+
+```ts
+type ServiceSchedulingProfile = Readonly<{
+  capacityUnits: number;
+  requiredCapabilities: readonly Readonly<{
+    code: string;
+    quantity: number;
+    resourceKinds?: readonly string[];
+  }>[];
+  buffers: Readonly<{
+    beforeMinutes: number;
+    afterMinutes: number;
+  }>;
+}>;
+```
+
+The profile is persisted with the Services Offering revision. It may describe resource **kinds/capabilities**, but it must not embed concrete Scheduler resource IDs, schedule IDs, hold IDs or reservation IDs.
+
+Non-schedulable Offerings may omit the profile.
+
+## 3. Immutable handoff
+
+Scheduler receives material derived from an already-frozen `ServicesSelectionSnapshot`, not a fresh read of mutable catalog head.
 
 ```ts
 type SchedulingDemand = Readonly<{
@@ -64,17 +87,75 @@ type CapabilityDemand = Readonly<{
 }>;
 ```
 
-`demandId` is durable Workflow-owned identity for this scheduling demand.
+`demandId` is durable workflow/domain identity for the scheduling demand. Once persisted, `scheduler_demands` is Scheduler operational truth by value.
 
-## 3. Snapshot invariant
+## 4. Snapshot invariant
 
-If a Workflow selected Offering revision `N`, all Scheduler operations for that selection use the derived demand from `N` until an explicit Workflow operation reselects/refreshed the offering.
+If a Workflow selected Offering revision `N`, Scheduler operations for that selection use the demand derived from `N` until an explicit Workflow operation creates/reselects a new demand.
 
 ```text
-catalog head N+1 != silent scheduling demand mutation
+Services catalog head N+1
+!= silent mutation of SchedulingDemand N
 ```
 
-## 4. Resource abstraction
+G2-S6 executable evidence proves this with materially different N and N+1 duration, capability, resource-kind and buffer semantics.
+
+## 5. Materialization contract
+
+Canonical handoff implementation:
+
+```text
+ServicesSelectionSnapshot
+→ materializeSchedulingDemandFromServicesSnapshot(...)
+→ validate canonical SchedulingDemand
+→ persistSchedulingDemandImmutable(...)
+→ scheduler_demands
+```
+
+The materializer:
+
+```text
+requires matching Service/Offering business + service identity
+requires active frozen Service and Offering for new demand creation
+requires a valid ServiceSchedulingProfile
+copies Service revision by value
+copies Offering revision + duration by value
+copies capacity/capabilities/buffers by value
+never looks up mutable Services head
+```
+
+## 6. Durable demand identity
+
+Persistence is immutable and replay-safe:
+
+```text
+same demandId + same canonical frozen material
+→ replay existing demand
+→ same snapshot hash
+→ no duplicate
+
+same demandId + different canonical material
+→ DEMAND_MATERIAL_CONFLICT
+→ rollback
+→ original demand unchanged
+```
+
+The current Scheduler schema makes `demand_id` globally unique; G2-S6 therefore serializes concurrent materialization on that durable identity.
+
+## 7. Persistence decoupling
+
+`scheduler_demands` intentionally has no foreign key to `service_catalog` or `service_products`.
+
+That is a correctness property:
+
+```text
+Services current head = mutable catalog truth
+Scheduler demand       = immutable operational input
+```
+
+Services can publish N+1 without changing demand N. Scheduler availability/hold/reservation logic can reload demand N from PostgreSQL without consulting current Services catalog.
+
+## 8. Resource abstraction
 
 Services may require abstract capabilities such as:
 
@@ -86,11 +167,9 @@ DELIVERY_VEHICLE
 CONSULTATION_ROOM
 ```
 
-Services must not embed concrete Scheduler identities such as `employee_42` or `bay_3` as general catalog semantics.
+It must not smuggle generic concrete identities such as `employee_42` or `bay_3` into the scheduling profile. A commercial offering that genuinely names a specific concrete resource would require a separately designed explicit relationship rather than weakening this generic boundary.
 
-If a specific concrete resource is itself part of the commercial offering, that explicit relationship must be modeled separately rather than smuggled into generic capability requirements.
-
-## 5. Query contract
+## 9. Query contract
 
 ```ts
 type QueryAvailabilityInput = Readonly<{
@@ -107,89 +186,68 @@ type QueryAvailabilityInput = Readonly<{
 }>;
 ```
 
-Output:
+Output is advisory `SlotCandidate[]`; no availability response reserves capacity.
 
-```ts
-type AvailabilityResult = Readonly<{
-  requestId: string;
-  generatedAt: string;
-  slots: readonly SlotCandidate[];
-}>;
+## 10. Hold / reservation boundary
+
+Scheduler alone turns advisory availability into capacity protection or durable allocation.
+
+```text
+SchedulingDemand
+→ QueryAvailability
+→ optional CreateHold
+→ ConfirmReservation with commit-time revalidation
 ```
 
-The result is advisory and does not reserve capacity.
+Candidates/holds never authorize skipping current-truth validation.
 
-## 6. Candidate contract
+## 11. G2-S6 executable proof
 
-```ts
-type SlotCandidate = Readonly<{
-  candidateId: string;
-  startAt: string;
-  endAt: string;
-  timeZone: string;
-  assignments: readonly ResourceAssignmentCandidate[];
-}>;
+Implementation candidate exact head `9d6af52e5749e83469e7d4aca89775753ea2f4e5` passed independently in push and PR contexts.
 
-type ResourceAssignmentCandidate = Readonly<{
-  resourceId: string;
-  capacityUnits: number;
-}>;
+It proves:
+
+```text
+Services N is persisted and projected
+snapshot N is frozen by value
+demand N persists with exact revisions + snapshot_hash
+identical demand retry replays
+Scheduler reloads demand N and resolves N-compatible resource semantics
+Services publishes materially different N+1
+demand N remains unchanged after N+1
+demand N continues driving N Scheduler behavior
+new demand N+1 sees N+1 semantics
+Scheduler reloads N+1 and resolves N+1-compatible resource semantics
+old demandId + N+1 material fails closed
+G2-S0..G2-S5 regressions remain green
+inherited CTA/Temporal path remains green
 ```
 
-`candidateId` is an opaque Scheduler-generated reference useful for selection/revalidation, not a reservation ID.
+Exact-final-head push/PR run IDs and artifact digests are maintained on PR #32 after the final seal rather than causing a new unsealed documentation commit.
 
-## 7. Hold contract
+## 12. Appointment composition target — G2-S7
 
-Hold is optional in early G2 but the contract is reserved now.
+G2-S6 deliberately does **not** migrate `RegisterNewAppointment`.
 
-```ts
-type CreateHoldInput = Readonly<{
-  businessSlug: string;
-  operationId: string;
-  demandId: string;
-  candidateId: string;
-  expiresInSeconds: number;
-}>;
+The G2-S7 composition target remains:
+
+```text
+Appointment Workflow
+  → Get/Select frozen Offering snapshot
+  → derive/persist SchedulingDemand
+  → QueryAvailability
+  → choose SlotCandidate
+  → optional CreateHold
+  → explicit Finalize
+  → ConfirmReservation atomically
+  → persist/reference Scheduler reservation in Appointment result
 ```
 
-A hold protects capacity temporarily and expires automatically.
+`availability shown != reservation persisted` remains mandatory.
 
-## 8. Reservation contract
+## 13. Failure semantics
 
-```ts
-type ConfirmReservationInput = Readonly<{
-  businessSlug: string;
-  operationId: string;
-  demand: SchedulingDemand;
-  candidateId?: string;
-  holdId?: string;
-  requestedStartAt: string;
-}>;
-```
-
-Confirmation must recompute/revalidate all material constraints atomically. Candidate or hold references are evidence/optimization, not permission to skip revalidation.
-
-## 9. Result identity
-
-```ts
-type SchedulerReservation = Readonly<{
-  reservationId: string;
-  businessSlug: string;
-  demandId: string;
-  startAt: string;
-  endAt: string;
-  timeZone: string;
-  assignments: readonly ResourceAssignment[];
-  status: 'RESERVED' | 'CANCELLED' | 'COMPLETED';
-  revision: number;
-}>;
-```
-
-Appointment/business records may reference `reservationId`, but Scheduler does not become the Customer/Appointment authority.
-
-## 10. Failure semantics
-
-Minimum typed outcomes:
+Scheduler domain failures remain typed, including:
 
 ```text
 BUSINESS_SCOPE_NOT_FOUND
@@ -206,36 +264,8 @@ RESERVATION_REVISION_CONFLICT
 IDEMPOTENCY_MATERIAL_CONFLICT
 ```
 
-## 11. Idempotency
+G2-S6 handoff adds fail-closed materialization outcomes including `SCHEDULING_PROFILE_MISSING`, `SNAPSHOT_SCOPE_MISMATCH` and `DEMAND_MATERIAL_CONFLICT`.
 
-All mutation operations use business-scoped explicit operation identity.
+## 14. Non-claims
 
-```text
-same operationId + same canonical material
-→ exact replay
-
-same operationId + different material
-→ conflict
-```
-
-This follows the same discipline already certified in Customer, Services and C1B channel work.
-
-## 12. Appointment composition target
-
-```text
-Appointment Workflow
-  → Get/Select OfferingSnapshot
-  → derive SchedulingDemand
-  → QueryAvailability
-  → choose SlotCandidate
-  → optional CreateHold
-  → explicit Finalize
-  → ConfirmReservation atomically
-  → persist/reference Appointment result
-```
-
-Final appointment creation must not assume that previously displayed availability is still valid.
-
-## 13. Non-claims
-
-This design does not yet certify Scheduler implementation, real concurrency behavior, multi-resource assignment, optimization, production scale, or Appointment migration to G2.
+G2-S6 does not certify Appointment→Scheduler orchestration, multi-resource assignment/search, broad Integration Engine behavior, reservation cancel/complete lifecycle, or final Scheduler production readiness. Those remain later gates.
