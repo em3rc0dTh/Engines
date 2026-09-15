@@ -10,10 +10,12 @@ on:
       - 'mk1/runtime/src/orchestration/temporal/activities/appointment.activities.ts'
       - 'mk1/runtime/src/orchestration/temporal/activities/appointment.types.ts'
       - 'mk1/runtime/src/persistence/postgres/appointment-scheduler.repository.ts'
+      - 'mk1/runtime/src/persistence/postgres/appointment-scheduler-compensation.ts'
       - 'mk1/runtime/src/scheduler/**'
       - 'mk1/runtime/migrations/011_appointment_scheduler_reservation_link.sql'
       - 'mk1/runtime/scripts/migrate-postgres-scheduler-g2-s7.ts'
       - 'mk1/runtime/scripts/certify-scheduler-g2-s7.ts'
+      - 'mk1/runtime/scripts/certify-cta-orchestration-poc.ts'
       - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
       - 'mk1/runtime/package.json'
       - 'mk1/runtime/docker-compose.yml'
@@ -32,10 +34,12 @@ on:
       - 'mk1/runtime/src/orchestration/temporal/activities/appointment.activities.ts'
       - 'mk1/runtime/src/orchestration/temporal/activities/appointment.types.ts'
       - 'mk1/runtime/src/persistence/postgres/appointment-scheduler.repository.ts'
+      - 'mk1/runtime/src/persistence/postgres/appointment-scheduler-compensation.ts'
       - 'mk1/runtime/src/scheduler/**'
       - 'mk1/runtime/migrations/011_appointment_scheduler_reservation_link.sql'
       - 'mk1/runtime/scripts/migrate-postgres-scheduler-g2-s7.ts'
       - 'mk1/runtime/scripts/certify-scheduler-g2-s7.ts'
+      - 'mk1/runtime/scripts/certify-cta-orchestration-poc.ts'
       - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
       - 'mk1/runtime/package.json'
       - 'mk1/runtime/docker-compose.yml'
@@ -95,6 +99,7 @@ jobs:
           grep -Fq 'materializeAndPersistSchedulingDemand' src/persistence/postgres/appointment-scheduler.repository.ts
           grep -Fq 'queryDeterministicAvailability' src/persistence/postgres/appointment-scheduler.repository.ts
           grep -Fq 'confirmReservationAtomic' src/persistence/postgres/appointment-scheduler.repository.ts
+          grep -Fq 'compensateFailedAppointmentSchedulerReservation' src/orchestration/temporal/activities/appointment.activities.ts
           if grep -nE '^  (bookAppointment|listAppointmentSlots),' src/orchestration/temporal/activities/appointment.activities.ts; then
             echo 'Legacy Appointment slot/book repository authority is still imported.'
             exit 1
@@ -103,7 +108,8 @@ jobs:
       - name: Guard provider and channel mechanics from Scheduler bridge
         run: |
           matches="$(grep -niE 'telegram|whatsapp|tiktok|webchat|kapso|messenger|facebook' \
-            src/persistence/postgres/appointment-scheduler.repository.ts || true)"
+            src/persistence/postgres/appointment-scheduler.repository.ts \
+            src/persistence/postgres/appointment-scheduler-compensation.ts || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
             echo 'Provider/channel mechanics leaked into Appointment Scheduler bridge.'
@@ -185,16 +191,17 @@ jobs:
           echo 'SCHEDULER_G2_S7_PREDECESSOR_REGRESSION_PASS'
       - name: Start Temporal Appointment runtime
         run: |
-          docker compose up --build -d temporal worker cta
+          docker compose up --build -d temporal worker cta channel-core
           for attempt in $(seq 1 75); do
             if curl -fsS http://127.0.0.1:8787/health >/tmp/g2-s7-health.json \
+              && curl -fsS http://127.0.0.1:8788/health >/tmp/g2-s7-channel-health.json \
               && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
               exit 0
             fi
             sleep 1
           done
           docker compose ps -a
-          docker compose logs worker cta temporal migrate
+          docker compose logs worker cta channel-core temporal migrate
           exit 1
       - name: Re-certify inherited Appointment UX and atomic slot-race behavior
         run: |
@@ -216,6 +223,15 @@ jobs:
           grep -F 'SCHEDULER_G2_S7_FROZEN_SELECTION_PASS' /tmp/g2-s7-orchestration.log
           grep -F 'SCHEDULER_G2_S7_REPLAY_PASS' /tmp/g2-s7-orchestration.log
           grep -F 'SCHEDULER_G2_S7_APPOINTMENT_ORCHESTRATION_PASS' /tmp/g2-s7-orchestration.log
+      - name: Certify CTA orchestration and exhausted-retry compensation on Scheduler-backed Appointment
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/g2-s7-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/g2-s7-cta.log
+          grep -F '"capacityAuthority":"SCHEDULER"' /tmp/g2-s7-cta.log
+          grep -F '"failureCompensation":true' /tmp/g2-s7-cta.log
           echo 'SCHEDULER_G2_S7_PLATFORM_REGRESSION_PASS'
       - name: Capture G2-S7 evidence
         if: always()
@@ -224,9 +240,11 @@ jobs:
           git rev-parse HEAD > /tmp/g2-s7-evidence/git-sha.txt
           cp /tmp/g2-s7-*.log /tmp/g2-s7-evidence/ 2>/dev/null || true
           cp /tmp/g2-s7-health.json /tmp/g2-s7-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s7-channel-health.json /tmp/g2-s7-evidence/ 2>/dev/null || true
           docker compose ps -a > /tmp/g2-s7-evidence/compose-ps.txt 2>&1 || true
           docker compose logs worker > /tmp/g2-s7-evidence/worker.log 2>&1 || true
           docker compose logs cta > /tmp/g2-s7-evidence/cta.log 2>&1 || true
+          docker compose logs channel-core > /tmp/g2-s7-evidence/channel-core.log 2>&1 || true
           docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
             "SELECT appointment_id,workflow_id,service_id,product_id,appointment_date,start_time::text,end_time::text,resource_reservation_id,scheduler_reservation_id,status FROM appointments ORDER BY created_at;" \
             > /tmp/g2-s7-evidence/appointments.txt 2>&1 || true
@@ -278,6 +296,9 @@ jobs:
           Scheduler command replay does not duplicate reservation PASS
           Appointment references Scheduler reservation PASS
           legacy ResourceReservation shadow writes     ZERO
+          exhausted Appointment retry compensation     PASS
+          compensated Scheduler capacity is non-blocking PASS
+          CTA/channel orchestration on Scheduler path   PASS
           one concrete resource Appointment path       PASS
           provider/channel mechanics outside Scheduler PASS
           G2-S8 generalized multi-resource             NOT CLAIMED
