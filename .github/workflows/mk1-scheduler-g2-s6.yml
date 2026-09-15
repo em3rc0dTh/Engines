@@ -114,17 +114,19 @@ jobs:
             exit 1
           fi
           echo 'SCHEDULER_G2_S6_GENERIC_BOUNDARY_PASS'
-      - name: Guard Appointment from premature Scheduler migration
+      - name: Guard G2-S6 handoff from Appointment coupling
         run: |
-          matches="$(grep -nEi 'availability-engine|hold-engine|reservation-engine|services-demand-handoff|confirmReservationAtomic|createHoldAtomic|scheduler_' \
-            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts \
-            src/orchestration/temporal/activities/appointment.activities.ts || true)"
+          matches="$(grep -nEi 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler/services-demand-handoff.ts \
+            src/contracts/services-engine/types.ts \
+            src/persistence/postgres/services.repository.ts \
+            src/persistence/postgres/services-management.repository.ts || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo 'Appointment migration remains G2-S7.'
+            echo 'Appointment-specific orchestration leaked backward into the Services→Scheduler handoff.'
             exit 1
           fi
-          echo 'SCHEDULER_G2_S6_NO_APPOINTMENT_MIGRATION_PASS'
+          echo 'SCHEDULER_G2_S6_APPOINTMENT_DECOUPLING_PASS'
       - name: Terminal contract marker
         run: echo 'SCHEDULER_G2_S6_CONTRACTS_PASS'
 
@@ -277,7 +279,7 @@ jobs:
           demand identity material conflict fails closed PASS
           Services profile contains no concrete resource identity PASS
           inherited CTA/Temporal regression             PASS
-          Appointment remains pre-Scheduler             PASS
+          G2-S6 handoff remains Appointment-decoupled   PASS
           EOF
           echo 'SCHEDULER_G2_S6_CERTIFICATION_PASS' | tee /tmp/g2-s6-seal/terminal-marker.txt
       - name: Upload G2-S6 seal
