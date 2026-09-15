@@ -82,17 +82,17 @@ jobs:
           fi
           echo 'SCHEDULER_G2_S0_PROVIDER_AGNOSTIC_PASS'
 
-      - name: Guard Appointment from premature Scheduler integration
+      - name: Guard G2-S0 Scheduler core from Appointment coupling
         run: |
-          matches="$(grep -nEi 'scheduler-engine|schedulerFoundationRepository|scheduler_' \
-            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts \
-            src/orchestration/temporal/activities/appointment.activities.ts || true)"
+          matches="$(grep -RniE 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/contracts/scheduler-engine \
+            src/persistence/postgres/scheduler-foundation.repository.ts || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo 'G2-S0 must not rewrite Appointment before G2-S3 conflict correctness.'
+            echo 'Appointment-specific coupling leaked backward into the G2-S0 Scheduler foundation.'
             exit 1
           fi
-          echo 'SCHEDULER_G2_S0_NO_APPOINTMENT_REWRITE_PASS'
+          echo 'SCHEDULER_G2_S0_APPOINTMENT_DECOUPLING_PASS'
 
       - name: Guard advisory SlotCandidate from persistence
         run: |
@@ -234,7 +234,7 @@ jobs:
           Business-scope relational isolation         PASS
           Scheduler command identity ledger           PASS
           SlotCandidate advisory/non-persisted        PASS
-          Appointment not migrated in G2-S0           PASS
+          G2-S0 core remains Appointment-decoupled    PASS
           Inherited CTA orchestration regression      PASS
           EOF
           echo 'SCHEDULER_G2_S0_CERTIFICATION_PASS' | tee /tmp/g2-s0-seal/terminal-marker.txt
