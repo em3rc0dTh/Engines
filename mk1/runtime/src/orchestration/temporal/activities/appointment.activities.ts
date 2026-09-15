@@ -20,7 +20,9 @@ import type { AppointmentActivities } from './appointment.types.js';
 import { servicesReadActivities } from './services-read.activities.js';
 
 function currentWorkflowId(): string {
-  return Context.current().info.workflowExecution.workflowId;
+  const workflowExecution = Context.current().info.workflowExecution;
+  if (!workflowExecution) throw new Error('APPOINTMENT_ACTIVITY_WORKFLOW_EXECUTION_MISSING');
+  return workflowExecution.workflowId;
 }
 
 export const appointmentActivities: AppointmentActivities = {
