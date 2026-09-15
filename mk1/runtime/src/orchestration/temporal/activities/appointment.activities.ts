@@ -1,12 +1,17 @@
+import { Context } from '@temporalio/activity';
 import { todayInTimeZone } from '../../../contracts/register-new-appointment/index.js';
 import {
-  bookAppointment,
   closeAppointmentRepository,
-  getAppointmentById,
-  listAppointmentSlots,
   reserveAppointmentCommand,
   resolveAppointmentCustomer,
 } from '../../../persistence/postgres/appointment.repository.js';
+import {
+  bookAppointmentViaScheduler,
+  closeAppointmentSchedulerRepository,
+  freezeAppointmentSchedulingDemands,
+  getSchedulerBackedAppointmentById,
+  listAppointmentSlotsViaScheduler,
+} from '../../../persistence/postgres/appointment-scheduler.repository.js';
 import {
   toAppointmentProduct,
   toAppointmentService,
@@ -14,15 +19,17 @@ import {
 import type { AppointmentActivities } from './appointment.types.js';
 import { servicesReadActivities } from './services-read.activities.js';
 
+function currentWorkflowId(): string {
+  return Context.current().info.workflowExecution.workflowId;
+}
+
 export const appointmentActivities: AppointmentActivities = {
   reserveAppointmentCommand: (input) => reserveAppointmentCommand(input.start, input.workflowId),
   getBusinessToday: (input) => Promise.resolve(todayInTimeZone(input.timeZone)),
   resolveAppointmentCustomer: (input) =>
     resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer),
 
-  // S7 authority boundary: Appointment no longer performs its own Service/Product
-  // catalog queries. The same canonical Services read activities used by the
-  // standalone Services Engine supply the renderer-compatible projections.
+  // Canonical Services authority remains unchanged by G2-S7.
   async listAppointmentServices(input) {
     const services = await servicesReadActivities.listServices({
       businessSlug: input.businessSlug,
@@ -31,22 +38,47 @@ export const appointmentActivities: AppointmentActivities = {
   },
 
   async listAppointmentProducts(input) {
-    const offerings = await servicesReadActivities.listOfferings({
+    const [service, offerings] = await Promise.all([
+      servicesReadActivities.getService({
+        businessSlug: input.businessSlug,
+        serviceIdOrCode: input.serviceId,
+      }),
+      servicesReadActivities.listOfferings({
+        businessSlug: input.businessSlug,
+        serviceId: input.serviceId,
+      }),
+    ]);
+    if (!service || service.status !== 'ACTIVE') return [];
+
+    // G2-S7 freezes the exact schedulable Services projections shown to this
+    // durable Appointment workflow before a user can select one. The resulting
+    // SchedulingDemand is immutable and survives catalog revision advances.
+    const schedulable = await freezeAppointmentSchedulingDemands({
       businessSlug: input.businessSlug,
-      serviceId: input.serviceId,
+      workflowId: currentWorkflowId(),
+      service,
+      offerings,
     });
-    return offerings.map(toAppointmentProduct);
+    return schedulable.map(toAppointmentProduct);
   },
 
-  // Slot generation/final persistence remains the inherited compatibility
-  // boundary until G2 Scheduler. S7 changes catalog authority, not Scheduler
-  // ownership.
+  // Stable Appointment activity names are intentionally preserved for channel
+  // compatibility. Their authority is now canonical G2 Scheduler: availability
+  // is advisory and explicit Finalize commits through ConfirmReservation.
   listAppointmentSlots: (input) =>
-    listAppointmentSlots(input.businessSlug, input.productId, input.appointmentDate),
-  bookAppointment: (input) => bookAppointment(input),
-  getAppointment: (input) => getAppointmentById(input.appointmentId),
+    listAppointmentSlotsViaScheduler({
+      businessSlug: input.businessSlug,
+      workflowId: currentWorkflowId(),
+      productId: input.productId,
+      appointmentDate: input.appointmentDate,
+    }),
+  bookAppointment: (input) => bookAppointmentViaScheduler(input),
+  getAppointment: (input) => getSchedulerBackedAppointmentById(input.appointmentId),
 };
 
 export async function closeAppointmentActivities(): Promise<void> {
-  await closeAppointmentRepository();
+  await Promise.all([
+    closeAppointmentRepository(),
+    closeAppointmentSchedulerRepository(),
+  ]);
 }
