@@ -435,11 +435,6 @@ export async function confirmMultiResourceReservationAtomic(
     throw new SchedulerReservationError('SCHEDULING_DEMAND_INVALID', 'confirmation now must be an unambiguous instant');
   }
   const now = new Date(Date.parse(nowValue)).toISOString();
-  const initialCandidate = await resolveCandidate(pool, input, now);
-  if (!initialCandidate || initialCandidate.assignments.length < 2) {
-    throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', `candidate ${input.candidateId} is not currently available`);
-  }
-
   const material = commandMaterial(input);
   const materialHash = sha256(stableJson(material));
   const reservationId = `schedres_${sha256(`${input.businessSlug}:${input.operationId}`).slice(0, 32)}`;
@@ -478,6 +473,13 @@ export async function confirmMultiResourceReservationAtomic(
         reservation: await loadReservation(client, input.businessSlug, reservationId),
         replayed: true,
       };
+    }
+
+    // Resolve only after durable operation replay has been checked. A successful
+    // confirmation consumes its own slot, so availability cannot be a replay gate.
+    const initialCandidate = await resolveCandidate(pool, input, now);
+    if (!initialCandidate || initialCandidate.assignments.length < 2) {
+      throw new SchedulerReservationError('SLOT_NO_LONGER_AVAILABLE', `candidate ${input.candidateId} is not currently available`);
     }
 
     const assignments = [...initialCandidate.assignments]
