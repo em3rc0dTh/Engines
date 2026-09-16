@@ -227,7 +227,7 @@ async function verifySequentialConversation(
     assert(ingress.rows[0]?.appointment_id === firstResult.appointmentId, 'first ingress Appointment was overwritten');
     assert(ingress.rows[0]?.status === 'COMPLETED', 'first ingress lost terminal state');
     assert(ingress.rows[1]?.workflow_id === second.workflowId, 'second ingress workflow mismatch');
-    assert(ingress.rows[1]?.appointment_id === secondResult.appointmentId, 'second ingress Appointment was overwritten');
+    assert(ingress.rows[1]?.appointment_id === secondResult.appointmentId, 'second ingress Appointment mismatch');
     assert(ingress.rows[1]?.status === 'COMPLETED', 'second ingress did not complete');
 
     const binding = await pool.query<Json>(
