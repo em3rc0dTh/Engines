@@ -3,7 +3,7 @@
   "engine": "Scheduler",
   "track": "G2",
   "policy": "sequential-hard-gates",
-  "currentNext": "G2-S9",
+  "currentNext": null,
   "gates": [
     {
       "id": "G2-S0",
@@ -79,7 +79,7 @@
     },
     {
       "id": "G2-S9",
-      "status": "NEXT",
+      "status": "CERTIFIED",
       "predecessor": "G2-S8",
       "expectedReceipt": "mk1/Test/g2-scheduler-engine-s9.md",
       "expectedWorkflow": ".github/workflows/mk1-scheduler-g2-s9.yml",
