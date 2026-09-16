@@ -1,0 +1,232 @@
+name: MK1 Integration G3-I4 Kapso Real Provider Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/integration/secret-resolution.ts'
+      - 'mk1/runtime/src/integration/provider.ts'
+      - 'mk1/runtime/src/integration/delivery-executor.ts'
+      - 'mk1/runtime/src/integration/providers/kapso-whatsapp.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-readiness.ts'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - '.github/workflows/mk1-integration-g3-i4.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i4-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/engines_mk0
+
+jobs:
+  i4-contract-readiness:
+    name: g3-i4-kapso-contract-readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: TypeScript
+        run: npm run check | tee /tmp/g3-i4-typescript.log
+      - name: Sequential Integration ledger remains I4 NEXT
+        run: |
+          npm run verify:integration:g3 | tee /tmp/g3-i4-ledger.log
+          grep -F 'Integration next gate: G3-I4' /tmp/g3-i4-ledger.log
+          grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/g3-i4-ledger.log
+      - name: Re-certify I0 and I1 contract boundaries
+        run: |
+          npm run test:integration:g3:i0 | tee /tmp/g3-i4-i0.log
+          npx tsx --test src/integration/registry.test.ts | tee /tmp/g3-i4-i1.log
+      - name: I4 authority boundary
+        run: |
+          if grep -R -E "contracts/(scheduler-engine|services-engine)|cta/" \
+            src/integration/secret-resolution.ts \
+            src/integration/provider.ts \
+            src/integration/delivery-executor.ts \
+            src/integration/providers/kapso-whatsapp.ts; then
+            echo 'G3-I4 crossed a protected CTA/Services/Scheduler authority boundary' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I4_AUTHORITY_BOUNDARY_PASS' | tee /tmp/g3-i4-authority.log
+      - name: Require no real-provider overclaim in deterministic gate
+        run: |
+          if grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' scripts/certify-integration-g3-i4-readiness.ts; then
+            echo 'I4 readiness probe must not emit the real-provider certification marker' >&2
+            exit 1
+          fi
+          grep -F 'INTEGRATION_G3_I4_HUMAN_TEST_READY' scripts/certify-integration-g3-i4-readiness.ts
+          echo 'INTEGRATION_G3_I4_TRUTH_BOUNDARY_PASS' | tee /tmp/g3-i4-truth-boundary.log
+      - name: Capture contract readiness evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i4-contract-evidence
+          git rev-parse HEAD > /tmp/g3-i4-contract-evidence/git-sha.txt
+          cp /tmp/g3-i4-*.log /tmp/g3-i4-contract-evidence/ 2>/dev/null || true
+      - name: Upload contract readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-contract-readiness-${{ github.run_id }}
+          path: /tmp/g3-i4-contract-evidence
+          if-no-files-found: error
+
+  i4-postgres-readiness:
+    name: g3-i4-kapso-postgres-readiness
+    needs: i4-contract-readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: engines_mk0
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d engines_mk0"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Apply I1-I3 persistence migrations
+        run: |
+          npx tsx scripts/migrate-postgres-integration-g3-i1.ts | tee /tmp/g3-i4-migrate-i1.log
+          npx tsx scripts/migrate-postgres-integration-g3-i2.ts | tee /tmp/g3-i4-migrate-i2.log
+          npx tsx scripts/migrate-postgres-integration-g3-i3.ts | tee /tmp/g3-i4-migrate-i3.log
+      - name: Re-certify durable I1-I3 predecessors
+        run: |
+          npx tsx scripts/certify-integration-g3-i1.ts | tee /tmp/g3-i4-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/g3-i4-i1-probe.log
+          npx tsx scripts/certify-integration-g3-i2.ts | tee /tmp/g3-i4-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_CERTIFICATION_PASS' /tmp/g3-i4-i2-probe.log
+          npx tsx scripts/certify-integration-g3-i3.ts | tee /tmp/g3-i4-i3-probe.log
+          grep -F 'INTEGRATION_G3_I3_CERTIFICATION_PASS' /tmp/g3-i4-i3-probe.log
+      - name: Certify Kapso Integration adapter readiness
+        run: npx tsx scripts/certify-integration-g3-i4-readiness.ts | tee /tmp/g3-i4-readiness.log
+      - name: Require I4 readiness proof markers
+        run: |
+          grep -F 'INTEGRATION_G3_I4_SECRET_REF_RESOLUTION_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_OUTBOUND_MAPPING_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_PROVIDER_ERROR_MAPPING_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_WEBHOOK_VERIFICATION_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_INVALID_SIGNATURE_ZERO_DURABLE_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_SECRET_PERSISTENCE_BOUNDARY_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_ADAPTER_READY_PASS' /tmp/g3-i4-readiness.log
+          grep -F 'INTEGRATION_G3_I4_HUMAN_TEST_READY' /tmp/g3-i4-readiness.log
+      - name: Capture persistence readiness evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i4-postgres-evidence
+          git rev-parse HEAD > /tmp/g3-i4-postgres-evidence/git-sha.txt
+          cp /tmp/g3-i4-*.log /tmp/g3-i4-postgres-evidence/ 2>/dev/null || true
+      - name: Upload persistence readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-postgres-readiness-${{ github.run_id }}
+          path: /tmp/g3-i4-postgres-evidence
+          if-no-files-found: error
+
+  i4-protected-regressions:
+    name: g3-i4-protected-predecessor-regressions
+    needs: i4-contract-readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Scheduler + Services + Appointment regressions
+        run: |
+          npm run test:scheduler:g2:s0
+          npm run test:scheduler:g2:s6
+          npm run test:services:s1
+          npm run test:appointment
+      - name: CTA/channel/provider transport regressions
+        run: |
+          npm run test:cta:poc
+          npm run test:channel:c0
+          npm run test:telegram:bot-api
+          npm run test:whatsapp:kapso
+      - name: Protected predecessor marker
+        run: echo 'INTEGRATION_G3_I4_PREDECESSOR_REGRESSION_PASS'
+
+  integration-g3-i4-readiness-seal:
+    name: integration-g3-i4-human-readiness-seal
+    needs:
+      - i4-contract-readiness
+      - i4-postgres-readiness
+      - i4-protected-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G3-I4 human-readiness seal
+        run: |
+          mkdir -p /tmp/g3-i4-readiness-seal
+          git rev-parse HEAD | tee /tmp/g3-i4-readiness-seal/git-sha.txt
+          cat > /tmp/g3-i4-readiness-seal/readiness.txt <<'EOF'
+          Kapso provider adapter contract                 PASS
+          SecretRef -> runtime secret resolution          PASS
+          Canonical outbound -> Kapso mapping             PASS
+          Provider error -> canonical error mapping       PASS
+          Kapso HMAC -> canonical IntegrationEvent        PASS
+          Invalid signature -> zero durable event         PASS
+          Secret/raw transport durability boundary        PASS
+          I0-I3 durable predecessors                      PASS
+          Scheduler/Services/Appointment/CTA regressions  PASS
+          Real Kapso provider acceptance                  PENDING HUMAN
+          Real signed Kapso webhook                       PENDING HUMAN
+          G3-I4 certification                             NOT CLAIMED
+          EOF
+          echo 'INTEGRATION_G3_I4_HUMAN_TEST_READY' | tee /tmp/g3-i4-readiness-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-human-readiness-${{ github.run_id }}
+          path: /tmp/g3-i4-readiness-seal
+          if-no-files-found: error
+      - name: Human readiness terminal marker
+        run: echo 'INTEGRATION_G3_I4_HUMAN_TEST_READY'
