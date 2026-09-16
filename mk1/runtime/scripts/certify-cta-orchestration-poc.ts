@@ -44,9 +44,11 @@ async function waitFor(conversationId: string, predicate: (value: Json) => boole
   throw new Error(`CTA_POC_TIMEOUT:${label}:${JSON.stringify(current)}`);
 }
 
-function nextBookableDate(): string {
+function isolatedBookableDate(): string {
+  // Keep CTA certification capacity isolated from the inherited Appointment/Services
+  // probes, which intentionally consume the nearest Friday/Saturday fixture slots.
   const date = new Date();
-  date.setUTCDate(date.getUTCDate() + 2);
+  date.setUTCDate(date.getUTCDate() + 14);
   while (date.getUTCDay() === 0) date.setUTCDate(date.getUTCDate() + 1);
   return date.toISOString().slice(0, 10);
 }
@@ -80,7 +82,7 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
   assert(list(current.services).some((v) => v.serviceId === 'svc_car_wash'), 'service fixture missing');
   await event(conversationId, `${token}:offering`, 'SELECT_OFFERING', { catalogOfferingId: 'prd_car_wash_basic' });
   await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_DATE', 'date');
-  await event(conversationId, `${token}:date`, 'SET_DATE', { dateInput: nextBookableDate() });
+  await event(conversationId, `${token}:date`, 'SET_DATE', { dateInput: isolatedBookableDate() });
   current = await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_SLOT', 'slot');
   const slot = list(current.availableSlots)[0];
   assert(typeof slot?.start === 'string', 'slot fixture missing');
@@ -225,7 +227,7 @@ async function verifySequentialConversation(
     assert(ingress.rows[0]?.appointment_id === firstResult.appointmentId, 'first ingress Appointment was overwritten');
     assert(ingress.rows[0]?.status === 'COMPLETED', 'first ingress lost terminal state');
     assert(ingress.rows[1]?.workflow_id === second.workflowId, 'second ingress workflow mismatch');
-    assert(ingress.rows[1]?.appointment_id === secondResult.appointmentId, 'second ingress Appointment mismatch');
+    assert(ingress.rows[1]?.appointment_id === secondResult.appointmentId, 'second ingress Appointment was overwritten');
     assert(ingress.rows[1]?.status === 'COMPLETED', 'second ingress did not complete');
 
     const binding = await pool.query<Json>(
