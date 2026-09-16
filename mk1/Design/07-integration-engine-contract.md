@@ -2,7 +2,7 @@
 
 ## Status
 
-**G3-I0 CERTIFIED · G3-I1 CERTIFIED · G3-I2 NEXT**
+**G3-I0 CERTIFIED · G3-I1 CERTIFIED · G3-I2 CERTIFIED · G3-I3 NEXT**
 
 Scheduler G2 is terminally closed and merged into the baseline. Integration Engine remains a separate authority boundary on `build/g3-integration` / PR #33. Certification status is valid only on an exact head that passes the corresponding dedicated gate.
 
@@ -46,8 +46,8 @@ Integration MUST NOT become a second Scheduler, Services catalog, CTA router, cu
 ```text
 I0  canonical command/event contracts + authority boundary        ✅ CERTIFIED
 I1  connection/provider registry + secret references              ✅ CERTIFIED
-I2  durable outbound command + retry/idempotency ledger           NEXT
-I3  authenticated inbound webhook + deduplication ledger          OPEN
+I2  durable outbound command + retry/idempotency ledger           ✅ CERTIFIED
+I3  authenticated inbound webhook + deduplication ledger          NEXT
 I4  first real provider adapter                                   OPEN
 I5  Temporal composition + failure/recovery certification         OPEN
 ```
@@ -202,6 +202,70 @@ CONNECTION_REVISION_CONFLICT
 CAPABILITY_NOT_SUPPORTED
 ```
 
+## G3-I2 durable outbound model
+
+I2 materializes provider-neutral outbound execution state behind the canonical `IntegrationCommand` and I1 connection boundary.
+
+### Durable identity
+
+```text
+businessSlug + operationId
+```
+
+The same operation identifier may be used by different businesses without sharing state. Inside one business, replay of the same canonical material resolves to the existing durable operation; changed material under the same operation identity is rejected as `IDEMPOTENCY_CONFLICT`.
+
+### Outbound command state
+
+PostgreSQL owns durable state for:
+
+```text
+integration_outbound_commands
+integration_outbound_attempts
+```
+
+The ledger records provider-neutral execution state and attempt history. It does not persist credential material or raw provider response bodies.
+
+### Claim and retry semantics
+
+I2 establishes:
+
+```text
+READY → IN_FLIGHT → SUCCEEDED
+READY → IN_FLIGHT → RETRY_WAIT → IN_FLIGHT
+READY → IN_FLIGHT → FAILED_PERMANENT
+```
+
+Required mechanics:
+
+```text
+atomic claim with one delivery winner
+lease on an in-flight claim
+expired lease becomes recoverable
+abandoned attempt records LEASE_EXPIRED
+retry is unavailable before nextAttemptAt
+retry count is bounded by maxAttempts
+terminal replay returns the terminal record without a new attempt
+```
+
+These mechanics make provider delivery safe to compose later; they do not claim provider acceptance before I4.
+
+### I2 secret boundary
+
+The outbound schema intentionally excludes credential-bearing or provider-transport fields such as:
+
+```text
+token
+access_token
+api_key
+password
+secret_value
+credential
+authorization
+raw_response
+```
+
+Actual secret material remains behind a later adapter/secret-resolution boundary. Provider-neutral receipt references may be persisted without storing secret material or raw provider payloads.
+
 ## Error taxonomy baseline
 
 Provider-facing failures remain provider-neutral enough for Temporal/domain policy:
@@ -242,6 +306,37 @@ Integration owns replay/dedup boundary and canonical event emission
 Temporal/domain owns resulting business workflow decisions
 ```
 
+## G3-I3 inbound contract target
+
+I3 is the next gate and must establish a provider-neutral, durable inbound boundary:
+
+```text
+external webhook
+  ↓
+authentication / verification
+  ↓
+connection resolution
+  ↓
+durable provider-event identity
+  ↓
+dedup / replay protection
+  ↓
+canonical IntegrationEvent
+```
+
+I3 must prove at minimum:
+
+```text
+invalid authentication/verification → zero accepted durable event
+same provider event + same canonical material → replay of existing event
+same provider event + changed material → conflict
+business A and business B remain isolated
+provider-specific transport mechanics do not escape the Integration boundary
+secret material is not persisted in the inbound ledger
+```
+
+I3 may use a deterministic proof authenticator/adapter fixture to certify the engine mechanics. Such a fixture is not evidence of a real provider; real provider acceptance belongs only to I4.
+
 ## Executable certification surfaces
 
 ### I0
@@ -270,33 +365,48 @@ mk1/runtime/scripts/certify-integration-g3-i1.ts
 I1 receipt: `mk1/Test/g3-integration-engine-i1.md`.
 Evidence: `mk1/Build/evidence/integration-g3-i1-certification-2026-09-16.md`.
 
+### I2
+
+```text
+mk1/runtime/src/integration/outbound.ts
+mk1/runtime/src/persistence/postgres/integration-outbound-ledger.repository.ts
+mk1/runtime/migrations/013_integration_outbound_ledger.sql
+mk1/runtime/scripts/migrate-postgres-integration-g3-i2.ts
+mk1/runtime/scripts/certify-integration-g3-i2.ts
+.github/workflows/mk1-integration-g3-i2.yml
+```
+
+I2 receipt: `mk1/Test/g3-integration-engine-i2.md`.
+Evidence: `mk1/Build/evidence/integration-g3-i2-certification-2026-09-16.md`.
+
 ## Existing channel truth boundary
 
 Existing interactive Telegram/WhatsApp channel transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
 
 Kapso evidence likewise remains within its existing CTA/channel transport claim unless a later Integration gate explicitly certifies a provider adapter through the Integration contract.
 
-## Explicit exclusions after I1
+## Explicit exclusions after I2
 
-Even after I1 certification, Integration Engine does **not** yet claim:
+Even after I2 certification, Integration Engine does **not** yet claim:
 
 ```text
 secret values stored by Engines
 concrete secret-manager retrieval/rotation
-outbound command persistence/delivery
-retry/backoff persistence
-provider idempotency-key delivery
-inbound webhook authentication
-inbound dedup persistence
-real provider HTTP/SDK adapter acceptance
+real provider HTTP/SDK delivery
+provider authentication success
+provider idempotency headers/keys
+inbound webhook authentication/verification
+inbound provider-event dedup persistence
+canonical webhook-to-IntegrationEvent normalization
+real provider acceptance
 Temporal Integration composition
 production security/readiness
 Agent behavior
 MCP behavior
 ```
 
-## Next gate — G3-I2
+## Next gate — G3-I3
 
-G3-I2 may implement durable outbound command execution state, idempotent replay, bounded retry scheduling/state and terminal delivery outcomes while preserving the I0/I1 authority and secret boundaries.
+G3-I3 may implement authenticated/verified inbound webhook acceptance, connection resolution, durable provider-event identity, replay/dedup semantics and canonical `IntegrationEvent` emission while preserving I0-I2 authority, tenant isolation and secret boundaries.
 
 No merge authorization is implied by any Integration certification gate. PR #33 remains draft/open/unmerged until explicit owner authorization.
