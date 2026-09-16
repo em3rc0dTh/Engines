@@ -1,0 +1,238 @@
+name: MK1 Scheduler G2-S3 Atomic Reservation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g2-scheduler
+    paths:
+      - 'mk1/runtime/src/scheduler/reservation-engine.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s3.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g2-scheduler-engine-s3.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s3-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s3.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+    paths:
+      - 'mk1/runtime/src/scheduler/reservation-engine.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s3.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g2-scheduler-engine-s3.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s3-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s3.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-scheduler-g2-s3-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-and-boundaries:
+    name: g2-s3-contracts-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run check
+      - name: Scheduler sequential certification policy
+        run: npx tsx scripts/verify-scheduler-certification-ledger.ts
+      - name: G2-S0 contract regression
+        run: npm run test:scheduler:g2:s0
+      - name: Protected platform regressions
+        run: |
+          npm run test:appointment
+          npm run test:services:s4
+          npm run test:cta:poc
+      - name: Guard atomic reservation from provider or vertical branches
+        run: |
+          matches="$(grep -nEi 'telegram|whatsapp|tiktok|webchat|kapso|messenger|facebook|golden-auto|golden-vet' \
+            src/scheduler/reservation-engine.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Provider/vertical logic leaked into Scheduler G2-S3.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S3_GENERIC_BOUNDARY_PASS'
+      - name: Guard certified atomic reservation invariant
+        run: |
+          grep -F 'confirmReservationAtomic' src/scheduler/reservation-engine.ts
+          grep -F "'CAPACITY_CONFLICT'" src/scheduler/reservation-engine.ts
+          grep -F 'scheduler-capacity:' src/scheduler/reservation-engine.ts
+          grep -F 'pg_advisory_xact_lock' src/scheduler/reservation-engine.ts
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' scripts/certify-scheduler-g2-s3.ts
+          echo 'SCHEDULER_G2_S3_ATOMIC_INVARIANT_GUARD_PASS'
+      - name: Guard G2-S3 engine from Appointment coupling
+        run: |
+          matches="$(grep -nEi 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler/reservation-engine.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Appointment-specific orchestration leaked backward into the G2-S3 reservation engine.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S3_APPOINTMENT_DECOUPLING_PASS'
+      - name: Terminal contract marker
+        run: echo 'SCHEDULER_G2_S3_CONTRACTS_PASS'
+
+  postgres-atomic-reservation:
+    name: g2-s3-postgres-atomic-reservation
+    needs: contracts-and-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start clean PostgreSQL + MongoDB
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo
+      - name: Apply full migration chain
+        run: docker compose run --rm migrate | tee /tmp/g2-s3-migrate.log
+      - name: Re-certify G2-S0 persistence predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s0 | tee /tmp/g2-s3-s0.log
+          grep -F 'SCHEDULER_G2_S0_CONTRACT_PERSISTENCE_PASS' /tmp/g2-s3-s0.log
+      - name: Re-certify G2-S1 management predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s1.ts | tee /tmp/g2-s3-s1.log
+          grep -F 'SCHEDULER_G2_S1_MANAGEMENT_PASS' /tmp/g2-s3-s1.log
+      - name: Re-certify G2-S2 deterministic availability predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s2.ts | tee /tmp/g2-s3-s2.log
+          grep -F 'SCHEDULER_G2_S2_AVAILABILITY_PASS' /tmp/g2-s3-s2.log
+          echo 'SCHEDULER_G2_S3_PREDECESSOR_REGRESSION_PASS'
+      - name: Certify atomic reservation and concurrency conflict
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s3 | tee /tmp/g2-s3-atomic.log
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' /tmp/g2-s3-atomic.log
+      - name: Start inherited runtime
+        run: |
+          docker compose up --build -d temporal worker cta channel-core
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://localhost:8788/health >/tmp/g2-s3-channel-health.json; then
+              if grep -Fq '"ok":true' /tmp/g2-s3-channel-health.json; then
+                exit 0
+              fi
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta channel-core temporal migrate
+          exit 1
+      - name: Re-certify inherited CTA orchestration path
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/g2-s3-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/g2-s3-cta.log
+          echo 'SCHEDULER_G2_S3_PLATFORM_REGRESSION_PASS'
+      - name: Capture G2-S3 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g2-s3-evidence
+          git rev-parse HEAD > /tmp/g2-s3-evidence/git-sha.txt
+          cp /tmp/g2-s3-migrate.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-s0.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-s1.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-s2.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-atomic.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-cta.log /tmp/g2-s3-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s3-channel-health.json /tmp/g2-s3-evidence/ 2>/dev/null || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,reservation_id,demand_id,start_at,end_at,status,revision FROM scheduler_reservations ORDER BY business_slug,reservation_id;" \
+            > /tmp/g2-s3-evidence/reservations.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,operation_id,command_type,result_type,result_id FROM scheduler_commands WHERE command_type='ConfirmReservation' ORDER BY business_slug,operation_id;" \
+            > /tmp/g2-s3-evidence/confirm-commands.txt 2>&1 || true
+      - name: Upload G2-S3 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s3-${{ github.run_id }}
+          path: /tmp/g2-s3-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  scheduler-g2-s3-seal:
+    name: scheduler-g2-s3-seal
+    needs:
+      - contracts-and-boundaries
+      - postgres-atomic-reservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G2-S3 receipt
+        run: |
+          mkdir -p /tmp/g2-s3-seal
+          git rev-parse HEAD | tee /tmp/g2-s3-seal/git-sha.txt
+          cat > /tmp/g2-s3-seal/certification.txt <<'EOF'
+          G2-S0 + G2-S1 + G2-S2 regressions       PASS
+          commit-time candidate revalidation      PASS
+          per-resource atomic serialization       PASS
+          exactly one concurrent winner           PASS
+          typed CAPACITY_CONFLICT loser           PASS
+          zero loser reservation effect           PASS
+          zero loser assignment effect            PASS
+          zero loser command-ledger effect        PASS
+          successful operation replay             PASS
+          idempotency material conflict           PASS
+          G2-S3 engine remains Appointment-decoupled PASS
+          later hold/Appointment lifecycle does not alter S3 PASS
+          EOF
+          echo 'SCHEDULER_G2_S3_CERTIFICATION_PASS' | tee /tmp/g2-s3-seal/terminal-marker.txt
+      - name: Upload G2-S3 seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s3-seal-${{ github.run_id }}
+          path: /tmp/g2-s3-seal
+          if-no-files-found: error
+      - name: Terminal certification marker
+        run: echo 'SCHEDULER_G2_S3_CERTIFICATION_PASS'
