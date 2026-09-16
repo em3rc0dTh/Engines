@@ -2,11 +2,11 @@
 
 ## Status
 
-**SCHEDULER G2-S7 CERTIFIED — G2-S8 NEXT**
+**SCHEDULER G2-S8 CERTIFIED — G2-S9 NEXT**
 
 This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
-G2-S7 exact-final-head evidence is kept on PR #32 after the documentation-complete branch seal. The branch itself is not mutated merely to copy final run IDs/digests, because that would create a new unsealed head.
+Exact-final-head evidence is kept on PR #32 after documentation-complete branch seals. The branch itself is not mutated merely to copy final run IDs/digests, because that would create a new unsealed head.
 
 ## Current certified baseline
 
@@ -36,8 +36,8 @@ Step 4 Scheduler Engine
   G2-S5 Multi-business generality       ✅ CERTIFIED
   G2-S6 Services snapshot integration   ✅ CERTIFIED
   G2-S7 Appointment integration         ✅ CERTIFIED
-  G2-S8 Multi-resource proof/deferral   ⏭️ NEXT
-  G2-S9 Final clean certification       OPEN
+  G2-S8 Multi-resource atomicity        ✅ CERTIFIED
+  G2-S9 Final clean certification       ⏭️ NEXT
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
@@ -101,8 +101,8 @@ G2-S4 Holds + expiry + replay                                   ✅ CERTIFIED
 G2-S5 Multi-business generality                                 ✅ CERTIFIED
 G2-S6 Services snapshot/demand integration                      ✅ CERTIFIED
 G2-S7 Appointment Workflow integration                          ✅ CERTIFIED
-G2-S8 Multi-resource assignment proof or explicit deferral      ⏭️ NEXT
-G2-S9 Final clean Scheduler certification                       OPEN
+G2-S8 Multi-resource assignment + atomicity                     ✅ CERTIFIED
+G2-S9 Final clean Scheduler certification                       ⏭️ NEXT
 ```
 
 ### G2-S0 — CERTIFIED
@@ -131,15 +131,13 @@ Stale candidates are revalidated at commit; replay/idempotency is preserved.
 
 ### G2-S4 — CERTIFIED
 
-Durable hold create/release/replay, persisted-time logical expiry independent of cleanup timing, restart/re-entry correctness and atomic hold consumption into reservation.
+Durable one-resource hold create/release/replay, persisted-time logical expiry independent of cleanup timing, restart/re-entry correctness and atomic hold consumption into reservation.
 
 ### G2-S5 — CERTIFIED
 
 Same implementation, materially different businesses, strict isolation for resource/schedule/availability/hold/reservation/idempotency state, cross-business references fail closed and no customer/provider forks in Scheduler core.
 
 ### G2-S6 — CERTIFIED
-
-Runtime handoff:
 
 ```text
 frozen ServicesSelectionSnapshot
@@ -149,25 +147,13 @@ frozen ServicesSelectionSnapshot
 → Scheduler executes from persisted demand
 ```
 
-Certified N→N+1 invariant:
-
-```text
-Services N → demand N → Scheduler N semantics
-Services publishes materially different N+1
-demand N + hash remain unchanged
-Scheduler still executes N semantics from demand N
-new demand from N+1 sees N+1 semantics
-same demand identity + same material replays
-same demand identity + changed material fails closed
-```
+Demand N remains unchanged after Services publishes materially different N+1; new demand sees N+1. Same demand/material replays, changed immutable material fails closed.
 
 ### G2-S7 — CERTIFIED
 
-`RegisterNewAppointment` now crosses the certified Services/Scheduler boundary without moving orchestration authority out of Temporal:
-
 ```text
 Services exact selection
-→ frozen immutable SchedulingDemand
+→ frozen SchedulingDemand
 → QueryAvailability
 → advisory SlotCandidate
 → explicit Finalize
@@ -176,69 +162,93 @@ Services exact selection
 → terminal CTA/domain projection
 ```
 
+Temporal remains orchestration authority; Scheduler remains capacity authority. Current Appointment uses one concrete Scheduler resource, writes no legacy `ResourceReservation` shadow, replays durable reservation on retry, and executes bounded orphan-capacity compensation only after downstream persistence exhausts its retry budget.
+
+That compensation is not a generalized cancellation lifecycle.
+
+### G2-S8 — CERTIFIED
+
+G2-S8 chose implementation rather than deferral. It certifies bounded real multi-resource scheduling:
+
+```text
+SchedulingDemand
+  ├── BAY_ACCESS → BAY
+  └── TECHNICIAN → TECHNICIAN
+       ↓
+intersect per-capability deterministic availability
+       ↓
+joint SlotCandidate with distinct concrete resources
+       ↓
+sort assignments by resourceId
+       ↓
+lock all capacity keys/resources in deterministic order
+       ↓
+revalidate complete joint candidate
+       ↓
+commit one reservation + all assignments + command atomically
+```
+
 Certified invariants:
 
 ```text
-Temporal remains orchestration authority
-availability shown != reservation persisted
-Scheduler remains capacity authority, not Appointment/Customer authority
-commit-time current capacity is revalidated
-workflow/activity retry replays the same Scheduler reservation
-successful migrated Appointment writes zero legacy ResourceReservation shadow
-provider/channel mechanics remain outside Scheduler core
-current Appointment slice uses exactly one concrete Scheduler resource
+one distinct concrete resource per capability demand
+common canonical query timezone across selected set
+capacityUnits applied to every selected assignment
+same operation/material replays durable result before availability lookup
+concurrent final-pair race → one winner / one zero-effect loser
+reservation + N assignments + command are all-or-nothing
+provider/channel and Appointment-specific mechanics remain outside Scheduler core
 ```
 
-G2-S7 additionally closes the persistent post-confirmation failure gap:
+Hard-gate construction found and repaired two issues before promotion: an `exactOptionalPropertyTypes` contract mismatch and a replay-order bug where current availability was checked before durable command replay. Candidate head `e68df10cd2d57fa451df60e52f467804318b449f` then passed dedicated push `35120323440` and PR `35120326801`; final documentation-complete exact-head evidence is maintained on PR #32 after the final seal.
+
+Explicit non-claims:
 
 ```text
-Scheduler confirmation succeeds
-→ downstream Appointment persistence fails
-→ ordinary Temporal retries reuse the durable Scheduler result
-
-if retry budget is exhausted
-→ resolve/lock the Scheduler operation
-→ lock assigned capacity
-→ verify no Appointment references the reservation
-→ RESERVED → CANCELLED
-→ orphan capacity stops blocking
-→ immutable ConfirmReservation command remains evidence
-→ Workflow / CTA projects FAILED
+multi-resource holds
+solver / optimizer / best-fit / scoring / routing
+heterogeneous candidate display timezones
+general staff shift/travel/sequence planning
+Appointment consuming multi-resource demands
+general reservation cancellation/completion lifecycle
 ```
-
-This is a bounded Appointment saga compensation. It does **not** certify a generalized reservation cancellation/completion lifecycle.
-
-Candidate implementation proof passed dedicated push `34988870429` and PR `34988874452` on head `2271f002a809ed03f64bd5cd4c51ad007251eaeb`; exact documentation-complete seal evidence is maintained on PR #32.
 
 ### Forward-compatible predecessor regressions
 
-Historical S0/S3/S4/S5/S6 workflows no longer encode the temporary construction-phase rule “Appointment must never use Scheduler.” They now enforce the durable boundary:
+Historical Scheduler workflows enforce the durable boundary:
 
 ```text
-Appointment may consume Scheduler at G2-S7+
-Scheduler producer/core layers may not import or branch on Appointment-specific orchestration
+later consumers may use Scheduler
+Scheduler producer/core layers may not import or branch on Appointment/provider-specific orchestration
 ```
 
-Earlier Scheduler behavior remains protected while legitimate downstream composition is allowed.
+G2-S8 additionally re-runs G2-S0 through G2-S7 and CTA/channel regressions from a pristine persistence laboratory.
 
-### G2-S8 — NEXT
+### G2-S9 — NEXT
 
-G2-S8 must make one explicit choice and prove it executable:
+G2-S9 is the final clean Scheduler closure. It adds no normal feature scope.
+
+Required proof:
 
 ```text
-A. Generalized multi-resource assignment/search is required now
-   → implement and prove multi-resource atomicity, deterministic assignment identity,
-     business isolation, replay and conflict behavior.
-
-B. First product slice does not require generalized multi-resource scheduling
-   → record an explicit executable deferral; do not imply support.
+fresh PostgreSQL/Mongo laboratory
+full migration chain
+ledger/receipt/design consistency
+G2-S0 foundation
+G2-S1 management
+G2-S2 availability
+G2-S3 one-resource atomic reservation
+G2-S4 holds
+G2-S5 multi-business
+G2-S6 frozen Services handoff
+G2-S7 Appointment orchestration
+G2-S8 multi-resource atomicity
+protected CTA/channel/Temporal/Services regressions
+final evidence artifact + terminal marker
+exact-final-head push + PR seal
 ```
 
-No G2-S8 claim may be inherited merely because the schema already supports assignment tables.
-
-### G2-S9
-
-Run one clean Scheduler closure over G2-S0–G2-S8 plus protected CTA/Temporal/Services/Persistence regressions and emit final Scheduler evidence.
+G2-S9 must preserve every non-claim rather than silently widening Scheduler into an optimizer, multi-resource hold engine or production-readiness claim.
 
 ## Track C — Integration boundary
 
@@ -281,11 +291,11 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Complete the G2-S7 documentation/ledger seal on build/g2-scheduler.
-2. Re-run the dedicated G2-S7 gate on the exact documentation-complete head for push + PR.
-3. Require S0/S3/S4/S5/S6 protected regressions to remain green on that same head.
-4. Preserve final G2-S7 artifact IDs/digests on PR #32 without mutating the sealed head.
-5. Keep PR #32 draft/unmerged; certification does not authorize merge.
-6. Do NOT create a G2-S8 branch.
-7. Only after the final G2-S7 exact-head seal, begin G2-S8 on build/g2-scheduler.
+1. Re-run the dedicated G2-S8 gate on the exact documentation-complete head for push + PR.
+2. Require protected predecessor regressions to remain green on that same head.
+3. Preserve final G2-S8 artifact IDs/digests on PR #32 without mutating the sealed head.
+4. Keep PR #32 draft/unmerged; certification does not authorize merge.
+5. Do NOT create a G2-S9 branch.
+6. Only after final G2-S8 exact-head seal, execute G2-S9 on build/g2-scheduler.
+7. G2-S9 is closure, not a feature-expansion gate.
 ```
