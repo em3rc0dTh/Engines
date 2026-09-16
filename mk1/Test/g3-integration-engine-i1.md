@@ -4,7 +4,9 @@
 
 **G3-I1 — Connection / Provider Registry + Secret References**
 
-Status: **CERTIFIED**
+## Status
+
+**✅ CERTIFIED — provider/connection registry and secret-reference boundary established. G3-I2 is NEXT.**
 
 This receipt is authoritative only when the documentation-complete exact head passes the dedicated push and PR workflows. Any later branch mutation invalidates that exact-head seal until the same gate is rerun.
 

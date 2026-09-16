@@ -36,6 +36,7 @@ jobs:
     defaults:
       run:
         working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
 
     steps:
       - uses: actions/checkout@v4
@@ -95,6 +96,7 @@ jobs:
     defaults:
       run:
         working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
 
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +148,9 @@ jobs:
       - protected-predecessor-regressions
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
 
     steps:
       - uses: actions/checkout@v4

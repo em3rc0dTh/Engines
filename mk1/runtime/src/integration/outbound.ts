@@ -56,7 +56,7 @@ export type IntegrationOutboundAttemptRecord = Readonly<{
   attemptId: string;
   startedAt: string;
   finishedAt?: string;
-  outcome?: IntegrationAttemptOutcome;
+  outcome?: IntegrationAttemptOutcome | undefined;
   errorCode?: IntegrationErrorCode;
   providerReceiptRef?: string;
   nextAttemptAt?: string;
