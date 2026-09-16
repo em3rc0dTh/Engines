@@ -2,7 +2,7 @@
 
 ## Status
 
-**SCHEDULER G2-S8 CERTIFIED — G2-S9 NEXT**
+**SCHEDULER G2-S0..G2-S9 CERTIFIED — G2 CLOSED**
 
 This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
@@ -37,7 +37,8 @@ Step 4 Scheduler Engine
   G2-S6 Services snapshot integration   ✅ CERTIFIED
   G2-S7 Appointment integration         ✅ CERTIFIED
   G2-S8 Multi-resource atomicity        ✅ CERTIFIED
-  G2-S9 Final clean certification       ⏭️ NEXT
+  G2-S9 Final clean certification       ✅ CERTIFIED
+  Scheduler G2                         ✅ CLOSED
 
 Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
 ```
@@ -55,7 +56,7 @@ Historical per-gate PRs
   #31 G2-S2   CLOSED / UNMERGED / evidence preserved
 ```
 
-From G2-S3 onward, normal Scheduler development stays on `build/g2-scheduler`. No normal per-gate branch is created. Each gate receives its own workflow, executable proof, receipt, machine-ledger transition, artifact evidence and exact-final-head rerun. Exceptional recovery/isolation is the only reason to create another branch.
+From G2-S3 through final closure, normal Scheduler development stayed on `build/g2-scheduler`. No normal per-gate branch was created. Each gate received its own workflow, executable proof, receipt, machine-ledger transition, artifact evidence and exact-final-head rerun. Certification still does not authorize merge.
 
 ## Mandatory Scheduler certification rule
 
@@ -77,6 +78,13 @@ Machine state: `mk1/Test/g2-scheduler-certification-ledger.json`
 
 Executable verifier: `mk1/runtime/scripts/verify-scheduler-certification-ledger.ts`
 
+Terminal machine state after G2-S9 promotion:
+
+```text
+G2-S0..G2-S9 = CERTIFIED
+currentNext  = null
+```
+
 ## Track A — Services completion
 
 **CLOSED.**
@@ -90,6 +98,8 @@ G1 Services Engine                               ✅ CERTIFIED
 
 ## Track B — Scheduler design/build
 
+**CLOSED after G2-S9 exact-final-head certification.**
+
 Scheduler owns concrete time/resource allocation; Services owns catalog/commercial and abstract scheduling semantics; Temporal owns durable orchestration.
 
 ```text
@@ -102,7 +112,7 @@ G2-S5 Multi-business generality                                 ✅ CERTIFIED
 G2-S6 Services snapshot/demand integration                      ✅ CERTIFIED
 G2-S7 Appointment Workflow integration                          ✅ CERTIFIED
 G2-S8 Multi-resource assignment + atomicity                     ✅ CERTIFIED
-G2-S9 Final clean Scheduler certification                       ⏭️ NEXT
+G2-S9 Final clean Scheduler certification                       ✅ CERTIFIED
 ```
 
 ### G2-S0 — CERTIFIED
@@ -122,7 +132,7 @@ Deterministic one-resource availability over ACTIVE resources, capability/resour
 ```text
 two concurrent confirmations for final capacity
 → exactly one RESERVED success
-→ exactly one CAPACITY_CONFLICT
+→ exactly one CAPACITY_CONFLICT / stale-capacity loser
 → exactly one persisted reservation + assignment + successful command
 → loser commits zero business effect
 ```
@@ -200,9 +210,7 @@ reservation + N assignments + command are all-or-nothing
 provider/channel and Appointment-specific mechanics remain outside Scheduler core
 ```
 
-Hard-gate construction found and repaired two issues before promotion: an `exactOptionalPropertyTypes` contract mismatch and a replay-order bug where current availability was checked before durable command replay. Candidate head `e68df10cd2d57fa451df60e52f467804318b449f` then passed dedicated push `35120323440` and PR `35120326801`; final documentation-complete exact-head evidence is maintained on PR #32 after the final seal.
-
-Explicit non-claims:
+Explicit non-claims retained by G2-S8:
 
 ```text
 multi-resource holds
@@ -213,22 +221,24 @@ Appointment consuming multi-resource demands
 general reservation cancellation/completion lifecycle
 ```
 
-### Forward-compatible predecessor regressions
+### G2-S9 — CERTIFIED TERMINAL CLOSURE
 
-Historical Scheduler workflows enforce the durable boundary:
+G2-S9 adds no normal feature scope. It re-proves the complete Scheduler G2 graph from pristine persistence and then audits the combined durable state.
+
+Candidate proof head:
 
 ```text
-later consumers may use Scheduler
-Scheduler producer/core layers may not import or branch on Appointment/provider-specific orchestration
+3ad95d39d69c39c0ff8bc44f959f4087d75cc52c
 ```
 
-G2-S8 additionally re-runs G2-S0 through G2-S7 and CTA/channel regressions from a pristine persistence laboratory.
+Candidate dedicated runs:
 
-### G2-S9 — NEXT
+```text
+Push 35129373821  SUCCESS
+PR   35129379874  SUCCESS
+```
 
-G2-S9 is the final clean Scheduler closure. It adds no normal feature scope.
-
-Required proof:
+The terminal gate verifies:
 
 ```text
 fresh PostgreSQL/Mongo laboratory
@@ -241,16 +251,34 @@ G2-S3 one-resource atomic reservation
 G2-S4 holds
 G2-S5 multi-business
 G2-S6 frozen Services handoff
-G2-S7 Appointment orchestration
 G2-S8 multi-resource atomicity
-protected CTA/channel/Temporal/Services regressions
-final evidence artifact + terminal marker
-exact-final-head push + PR seal
+Temporal + worker + CTA + channel runtime
+G2-S7 Appointment orchestration
+CTA orchestration regression
+final relational truth audit
+final evidence artifact + terminal seal
 ```
 
-G2-S9 must preserve every non-claim rather than silently widening Scheduler into an optimizer, multi-resource hold engine or production-readiness claim.
+The final relational audit additionally requires zero orphan reservation assignments, zero legacy Appointment capacity shadows, one-resource integrity on the protected G2-S7 Appointment path, BAY+TECHNICIAN integrity on G2-S8 reservations, multi-business fixture survival, and command-ledger identity integrity.
+
+G2-S9 preserves all prior non-claims. It does not widen Scheduler into an optimizer, multi-resource hold engine, workforce planner, generalized cancellation engine, production SLA claim or whole-platform release certification.
+
+### Forward-compatible predecessor regressions
+
+Historical Scheduler workflows enforce the durable boundary:
+
+```text
+later consumers may use Scheduler
+Scheduler producer/core layers may not import or branch on Appointment/provider-specific orchestration
+```
+
+G2-S9 also runs protected Services, Appointment, CTA/channel, Telegram and WhatsApp contract regressions and a full shared-persistence proof chain.
 
 ## Track C — Integration boundary
+
+Integration remains separate from core scheduling.
+
+Future Integration work may use the already-frozen boundary:
 
 ```text
 I0 Integration command/event contracts
@@ -261,7 +289,7 @@ I4 first real provider adapter
 I5 Temporal composition + failure/recovery proof
 ```
 
-Integration remains separate from core scheduling.
+No Integration gate is implied certified by Scheduler completion.
 
 ## Cross-track dependency rules
 
@@ -272,7 +300,7 @@ Integration is not a prerequisite for core scheduling.
 Appointment migration is complete at G2-S7.
 Persistence ownership stays explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic core gates are sufficiently mature.
-No Scheduler gate executes until predecessor exact-final-head certification is complete.
+Scheduler G2 is frozen after terminal certification except for explicitly scoped fixes/regressions.
 ```
 
 ## Frozen authority boundaries
@@ -290,12 +318,13 @@ Object Store = attachment bytes/content integrity
 
 ## Next executable work
 
+Before any new platform track begins:
+
 ```text
-1. Re-run the dedicated G2-S8 gate on the exact documentation-complete head for push + PR.
-2. Require protected predecessor regressions to remain green on that same head.
-3. Preserve final G2-S8 artifact IDs/digests on PR #32 without mutating the sealed head.
+1. Re-run the dedicated G2-S9 gate on the exact documentation-complete head for push + PR.
+2. Require the terminal machine ledger to pass with currentNext = null.
+3. Preserve final G2-S9 run IDs/artifact digests on PR #32 without mutating the sealed head.
 4. Keep PR #32 draft/unmerged; certification does not authorize merge.
-5. Do NOT create a G2-S9 branch.
-6. Only after final G2-S8 exact-head seal, execute G2-S9 on build/g2-scheduler.
-7. G2-S9 is closure, not a feature-expansion gate.
+5. Do not add normal Scheduler features after closure without opening a separately scoped post-G2 change.
+6. Only after owner direction choose merge/review disposition for PR #32 or start the next platform track.
 ```
