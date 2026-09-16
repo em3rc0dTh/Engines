@@ -2,11 +2,11 @@
 
 ## Status
 
-**G2-S0 through G2-S8 CERTIFIED — G2-S9 NEXT**
+**G2-S0 through G2-S9 CERTIFIED — TERMINAL G2 CLOSURE**
 
-The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle. The certified path covers contract/persistence foundation, resource and schedule management, deterministic availability, atomic reservations, durable holds, multi-business isolation, frozen Services demand handoff, Scheduler-backed Appointment orchestration, and bounded real multi-resource atomicity.
+The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle. The certified path covers contract/persistence foundation, resource and schedule management, deterministic availability, atomic reservations, durable one-resource holds, multi-business isolation, frozen Services demand handoff, Scheduler-backed Appointment orchestration, bounded real multi-resource atomicity, and a final clean cross-gate closure.
 
-Final exact-head run IDs and artifact digests are recorded on PR #32 after a documentation-complete seal so the branch is not mutated merely to copy its own CI metadata.
+Final exact-head run IDs and artifact digests are recorded on PR #32 after the documentation-complete seal so the branch is not mutated merely to copy its own CI metadata.
 
 ## 1. Responsibility and authority boundary
 
@@ -20,7 +20,7 @@ capabilities
 schedule templates and overrides
 capacity
 availability generation
-holds
+one-resource holds
 reservations
 resource assignments
 capacity conflicts
@@ -83,11 +83,11 @@ Once persisted, Scheduler executes from that frozen material without re-reading 
 
 ### Hold
 
-A `SchedulerHold` is durable PostgreSQL allocation truth with explicit assignments, occupied interval and persisted `expiresAt`. G2-S4 certifies the current one-resource hold lifecycle. G2-S8 does not widen that claim to multi-resource holds.
+A `SchedulerHold` is durable PostgreSQL allocation truth with explicit assignments, occupied interval and persisted `expiresAt`. G2-S4 certifies the current one-resource hold lifecycle. G2-S8 and G2-S9 do not widen that claim to multi-resource holds.
 
 ### Reservation
 
-A `SchedulerReservation` is persisted PostgreSQL allocation truth with explicit resource assignments and revision/status lifecycle. G2-S8 proves that one reservation may atomically own multiple assignment rows.
+A `SchedulerReservation` is persisted PostgreSQL allocation truth with explicit resource assignments and revision/status lifecycle. G2-S8 proves that one reservation may atomically own multiple assignment rows. G2-S9 re-audits that normalized truth jointly with Appointment and command-ledger state.
 
 ## 3. G2-S0 — contract + persistence foundation
 
@@ -322,7 +322,52 @@ generalized cancellation/completion lifecycle
 
 G2-S4 holds and the G2-S7 Appointment product path retain their existing one-resource boundaries.
 
-## 13. Forward-compatible predecessor gates
+## 13. G2-S9 — final clean closure
+
+G2-S9 adds no normal feature scope. Its purpose is to certify that all previous Scheduler gates coexist on one exact final branch head and preserve their truth boundaries.
+
+Dedicated candidate proof:
+
+```text
+candidate head  3ad95d39d69c39c0ff8bc44f959f4087d75cc52c
+push run        35129373821  SUCCESS
+PR run          35129379874  SUCCESS
+```
+
+The terminal gate starts from pristine PostgreSQL/Mongo persistence and executes:
+
+```text
+full migration chain
+G2-S0 persistence
+G2-S1 management
+G2-S2 deterministic availability
+G2-S3 atomic one-resource reservation
+G2-S4 one-resource hold lifecycle
+G2-S5 multi-business isolation
+G2-S6 frozen Services demand handoff
+G2-S8 atomic multi-resource allocation
+Temporal + worker + CTA + channel runtime
+G2-S7 Appointment/Services integration
+CTA orchestration regression
+terminal relational truth audit
+```
+
+The final truth audit verifies the graph that remains after all those probes have executed together:
+
+```text
+Scheduler resources/reservations/assignments/holds/demands/commands present
+zero orphan scheduler_reservation_assignments
+Scheduler-backed Appointments have zero legacy ResourceReservation shadows
+G2-S7 Appointments point to RESERVED capacity with exactly one assignment
+G2-S8 reservations retain exactly BAY + TECHNICIAN assignments
+G2-S5 business fixtures remain materially present
+no duplicate business+operation command identities
+successful reservation commands keep durable result IDs
+```
+
+Static closure guards additionally prohibit provider/channel mechanics, Appointment workflow logic, or mutable Services table queries from leaking into Scheduler core.
+
+## 14. Forward-compatible predecessor gates
 
 Historical S0/S3/S4/S5/S6 guards protect the durable producer invariant:
 
@@ -333,15 +378,15 @@ Scheduler foundation/reservation/hold/multi-business/Services-handoff core
 must not import or branch on Appointment/provider-specific orchestration
 ```
 
-G2-S8 continues that provider/channel-agnostic rule.
+G2-S8 and G2-S9 continue that provider/channel-agnostic rule.
 
-## 14. Capacity/time semantics
+## 15. Capacity/time semantics
 
 Capacity feasibility applies to occupied intervals including demand buffers. Persisted instants remain explicit offset/UTC values; Scheduler receives canonical instants and explicit IANA timezones. No implicit server-local time is permitted.
 
-The current G2-S8 joint-candidate proof requires a common canonical query timezone across the selected resource set. Cross-timezone optimization is not claimed.
+The current G2-S8 joint-candidate proof requires a common canonical query timezone across the selected resource set. Cross-timezone optimization is not claimed by G2-S9.
 
-## 15. PostgreSQL authority
+## 16. PostgreSQL authority
 
 Canonical Scheduler truth remains:
 
@@ -363,7 +408,7 @@ Composite business-scoped foreign keys protect declared relationships. The comma
 
 Multi-resource certification uses the existing normalized assignment table; no second allocation authority is introduced.
 
-## 16. Certification path
+## 17. Certification path
 
 ```text
 G2-S0 contract + persistence foundation                       ✅ CERTIFIED
@@ -375,23 +420,55 @@ G2-S5 multi-business generality                              ✅ CERTIFIED
 G2-S6 Services snapshot/demand integration                   ✅ CERTIFIED
 G2-S7 Appointment Workflow integration                       ✅ CERTIFIED
 G2-S8 multi-resource assignment + atomicity                  ✅ CERTIFIED
-G2-S9 final clean certification                              ⏭️ NEXT
+G2-S9 final clean certification                              ✅ CERTIFIED
 ```
 
-No gate may advance until the predecessor has dedicated CI, protected predecessor regressions, terminal marker, artifact evidence, receipt/non-claims, machine-ledger transition, and same-gate exact-final-head rerun.
+Machine terminal state:
 
-## 17. G2-S9 frozen target
+```text
+G2-S0..G2-S9 = CERTIFIED
+currentNext  = null
+```
 
-G2-S9 adds no normal feature scope. It is the final clean Scheduler closure over G2-S0 through G2-S8 plus protected Services, Appointment, CTA/channel and persistence regressions.
+No Scheduler gate was allowed to advance until its predecessor had dedicated CI, protected predecessor regressions, terminal marker, artifact evidence, receipt/non-claims, machine-ledger transition, and same-gate exact-final-head rerun.
 
-It must verify documentation/ledger consistency, run the full Scheduler proof chain from a pristine laboratory, emit final evidence and terminal marker, and preserve every explicit non-claim. It must not silently widen G2-S8 into solver/optimization or multi-resource holds.
+## 18. Terminal truth boundary
 
-## 18. Truth boundary
+Scheduler G2 certifies:
 
-G2-S8 certifies bounded deterministic multi-resource availability and all-or-nothing reservation across multiple concrete resources. It does **not** certify production readiness, a generalized optimization engine, multi-resource holds, generalized cancellation lifecycle, Integration Engine provider behavior, or Agent/MCP intelligence.
+```text
+deterministic resource/capability/schedule management
+deterministic one-resource availability
+atomic one-resource reservation under concurrency
+durable one-resource hold lifecycle and logical expiry
+multi-business isolation
+immutable Services scheduling-demand handoff
+Scheduler-backed one-resource Appointment finalization
+bounded exhausted-retry orphan-capacity compensation
+deterministic bounded multi-resource availability
+atomic BAY + TECHNICIAN reservation
+operation idempotency/replay
+all-or-nothing multi-resource concurrency
+```
 
-## 19. Bounded claim
+Scheduler G2 does **not** certify:
 
-The Scheduler Engine is certified through G2-S8 for deterministic resource scheduling, durable one-resource holds, one- and multi-resource atomic reservations, multi-business isolation, immutable Services revision handoff, Scheduler-backed one-resource Appointment orchestration, replay/idempotency, and bounded failure compensation.
+```text
+multi-resource holds
+solver / optimizer / ranking / best-fit / routing
+workforce planning or travel/sequence optimization
+heterogeneous cross-timezone optimization
+Appointment generalized multi-resource demand consumption
+generalized cancellation/completion lifecycle
+arbitrary historical Services reconstruction
+production SLA / load / HA / disaster recovery
+whole-platform release readiness
+Integration Engine provider behavior
+Agent/MCP intelligence
+```
 
-G2-S9 is the final Scheduler closure. Certification does not authorize merge; PR #32 remains draft/unmerged and continued work remains on `build/g2-scheduler`.
+## 19. Bounded terminal claim
+
+The Scheduler Engine G2 track is closed for its bounded deterministic scheduling scope. It is certified through G2-S9 for resource scheduling, durable one-resource holds, one- and multi-resource atomic reservations, multi-business isolation, immutable Services revision handoff, Scheduler-backed one-resource Appointment orchestration, replay/idempotency, bounded failure compensation, and final shared-state integrity.
+
+G2-S9 closure does not authorize merge. PR #32 remains draft/unmerged until explicit owner authorization. New normal Scheduler feature work must not be smuggled into the closed G2 claim; any later expansion requires a separately scoped post-G2 change and its own truth boundary.
