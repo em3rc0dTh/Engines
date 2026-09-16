@@ -167,6 +167,16 @@ The candidate proof is sufficient to write the receipt and advance the machine l
 
 After documentation completion, the **same G2-S7 workflow must run again from zero on the exact final branch head for both push and pull-request events**. Those final run IDs and artifact digests are recorded on PR #32 so the sealed head is not mutated merely to copy CI metadata into itself.
 
+## 2026-09-16 human replay and certification-harness isolation
+
+A clean local replay of the official S7 sequence reproduced the inherited Appointment, Services S7, and Scheduler G2-S7 proofs successfully. The final CTA PoC then reported `NO_AVAILABILITY` for the nearest Friday because the preceding probes had deliberately consumed all three canonical fixture slots on that date.
+
+The failure was therefore a date-sensitive certification-harness collision rather than a Scheduler/Appointment product regression. The CTA PoC fixture horizon was moved from the nearest `+2 day` bookable date to an isolated `+14 day` horizon so the CTA regression continues to prove the migrated orchestration path without sharing the nearest-date capacity consumed by the inherited Appointment/Services probes.
+
+This change affects certification data selection only. It does not alter production availability, reservation, Appointment, Services, Scheduler, Temporal, provider, or channel semantics.
+
+Because this evidence update mutates the canonical branch head, the hard final-head rule still applies: the dedicated G2-S7 push and pull-request workflows must both pass on the exact post-fix head before that head is treated as sealed.
+
 ## Truth boundary
 
 Not claimed by G2-S7:
