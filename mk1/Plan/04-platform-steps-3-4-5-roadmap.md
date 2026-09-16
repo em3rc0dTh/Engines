@@ -2,137 +2,283 @@
 
 ## Status
 
-**DESIGN ROADMAP — BUILD NOT STARTED FOR SCHEDULER/INTEGRATION**
+**SCHEDULER G2-S0..G2-S9 CERTIFIED — G2 CLOSED**
 
-This roadmap advances the architecture shown in the platform diagram while preserving current certified work.
+This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
+
+Exact-final-head evidence is kept on PR #32 after documentation-complete branch seals. The branch itself is not mutated merely to copy final run IDs/digests, because that would create a new unsealed head.
 
 ## Current certified baseline
 
 ```text
 Step 1 CTA / Channels
   WebChat C1A+C1B                       ✅ CERTIFIED + HUMAN VERIFIED
-  Telegram C2                           DESIGN/BUILD PREP
+  Telegram adapter/official transport  ✅ CERTIFIED ON INHERITED BASELINE
+  WhatsApp/Kapso transport regression  ✅ CERTIFIED ON INHERITED BASELINE
+  Canonical CTA compatibility/router   ✅ SCHEDULER-PATH RE-CERTIFIED
 
-Step 2 Temporal Orchestration           ✅ FOUNDATION CERTIFIED
+Step 2 Temporal Orchestration           ✅ CURRENT APPOINTMENT SLICE CERTIFIED
 
 Step 3 Services Engine
-  S0–S5                                 ✅ CERTIFIED
-  S6–S8                                 OPEN
+  S0–S8 / G1                           ✅ CERTIFIED
 
-Step 4 Scheduler Engine                 DESIGN NOW
+Layer 6 Persistence / Storage
+  PostgreSQL + MongoDB v4 + ObjectStore ✅ CERTIFIED
 
-Step 5 Integration Engine               BOUNDARY DESIGN NOW / BUILD LATER
+Pre-Scheduler node/edge closure         ✅ CERTIFIED
+
+Step 4 Scheduler Engine
+  G2-S0 Contract + persistence          ✅ CERTIFIED
+  G2-S1 Resource/schedule management    ✅ CERTIFIED
+  G2-S2 Deterministic availability      ✅ CERTIFIED
+  G2-S3 Atomic reservation conflict     ✅ CERTIFIED
+  G2-S4 Holds + expiry/replay           ✅ CERTIFIED
+  G2-S5 Multi-business generality       ✅ CERTIFIED
+  G2-S6 Services snapshot integration   ✅ CERTIFIED
+  G2-S7 Appointment integration         ✅ CERTIFIED
+  G2-S8 Multi-resource atomicity        ✅ CERTIFIED
+  G2-S9 Final clean certification       ✅ CERTIFIED
+  Scheduler G2                         ✅ CLOSED
+
+Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
+```
+
+## Canonical Scheduler branch policy
+
+```text
+ACTIVE BRANCH  build/g2-scheduler
+ACTIVE PR      #32 — Scheduler G2 canonical track
+BASE           feature/pre-scheduler-node-edge-certification
+
+Historical per-gate PRs
+  #29 G2-S0   CLOSED / UNMERGED / evidence preserved
+  #30 G2-S1   CLOSED / UNMERGED / evidence preserved
+  #31 G2-S2   CLOSED / UNMERGED / evidence preserved
+```
+
+From G2-S3 through final closure, normal Scheduler development stayed on `build/g2-scheduler`. No normal per-gate branch was created. Each gate received its own workflow, executable proof, receipt, machine-ledger transition, artifact evidence and exact-final-head rerun. Certification still does not authorize merge.
+
+## Mandatory Scheduler certification rule
+
+```text
+IMPLEMENT
+→ DEDICATED GATE CI
+→ PREDECESSOR REGRESSIONS
+→ GATE-SPECIFIC TERMINAL MARKER
+→ EVIDENCE ARTIFACT + DIGEST
+→ TEST RECEIPT + NON-CLAIMS
+→ MACHINE LEDGER UPDATE
+→ RE-RUN THE SAME GATE ON THE FINAL BRANCH HEAD
+→ ONLY THEN EXECUTE THE NEXT GATE
+```
+
+Canonical policy: `mk1/Test/g2-scheduler-certification-policy.md`
+
+Machine state: `mk1/Test/g2-scheduler-certification-ledger.json`
+
+Executable verifier: `mk1/runtime/scripts/verify-scheduler-certification-ledger.ts`
+
+Terminal machine state after G2-S9 promotion:
+
+```text
+G2-S0..G2-S9 = CERTIFIED
+currentNext  = null
 ```
 
 ## Track A — Services completion
 
-```text
-S6 Multi-business generality
-S7 Appointment integration with new Services contract
-S8 final clean G1 certification
-```
+**CLOSED.**
 
-Before S7 closes, the Appointment flow must consume canonical Services snapshots rather than legacy assumptions. Do not couple S7 to a non-existent Scheduler implementation beyond the frozen handoff contract.
+```text
+S6 Multi-business generality                     ✅ CERTIFIED
+S7 Appointment integration with Services         ✅ CERTIFIED
+S8 Final clean G1 certification                  ✅ CERTIFIED
+G1 Services Engine                               ✅ CERTIFIED
+```
 
 ## Track B — Scheduler design/build
 
-Proposed gates:
+**CLOSED after G2-S9 exact-final-head certification.**
+
+Scheduler owns concrete time/resource allocation; Services owns catalog/commercial and abstract scheduling semantics; Temporal owns durable orchestration.
 
 ```text
-G2-S0 Contract + persistence foundation
-G2-S1 Resource/capability/schedule management
-G2-S2 Deterministic availability engine
-G2-S3 Atomic reservation + concurrency conflict
-G2-S4 Holds + expiry + replay
-G2-S5 Multi-business generality
-G2-S6 Services snapshot/demand integration
-G2-S7 Appointment Workflow integration
-G2-S8 Multi-resource assignment proof or explicit deferral
-G2-S9 Final clean Scheduler certification
+G2-S0 Contract + persistence foundation                         ✅ CERTIFIED
+G2-S1 Resource/capability/schedule management                   ✅ CERTIFIED
+G2-S2 Deterministic availability engine                        ✅ CERTIFIED
+G2-S3 Atomic reservation + concurrency conflict                ✅ CERTIFIED
+G2-S4 Holds + expiry + replay                                   ✅ CERTIFIED
+G2-S5 Multi-business generality                                 ✅ CERTIFIED
+G2-S6 Services snapshot/demand integration                      ✅ CERTIFIED
+G2-S7 Appointment Workflow integration                          ✅ CERTIFIED
+G2-S8 Multi-resource assignment + atomicity                     ✅ CERTIFIED
+G2-S9 Final clean Scheduler certification                       ✅ CERTIFIED
 ```
 
-### G2-S0
+### G2-S0 — CERTIFIED
 
-Deliver:
+Frozen contracts, PostgreSQL Scheduler schema, immutable `SchedulingDemand`, resource/schedule/override persistence, hold/reservation assignment schema, operation identity ledger and provider-agnostic boundaries.
+
+### G2-S1 — CERTIFIED
+
+Versioned/idempotent resource and schedule management with optimistic revision checks and business-scoped mutation safety.
+
+### G2-S2 — CERTIFIED
+
+Deterministic one-resource availability over ACTIVE resources, capability/resource-kind matching, recurring schedules, overrides, segment-wise capacity, reservations, logically-unexpired holds, buffers and deterministic candidate ordering.
+
+### G2-S3 — CERTIFIED
 
 ```text
-SchedulerResource
-ResourceCapability
-ScheduleTemplate
-ScheduleOverride
-SchedulingDemand
-SlotCandidate
-Hold
-Reservation
-PostgreSQL schema
-contract tests
+two concurrent confirmations for final capacity
+→ exactly one RESERVED success
+→ exactly one CAPACITY_CONFLICT / stale-capacity loser
+→ exactly one persisted reservation + assignment + successful command
+→ loser commits zero business effect
 ```
 
-No Appointment rewrite yet.
+Stale candidates are revalidated at commit; replay/idempotency is preserved.
 
-### G2-S1
+### G2-S4 — CERTIFIED
 
-Certify versioned/idempotent management of resources and schedule definitions.
+Durable one-resource hold create/release/replay, persisted-time logical expiry independent of cleanup timing, restart/re-entry correctness and atomic hold consumption into reservation.
 
-### G2-S2
+### G2-S5 — CERTIFIED
 
-Certify deterministic read-only availability generation from schedules, overrides, capabilities, capacity and existing allocations.
+Same implementation, materially different businesses, strict isolation for resource/schedule/availability/hold/reservation/idempotency state, cross-business references fail closed and no customer/provider forks in Scheduler core.
 
-### G2-S3
-
-Certify the critical invariant:
+### G2-S6 — CERTIFIED
 
 ```text
-two concurrent confirmations for last capacity
-→ exactly one success
-→ exactly one typed conflict
-→ no partial second business effect
+frozen ServicesSelectionSnapshot
+→ materialize SchedulingDemand by value
+→ validate
+→ persist scheduler_demands + snapshot_hash
+→ Scheduler executes from persisted demand
 ```
 
-### G2-S4
+Demand N remains unchanged after Services publishes materially different N+1; new demand sees N+1. Same demand/material replays, changed immutable material fails closed.
 
-Add expiring holds and prove replay/restart semantics.
-
-### G2-S5
-
-Run materially different business fixtures through the same Scheduler implementation with zero vertical branches.
-
-### G2-S6
-
-Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Offering revisions. Prove catalog head N+1 does not silently change an active scheduling demand from N.
-
-### G2-S7
-
-Migrate `RegisterNewAppointment`:
+### G2-S7 — CERTIFIED
 
 ```text
-Services selection
-→ SchedulingDemand
+Services exact selection
+→ frozen SchedulingDemand
 → QueryAvailability
-→ selected candidate
-→ optional hold
+→ advisory SlotCandidate
 → explicit Finalize
-→ ConfirmReservation
-→ Appointment result references Scheduler reservation
+→ atomic ConfirmReservation
+→ Appointment.scheduler_reservation_id
+→ terminal CTA/domain projection
 ```
 
-Preserve `availability shown != reservation persisted`.
+Temporal remains orchestration authority; Scheduler remains capacity authority. Current Appointment uses one concrete Scheduler resource, writes no legacy `ResourceReservation` shadow, replays durable reservation on retry, and executes bounded orphan-capacity compensation only after downstream persistence exhausts its retry budget.
+
+That compensation is not a generalized cancellation lifecycle.
+
+### G2-S8 — CERTIFIED
+
+G2-S8 chose implementation rather than deferral. It certifies bounded real multi-resource scheduling:
+
+```text
+SchedulingDemand
+  ├── BAY_ACCESS → BAY
+  └── TECHNICIAN → TECHNICIAN
+       ↓
+intersect per-capability deterministic availability
+       ↓
+joint SlotCandidate with distinct concrete resources
+       ↓
+sort assignments by resourceId
+       ↓
+lock all capacity keys/resources in deterministic order
+       ↓
+revalidate complete joint candidate
+       ↓
+commit one reservation + all assignments + command atomically
+```
+
+Certified invariants:
+
+```text
+one distinct concrete resource per capability demand
+common canonical query timezone across selected set
+capacityUnits applied to every selected assignment
+same operation/material replays durable result before availability lookup
+concurrent final-pair race → one winner / one zero-effect loser
+reservation + N assignments + command are all-or-nothing
+provider/channel and Appointment-specific mechanics remain outside Scheduler core
+```
+
+Explicit non-claims retained by G2-S8:
+
+```text
+multi-resource holds
+solver / optimizer / best-fit / scoring / routing
+heterogeneous candidate display timezones
+general staff shift/travel/sequence planning
+Appointment consuming multi-resource demands
+general reservation cancellation/completion lifecycle
+```
+
+### G2-S9 — CERTIFIED TERMINAL CLOSURE
+
+G2-S9 adds no normal feature scope. It re-proves the complete Scheduler G2 graph from pristine persistence and then audits the combined durable state.
+
+Candidate proof head:
+
+```text
+3ad95d39d69c39c0ff8bc44f959f4087d75cc52c
+```
+
+Candidate dedicated runs:
+
+```text
+Push 35129373821  SUCCESS
+PR   35129379874  SUCCESS
+```
+
+The terminal gate verifies:
+
+```text
+fresh PostgreSQL/Mongo laboratory
+full migration chain
+ledger/receipt/design consistency
+G2-S0 foundation
+G2-S1 management
+G2-S2 availability
+G2-S3 one-resource atomic reservation
+G2-S4 holds
+G2-S5 multi-business
+G2-S6 frozen Services handoff
+G2-S8 multi-resource atomicity
+Temporal + worker + CTA + channel runtime
+G2-S7 Appointment orchestration
+CTA orchestration regression
+final relational truth audit
+final evidence artifact + terminal seal
+```
+
+The final relational audit additionally requires zero orphan reservation assignments, zero legacy Appointment capacity shadows, one-resource integrity on the protected G2-S7 Appointment path, BAY+TECHNICIAN integrity on G2-S8 reservations, multi-business fixture survival, and command-ledger identity integrity.
+
+G2-S9 preserves all prior non-claims. It does not widen Scheduler into an optimizer, multi-resource hold engine, workforce planner, generalized cancellation engine, production SLA claim or whole-platform release certification.
+
+### Forward-compatible predecessor regressions
+
+Historical Scheduler workflows enforce the durable boundary:
+
+```text
+later consumers may use Scheduler
+Scheduler producer/core layers may not import or branch on Appointment/provider-specific orchestration
+```
+
+G2-S9 also runs protected Services, Appointment, CTA/channel, Telegram and WhatsApp contract regressions and a full shared-persistence proof chain.
 
 ## Track C — Integration boundary
 
-Do not build a broad provider platform yet.
+Integration remains separate from core scheduling.
 
-Prepare common contracts first, then choose the first concrete integration from actual product need.
-
-Likely first implementations:
-
-```text
-payment provider
-or
-notification provider
-```
-
-Future gate shape:
+Future Integration work may use the already-frozen boundary:
 
 ```text
 I0 Integration command/event contracts
@@ -143,57 +289,42 @@ I4 first real provider adapter
 I5 Temporal composition + failure/recovery proof
 ```
 
-## Track D — Telegram C2
-
-Telegram proceeds independently of Scheduler/Integration implementation.
-
-Before physical/manual bot testing, build synthetic deterministic proof:
-
-```text
-TelegramAdapter
-trusted route config
-Telegram update identity
-text + callback normalization
-reuse ChannelExecutionCore
-reuse channel_conversation_bindings
-reuse channel_inbound_events
-bot-process restart recovery
-full synthetic Appointment flow
-WebChat regression
-```
-
-A real bot token/network test is explicitly deferred until requested.
+No Integration gate is implied certified by Scheduler completion.
 
 ## Cross-track dependency rules
 
 ```text
-Telegram must not wait for Scheduler.
-Scheduler must consume Services snapshots, not channels.
-Integration must not become a prerequisite for core scheduling.
-Appointment may migrate to Scheduler only after Scheduler conflict semantics are certified.
-Agent/MCP waits until deterministic Steps 1–7 are sufficiently mature.
+Channel work must not wait for Scheduler.
+Scheduler consumes frozen Services snapshots/demands, not channels.
+Integration is not a prerequisite for core scheduling.
+Appointment migration is complete at G2-S7.
+Persistence ownership stays explicit across PostgreSQL / MongoDB / Object Store.
+Agent/MCP waits until deterministic core gates are sufficiently mature.
+Scheduler G2 is frozen after terminal certification except for explicitly scoped fixes/regressions.
 ```
 
-## Immediate design decisions frozen by this roadmap
+## Frozen authority boundaries
 
 ```text
-Services = commercial/catalog semantics
+Services = commercial/catalog + abstract scheduling semantics
 Scheduler = concrete time/resource allocation
 Integration = external-system adapter/delivery mechanics
-Telegram interactive ingress = CTA, not Integration
-PostgreSQL = Scheduler transactional truth
+Channel interactive ingress = CTA, not Integration
+PostgreSQL = transactional operational truth
 Temporal = orchestration authority
-Mongo = audit/semantic evidence
+MongoDB = operational document/audit/semantic evidence
+Object Store = attachment bytes/content integrity
 ```
 
-## Next executable work after design review
+## Next executable work
 
-Recommended sequence:
+Before any new platform track begins:
 
 ```text
-1. Continue Services S6 on its existing Services certification line.
-2. Open a dedicated Scheduler build branch from a documented compatible MK1 head.
-3. Implement G2-S0 contracts/persistence only.
-4. In parallel, implement C2 Telegram synthetic adapter proof on its own channel branch.
-5. Do not integrate Appointment with Scheduler until G2-S3 conflict correctness is proven.
+1. Re-run the dedicated G2-S9 gate on the exact documentation-complete head for push + PR.
+2. Require the terminal machine ledger to pass with currentNext = null.
+3. Preserve final G2-S9 run IDs/artifact digests on PR #32 without mutating the sealed head.
+4. Keep PR #32 draft/unmerged; certification does not authorize merge.
+5. Do not add normal Scheduler features after closure without opening a separately scoped post-G2 change.
+6. Only after owner direction choose merge/review disposition for PR #32 or start the next platform track.
 ```
