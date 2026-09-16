@@ -25,6 +25,8 @@ G3-I5  Temporal composition + failure/recovery certification
 
 ## Mandatory rule
 
+No Integration gate may be skipped.
+
 Every gate must execute this sequence before the next gate begins:
 
 ```text
@@ -40,6 +42,8 @@ IMPLEMENT / FORMALIZE
 ```
 
 Documentation changes after a successful code run move the head and therefore require the same gate to be re-run on the new exact head before certification is claimed.
+
+A candidate run may prove implementation while the current gate remains `NEXT`. Promotion to `CERTIFIED` requires the receipt, evidence and ledger transition, followed by the same dedicated gate succeeding on the documentation-complete exact head.
 
 ## Authority rules
 
@@ -67,6 +71,25 @@ customer identity authority
 interactive channel conversation routing
 Temporal orchestration authority
 raw secret values in canonical payloads/evidence
+```
+
+## I0-specific truth boundary
+
+G3-I0 is contracts and authority only. It may certify provider-neutral `IntegrationCommand` / `IntegrationEvent` validation, stable business-scoped operation/event identities, canonical secret exclusion and static authority boundaries.
+
+G3-I0 must not claim:
+
+```text
+configured external connections
+secret storage
+outbound persistence or delivery
+retry persistence
+inbound HTTP/webhook transport
+webhook authentication
+dedup persistence
+real provider acceptance
+Temporal Integration composition
+production security/readiness
 ```
 
 ## Existing channel transports
