@@ -11,6 +11,11 @@ on:
       - 'mk1/runtime/src/integration/delivery-executor.ts'
       - 'mk1/runtime/src/integration/providers/kapso-whatsapp.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i4-readiness.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-real-outbound.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-real-webhook.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g3-integration-engine-i4-human-runbook.md'
       - 'mk1/Test/g3-integration-certification-ledger.json'
       - 'mk1/Design/07-integration-engine-contract.md'
       - '.github/workflows/mk1-integration-g3-i4.yml'
@@ -73,7 +78,17 @@ jobs:
             echo 'I4 readiness probe must not emit the real-provider certification marker' >&2
             exit 1
           fi
+          if grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' scripts/certify-integration-g3-i4-live-session.ts; then
+            echo 'I4 live harness may prove the provider round trip but must not self-promote the gate' >&2
+            exit 1
+          fi
           grep -F 'INTEGRATION_G3_I4_HUMAN_TEST_READY' scripts/certify-integration-g3-i4-readiness.ts
+          grep -F 'INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED' scripts/certify-integration-g3-i4-live-session.ts
+          grep -F 'INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED' scripts/certify-integration-g3-i4-live-session.ts
+          grep -F 'INTEGRATION_G3_I4_REAL_PROVIDER_PASS' scripts/certify-integration-g3-i4-live-session.ts
+          grep -F 'executeIntegrationOutboundOperation' scripts/certify-integration-g3-i4-live-session.ts
+          grep -F 'acceptIntegrationWebhook' scripts/certify-integration-g3-i4-live-session.ts
+          echo 'INTEGRATION_G3_I4_LIVE_HARNESS_CONTRACT_PASS' | tee /tmp/g3-i4-live-harness.log
           echo 'INTEGRATION_G3_I4_TRUTH_BOUNDARY_PASS' | tee /tmp/g3-i4-truth-boundary.log
       - name: Capture contract readiness evidence
         if: always()
@@ -216,6 +231,7 @@ jobs:
           Kapso HMAC -> canonical IntegrationEvent        PASS
           Invalid signature -> zero durable event         PASS
           Secret/raw transport durability boundary        PASS
+          Single-session live harness contract            PASS
           I0-I3 durable predecessors                      PASS
           Scheduler/Services/Appointment/CTA regressions  PASS
           Real Kapso provider acceptance                  PENDING HUMAN
