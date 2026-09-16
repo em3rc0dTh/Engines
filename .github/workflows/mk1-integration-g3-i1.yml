@@ -135,6 +135,7 @@ jobs:
           grep -F 'INTEGRATION_G3_I1_CONNECTION_REGISTRY_PASS' /tmp/g3-i1-probe.log
           grep -F 'INTEGRATION_G3_I1_SECRET_REFERENCE_PASS' /tmp/g3-i1-probe.log
           grep -F 'INTEGRATION_G3_I1_CAPABILITY_GUARD_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_REVISION_GUARD_PASS' /tmp/g3-i1-probe.log
           grep -F 'INTEGRATION_G3_I1_BUSINESS_ISOLATION_PASS' /tmp/g3-i1-probe.log
           grep -F 'INTEGRATION_G3_I1_REGISTRY_SEMANTICS_PASS' /tmp/g3-i1-probe.log
           grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/g3-i1-probe.log

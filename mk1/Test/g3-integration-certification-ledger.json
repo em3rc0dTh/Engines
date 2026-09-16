@@ -3,7 +3,7 @@
   "engine": "Integration",
   "track": "G3",
   "policy": "sequential-hard-gates",
-  "currentNext": "G3-I1",
+  "currentNext": "G3-I2",
   "gates": [
     {
       "id": "G3-I0",
@@ -15,7 +15,7 @@
     },
     {
       "id": "G3-I1",
-      "status": "NEXT",
+      "status": "CERTIFIED",
       "predecessor": "G3-I0",
       "expectedReceipt": "mk1/Test/g3-integration-engine-i1.md",
       "expectedWorkflow": ".github/workflows/mk1-integration-g3-i1.yml",
@@ -23,7 +23,7 @@
     },
     {
       "id": "G3-I2",
-      "status": "OPEN",
+      "status": "NEXT",
       "predecessor": "G3-I1",
       "expectedReceipt": "mk1/Test/g3-integration-engine-i2.md",
       "expectedWorkflow": ".github/workflows/mk1-integration-g3-i2.yml",

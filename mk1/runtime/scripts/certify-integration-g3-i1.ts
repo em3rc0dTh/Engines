@@ -121,6 +121,18 @@ async function run(): Promise<void> {
     assert.equal(disabledA.revision, 2);
 
     await assert.rejects(
+      repository.setConnectionStatus('i1-business-a', 'calendar-primary', 1, 'ENABLED'),
+      (error: unknown) => {
+        expectCode(error, 'CONNECTION_REVISION_CONFLICT');
+        return true;
+      },
+    );
+    const afterStaleWrite = await repository.getConnection('i1-business-a', 'calendar-primary');
+    assert.equal(afterStaleWrite?.status, 'DISABLED');
+    assert.equal(afterStaleWrite?.revision, 2);
+    console.log('INTEGRATION_G3_I1_REVISION_GUARD_PASS');
+
+    await assert.rejects(
       repository.resolveConnection('i1-business-a', 'calendar-primary', 'calendar.create_event'),
       (error: unknown) => {
         expectCode(error, 'CONNECTION_DISABLED');

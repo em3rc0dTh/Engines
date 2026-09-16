@@ -2,9 +2,9 @@
 
 ## Status
 
-**G3-I0 CERTIFIED — G3-I1 NEXT**
+**G3-I0 CERTIFIED · G3-I1 CERTIFICATION CANDIDATE · G3-I2 NEXT AFTER EXACT-HEAD I1 SEAL**
 
-Scheduler G2 is terminally closed and merged into the baseline. Integration Engine is a separate authority boundary on `build/g3-integration` / PR #33.
+Scheduler G2 is terminally closed and merged into the baseline. Integration Engine remains a separate authority boundary on `build/g3-integration` / PR #33.
 
 ## Purpose
 
@@ -39,26 +39,24 @@ MongoDB      = operational document/audit/semantic evidence
 Object Store = attachment bytes/content integrity
 ```
 
-Integration MUST NOT become a second Scheduler, Services catalog, CTA router, customer identity authority, or Temporal replacement.
+Integration MUST NOT become a second Scheduler, Services catalog, CTA router, customer identity authority, Temporal replacement, Agent runtime, or MCP registry.
 
 ## G3 roadmap
 
 ```text
 I0  canonical command/event contracts + authority boundary        ✅ CERTIFIED
-I1  connection/provider registry + secret references              NEXT
-I2  durable outbound command + retry/idempotency ledger           OPEN
+I1  connection/provider registry + secret references              certification candidate
+I2  durable outbound command + retry/idempotency ledger           NEXT after I1 exact-head seal
 I3  authenticated inbound webhook + deduplication ledger          OPEN
 I4  first real provider adapter                                   OPEN
 I5  Temporal composition + failure/recovery certification         OPEN
 ```
 
-## I0 certified canonical concepts
+## G3-I0 canonical contracts
 
 ### IntegrationCommand
 
-A provider-neutral request emitted by an authoritative workflow/domain caller.
-
-Executable canonical fields:
+Provider-neutral outbound intent:
 
 ```text
 schemaVersion = 1
@@ -74,13 +72,11 @@ requestedAt
 correlation? { correlationId, causationId? }
 ```
 
-The contract describes *what external effect is requested*. Provider-specific HTTP routes, SDK calls, webhook shapes, access tokens, API keys and retry headers are outside the canonical command.
+The command states *what external effect is requested*. Provider-specific HTTP routes, SDK calls, webhook shapes, tokens, API keys and retry headers are outside the canonical command.
 
 ### IntegrationEvent
 
-A provider-neutral fact accepted from an external system after provider authentication, normalization and replay protection at the Integration boundary.
-
-Executable canonical fields:
+Provider-neutral inbound fact:
 
 ```text
 schemaVersion = 1
@@ -96,64 +92,119 @@ receivedAt
 correlation? { correlationId, causationId? }
 ```
 
-Canonical consumers must not depend on raw provider JSON for ordinary domain behavior. Provider evidence, when introduced later, remains outside the core canonical shape.
+Canonical consumers must not depend on raw provider JSON for ordinary domain behavior.
 
 ### Canonical payload safety
 
-G3-I0 executable validation rejects secret-like material recursively from canonical payloads, including token/API-key/password/secret/authorization/private-key/credential families.
+Executable I0 validation rejects secret-like material recursively and rejects provider transport mechanics such as provider endpoints/routes, SDK methods, HTTP methods and HTTP headers from canonical payloads.
 
-It also rejects provider transport mechanics such as provider endpoints/routes, SDK methods, HTTP methods and HTTP headers from canonical payloads. These belong behind provider adapters in later gates.
-
-### Connection identity
-
-A connection identifies one business-scoped configured relationship to an external provider/system. Connection identity is not the secret itself.
-
-G3-I0 only establishes `connectionRef` as a provider-neutral reference carried by commands/events. G3-I1 will define and persist the registry material such as:
-
-```text
-connectionRef
-businessSlug
-providerKind
-externalAccountRef/status metadata
-secretRef(s)
-capabilities[]
-```
-
-No connection registry is claimed by I0.
-
-### Secret references
-
-Secrets are referenced, never embedded into canonical commands/events, durable evidence receipts, logs or provider-neutral contracts.
-
-G3-I0 certifies exclusion of secret material from the canonical payload boundary. Secret-reference registry semantics and storage-provider binding belong to G3-I1.
-
-### Operation identity
-
-Outbound intent exposes stable business-scoped operation identity:
+Outbound operation identity remains business scoped:
 
 ```text
 integration-operation:{businessSlug}:{operationId}
 ```
 
-The G3-I0 proof requires identical business/material identity to reproduce the same canonical identity and a different business to produce a different identity.
-
-I0 does not yet claim successful delivery, provider idempotency, retry persistence or a durable outbound command ledger.
-
-### Provider event identity
-
-Inbound identity is scoped by business + connection + provider event identity:
+Inbound provider-event identity remains business + connection scoped:
 
 ```text
 integration-event:{businessSlug}:{connectionRef}:{providerEventIdentity}
 ```
 
-The G3-I0 proof requires exact replay to reproduce the same identity while a changed business or connection produces a distinct identity.
+## G3-I1 registry model
 
-I0 does not yet claim webhook authentication, inbound transport or persisted deduplication.
+I1 materializes the provider-neutral connection boundary established by I0.
+
+### Provider registry
+
+```text
+providerKind
+displayName
+status = ENABLED | DISABLED
+capabilities[]
+revision
+```
+
+A provider definition describes capabilities available behind an adapter. I1 does not execute provider HTTP/SDK mechanics.
+
+### Business-scoped connection registry
+
+```text
+connectionRef
+businessSlug
+providerKind
+externalAccountRef?
+status = ENABLED | DISABLED
+capabilities[]
+secretRefs[]
+revision
+createdAt
+updatedAt
+```
+
+Durable identity is:
+
+```text
+(businessSlug, connectionRef)
+```
+
+The same `connectionRef` may therefore exist for different businesses without sharing state. Connection capabilities MUST be a subset of the referenced provider's capabilities.
+
+### Secret references
+
+Secrets are referenced, never embedded in canonical commands/events or persisted as registry values.
+
+I1 reference shape:
+
+```text
+secretRef
+purpose
+bindingKind = ENV | EXTERNAL_SECRET_STORE
+bindingRef
+```
+
+`bindingRef` is a locator/name. It is not a token, API key, password, Authorization header or credential value.
+
+PostgreSQL tables intentionally separate registry metadata:
+
+```text
+integration_providers
+integration_connections
+integration_secret_references
+```
+
+`integration_secret_references` MUST NOT acquire secret-value fields. Resolution of actual credential material belongs behind a later provider-adapter/secret-resolution boundary and is not an I1 claim.
+
+### Registry lifecycle semantics
+
+I1 requires:
+
+```text
+provider must exist and be ENABLED before a connection is created
+connection capabilities ⊆ provider capabilities
+identical provider/connection material may replay idempotently
+changed material under the same durable identity conflicts
+disabled connections fail closed at resolve time
+status mutation requires expected revision
+stale revision update fails without changing durable state
+business scopes remain isolated
+```
+
+Canonical registry errors include:
+
+```text
+PROVIDER_NOT_FOUND
+PROVIDER_DISABLED
+PROVIDER_CONFLICT
+CONNECTION_NOT_FOUND
+CONNECTION_DISABLED
+CONNECTION_CONFLICT
+CONNECTION_REVISION_CONFLICT
+CAPABILITY_NOT_SUPPORTED
+```
 
 ## Error taxonomy baseline
 
-Canonical failures remain provider-neutral enough for Temporal/domain policy:
+Provider-facing failures remain provider-neutral enough for Temporal/domain policy:
 
 ```text
 INVALID_COMMAND
@@ -171,7 +222,7 @@ INVALID_PROVIDER_EVENT
 DUPLICATE_PROVIDER_EVENT
 ```
 
-Provider-specific status/error codes may later be preserved as evidence but must map into a canonical category before leaving Integration Engine.
+Provider-specific error codes may later be retained as evidence but must map into canonical categories before leaving Integration Engine.
 
 ## Directionality and ownership
 
@@ -179,7 +230,7 @@ Provider-specific status/error codes may later be preserved as evidence but must
 
 ```text
 Temporal/domain owns intent and orchestration
-Integration owns provider delivery mechanics
+Integration owns connection resolution and provider delivery mechanics
 Provider owns external acceptance semantics
 ```
 
@@ -191,9 +242,9 @@ Integration owns replay/dedup boundary and canonical event emission
 Temporal/domain owns resulting business workflow decisions
 ```
 
-## G3-I0 executable certification
+## Executable certification surfaces
 
-Certified implementation:
+### I0
 
 ```text
 mk1/runtime/src/contracts/integration-engine/types.ts
@@ -201,55 +252,47 @@ mk1/runtime/src/contracts/integration-engine/validation.ts
 mk1/runtime/src/contracts/integration-engine/index.ts
 mk1/runtime/src/contracts/integration-engine/integration-engine.contract.test.ts
 mk1/runtime/scripts/certify-integration-g3-i0.ts
-mk1/runtime/scripts/verify-integration-certification-ledger.ts
 .github/workflows/mk1-integration-g3-i0.yml
 ```
 
-The dedicated gate proves:
+### I1
 
 ```text
-provider-neutral command/event validation
-stable outbound operation and provider-event identities
-business and connection scoping
-recursive canonical secret exclusion
-provider HTTP/SDK mechanics exclusion
-static authority/import boundaries
-protected Scheduler/Services/Appointment/CTA/channel regressions
-machine-ledger sequentiality
+mk1/runtime/src/integration/registry.ts
+mk1/runtime/src/integration/registry.test.ts
+mk1/runtime/src/persistence/postgres/integration-registry.repository.ts
+mk1/runtime/migrations/012_integration_registry.sql
+mk1/runtime/scripts/migrate-postgres-integration-g3-i1.ts
+mk1/runtime/scripts/certify-integration-g3-i1.ts
+.github/workflows/mk1-integration-g3-i1.yml
 ```
 
-Terminal marker:
+I1 receipt: `mk1/Test/g3-integration-engine-i1.md`.
+Evidence: `mk1/Build/evidence/integration-g3-i1-certification-2026-09-16.md`.
+
+## Explicit exclusions after I1
+
+Even after I1 certification, Integration Engine does **not** yet claim:
 
 ```text
-INTEGRATION_G3_I0_CERTIFICATION_PASS
-```
-
-Candidate evidence is preserved in `mk1/Build/evidence/integration-g3-i0-certification-2026-09-16.md`. G3-I0 is promoted only under the policy requiring the same dedicated gate to pass again on the documentation-complete exact head.
-
-## Explicit exclusions retained after I0
-
-G3-I0 does **not** certify:
-
-```text
-configured external connections
-real provider credentials
-secret storage or secret-manager implementation
-HTTP/webhook server implementation
+secret values stored by Engines
+concrete secret-manager retrieval/rotation
 outbound command persistence/delivery
-outbound retry persistence
+retry/backoff persistence
+provider idempotency-key delivery
+inbound webhook authentication
 inbound dedup persistence
-provider delivery/acceptance
-provider webhook authentication
-real provider adapter
+real provider HTTP/SDK adapter acceptance
 Temporal Integration composition
 production security/readiness
-WhatsApp/Telegram/Facebook/TikTok-specific Integration claims
+Agent behavior
+MCP behavior
 ```
 
-Existing interactive Telegram/WhatsApp channel transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
+Existing Telegram/WhatsApp/Kapso interactive transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
 
-## Next gate — G3-I1
+## Next gate — G3-I2
 
-G3-I1 may now define the business-scoped connection/provider registry and secret-reference boundary. It must not implement outbound delivery/retry, inbound webhook/dedup, or a real provider adapter ahead of their gates.
+After I1 passes its dedicated workflow on the documentation-complete exact head for both push and PR, G3-I2 may implement durable outbound command execution state, idempotent replay, bounded retry scheduling/state and terminal delivery outcomes while preserving the I0/I1 authority and secret boundaries.
 
-Until G3-I1 receives its own dedicated executable gate, receipt, evidence, machine-ledger promotion and exact-head reseal, it remains **NEXT, not certified**.
+No merge authorization is implied by any Integration certification gate. PR #33 remains draft/open/unmerged until explicit owner authorization.
