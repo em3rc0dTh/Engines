@@ -2,9 +2,9 @@
 
 ## Status
 
-**G3-I0 CERTIFIED · G3-I1 CERTIFICATION CANDIDATE · G3-I2 NEXT AFTER EXACT-HEAD I1 SEAL**
+**G3-I0 CERTIFIED · G3-I1 CERTIFIED · G3-I2 NEXT**
 
-Scheduler G2 is terminally closed and merged into the baseline. Integration Engine remains a separate authority boundary on `build/g3-integration` / PR #33.
+Scheduler G2 is terminally closed and merged into the baseline. Integration Engine remains a separate authority boundary on `build/g3-integration` / PR #33. Certification status is valid only on an exact head that passes the corresponding dedicated gate.
 
 ## Purpose
 
@@ -45,8 +45,8 @@ Integration MUST NOT become a second Scheduler, Services catalog, CTA router, cu
 
 ```text
 I0  canonical command/event contracts + authority boundary        ✅ CERTIFIED
-I1  connection/provider registry + secret references              certification candidate
-I2  durable outbound command + retry/idempotency ledger           NEXT after I1 exact-head seal
+I1  connection/provider registry + secret references              ✅ CERTIFIED
+I2  durable outbound command + retry/idempotency ledger           NEXT
 I3  authenticated inbound webhook + deduplication ledger          OPEN
 I4  first real provider adapter                                   OPEN
 I5  Temporal composition + failure/recovery certification         OPEN
@@ -270,6 +270,12 @@ mk1/runtime/scripts/certify-integration-g3-i1.ts
 I1 receipt: `mk1/Test/g3-integration-engine-i1.md`.
 Evidence: `mk1/Build/evidence/integration-g3-i1-certification-2026-09-16.md`.
 
+## Existing channel truth boundary
+
+Existing interactive Telegram/WhatsApp channel transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
+
+Kapso evidence likewise remains within its existing CTA/channel transport claim unless a later Integration gate explicitly certifies a provider adapter through the Integration contract.
+
 ## Explicit exclusions after I1
 
 Even after I1 certification, Integration Engine does **not** yet claim:
@@ -289,10 +295,8 @@ Agent behavior
 MCP behavior
 ```
 
-Existing Telegram/WhatsApp/Kapso interactive transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
-
 ## Next gate — G3-I2
 
-After I1 passes its dedicated workflow on the documentation-complete exact head for both push and PR, G3-I2 may implement durable outbound command execution state, idempotent replay, bounded retry scheduling/state and terminal delivery outcomes while preserving the I0/I1 authority and secret boundaries.
+G3-I2 may implement durable outbound command execution state, idempotent replay, bounded retry scheduling/state and terminal delivery outcomes while preserving the I0/I1 authority and secret boundaries.
 
 No merge authorization is implied by any Integration certification gate. PR #33 remains draft/open/unmerged until explicit owner authorization.

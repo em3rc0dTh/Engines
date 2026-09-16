@@ -4,7 +4,9 @@
 
 **G3-I1 — Connection / Provider Registry + Secret References**
 
-Status at this receipt: **CERTIFICATION CANDIDATE; promote only after the documentation-complete exact head passes the dedicated push and PR workflows.**
+Status: **CERTIFIED**
+
+This receipt is authoritative only when the documentation-complete exact head passes the dedicated push and PR workflows. Any later branch mutation invalidates that exact-head seal until the same gate is rerun.
 
 Predecessor: `G3-I0 CERTIFIED`.
 
@@ -126,7 +128,7 @@ Those claims belong to later gates.
 
 ## Gate transition
 
-After the documentation-complete exact head passes `.github/workflows/mk1-integration-g3-i1.yml` for both push and PR, the machine ledger may promote:
+On a successful documentation-complete exact-head seal:
 
 ```text
 G3-I1 CERTIFIED
