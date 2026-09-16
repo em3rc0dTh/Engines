@@ -87,6 +87,7 @@
     "probe:scheduler:g2:s6": "tsx scripts/certify-scheduler-g2-s6.ts",
     "probe:scheduler:g2:s7": "tsx scripts/certify-scheduler-g2-s7.ts",
     "probe:integration:g3:i0": "tsx scripts/certify-integration-g3-i0.ts",
+    "probe:integration:g3:i4:live": "tsx scripts/certify-integration-g3-i4-live-session.ts",
     "verify:integration:g3": "tsx scripts/verify-integration-certification-ledger.ts",
     "probe:webchat:c1": "tsx scripts/certify-webchat-c1.ts",
     "probe:webchat:c1b": "tsx scripts/certify-webchat-c1b.ts",
