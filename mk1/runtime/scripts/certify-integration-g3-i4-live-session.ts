@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server } from 'node:http';
+import { createInterface } from 'node:readline/promises';
 import { Pool } from 'pg';
 import { loadRuntimeConfig } from '../src/config/runtime-config.js';
 import type { IntegrationCommand, IntegrationEvent } from '../src/contracts/integration-engine/index.js';
@@ -126,6 +127,22 @@ async function listen(server: Server, host: string, port: number): Promise<void>
   });
 }
 
+async function awaitHumanArm(publicWebhookUrl: string | undefined, path: string): Promise<void> {
+  if (process.env.KAPSO_I4_AUTO_START?.trim().toLowerCase() === 'true') return;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error('KAPSO_I4_INTERACTIVE_TERMINAL_REQUIRED_OR_SET_KAPSO_I4_AUTO_START=true');
+  }
+  const terminal = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const endpoint = publicWebhookUrl ?? `https://<your-tunnel>${path}`;
+    await terminal.question(
+      `Listener is armed. Configure Kapso event whatsapp.message.received -> ${endpoint} with the same webhook secret, then press Enter to send the real proof message... `,
+    );
+  } finally {
+    terminal.close();
+  }
+}
+
 async function registerKapsoConnection(input: Readonly<{
   registry: PostgresIntegrationRegistryRepository;
   businessSlug: string;
@@ -203,6 +220,7 @@ async function run(): Promise<void> {
   let proofResolve: ((value: AcceptedProof) => void) | undefined;
   let proofReject: ((reason: unknown) => void) | undefined;
   let proofSettled = false;
+  let timeout: NodeJS.Timeout | undefined;
   const proofPromise = new Promise<AcceptedProof>((resolve, reject) => {
     proofResolve = resolve;
     proofReject = reject;
@@ -237,11 +255,11 @@ async function run(): Promise<void> {
         ledger: inbound,
       });
 
-      // Acknowledge every authenticated, canonical event quickly. Only the
-      // nonce-bound reply completes this physical certification session.
       response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
       response.end('OK');
 
+      // Valid but unrelated events are acknowledged and durably deduplicated.
+      // Only the nonce-bound reply completes this physical proof session.
       if (!proofSettled && eventText(acceptance.event) === replyToken) {
         proofSettled = true;
         proofResolve?.(acceptance);
@@ -256,13 +274,6 @@ async function run(): Promise<void> {
     }
   });
 
-  const timeout = setTimeout(() => {
-    if (proofSettled) return;
-    proofSettled = true;
-    proofReject?.(new Error(`KAPSO_I4_REAL_WEBHOOK_TIMEOUT:${timeoutMs}`));
-  }, timeoutMs);
-  timeout.unref();
-
   try {
     await registerKapsoConnection({ registry, businessSlug, connectionRef, phoneNumberId, now });
     await listen(server, host, port);
@@ -272,8 +283,18 @@ async function run(): Promise<void> {
       port,
       path,
       ...(publicWebhookUrl ? { publicWebhookUrl } : {}),
-      replyToken,
+      healthPath: '/health',
     })}`);
+
+    await awaitHumanArm(publicWebhookUrl, path);
+
+    timeout = setTimeout(() => {
+      if (proofSettled) return;
+      proofSettled = true;
+      proofReject?.(new Error(`KAPSO_I4_REAL_WEBHOOK_TIMEOUT:${timeoutMs}`));
+    }, timeoutMs);
+    timeout.unref();
+
     console.log(`INTEGRATION_G3_I4_LIVE_ACTION_REQUIRED Reply exactly ${replyToken} from the authorized WhatsApp test recipient.`);
 
     const command: IntegrationCommand = {
@@ -383,7 +404,7 @@ async function run(): Promise<void> {
       receiptFile,
     })}`);
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
     if (server.listening) await closeServer(server);
     await pool.end();
   }
