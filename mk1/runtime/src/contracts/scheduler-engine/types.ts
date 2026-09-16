@@ -111,7 +111,7 @@ export type QueryAvailabilityInput = Readonly<{
     timeZone: string;
   }>;
   preferredResourceIds?: readonly string[];
-  limit?: number;
+  limit?: number | undefined;
 }>;
 
 export type AvailabilityResult = Readonly<{
