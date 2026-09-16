@@ -4,6 +4,8 @@ Status: **CANDIDATE — NOT CERTIFIED**
 
 G2-S8 extends the certified Scheduler without changing the G2-S0..G2-S7 authority boundaries.
 
+Candidate retry note: the first dedicated run correctly failed TypeScript because an optional `limit` was passed explicitly as `undefined` under `exactOptionalPropertyTypes`; the contract now permits that explicit omission and the same G2-S8 gate is rerun before any certification promotion.
+
 ## Target
 
 Prove that one SchedulingDemand can require more than one concrete resource simultaneously and that confirmation is atomic across the whole resource set.
