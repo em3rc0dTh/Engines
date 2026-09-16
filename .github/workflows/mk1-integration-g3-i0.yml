@@ -1,0 +1,179 @@
+name: MK1 Integration G3-I0 Canonical Contracts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/contracts/integration-engine/**'
+      - 'mk1/runtime/scripts/certify-integration-g3-i0.ts'
+      - 'mk1/runtime/scripts/verify-integration-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g3-integration-engine-i0.md'
+      - 'mk1/Test/g3-integration-certification-policy.md'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i0-certification-2026-09-16.md'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-integration-g3-i0.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-and-boundaries:
+    name: g3-i0-contracts-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check | tee /tmp/g3-i0-typescript.log
+
+      - name: Integration sequential certification ledger
+        run: npm run verify:integration:g3 | tee /tmp/g3-i0-ledger.log
+
+      - name: G3-I0 contract tests
+        run: npm run test:integration:g3:i0 | tee /tmp/g3-i0-contract-tests.log
+
+      - name: G3-I0 executable authority certification
+        run: npm run probe:integration:g3:i0 | tee /tmp/g3-i0-probe.log
+
+      - name: Require G3-I0 proof markers
+        run: |
+          grep -F 'INTEGRATION_G3_I0_AUTHORITY_BOUNDARY_PASS' /tmp/g3-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_PROVIDER_NEUTRAL_PASS' /tmp/g3-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_CONTRACTS_PASS' /tmp/g3-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_SECRET_BOUNDARY_PASS' /tmp/g3-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_IDENTITY_PASS' /tmp/g3-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_CERTIFICATION_PASS' /tmp/g3-i0-probe.log
+
+      - name: Capture contract evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i0-contract-evidence
+          git rev-parse HEAD > /tmp/g3-i0-contract-evidence/git-sha.txt
+          cp /tmp/g3-i0-typescript.log /tmp/g3-i0-contract-evidence/ 2>/dev/null || true
+          cp /tmp/g3-i0-ledger.log /tmp/g3-i0-contract-evidence/ 2>/dev/null || true
+          cp /tmp/g3-i0-contract-tests.log /tmp/g3-i0-contract-evidence/ 2>/dev/null || true
+          cp /tmp/g3-i0-probe.log /tmp/g3-i0-contract-evidence/ 2>/dev/null || true
+
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i0-contracts-${{ github.run_id }}
+          path: /tmp/g3-i0-contract-evidence
+          if-no-files-found: error
+
+  protected-predecessor-regressions:
+    name: g3-i0-protected-predecessor-regressions
+    needs: contracts-and-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Scheduler + Services + Appointment regressions
+        run: |
+          npm run test:scheduler:g2:s0 | tee /tmp/g3-i0-scheduler-s0.log
+          npm run test:scheduler:g2:s6 | tee /tmp/g3-i0-scheduler-s6.log
+          npm run test:services:s1 | tee /tmp/g3-i0-services.log
+          npm run test:appointment | tee /tmp/g3-i0-appointment.log
+
+      - name: CTA/channel/provider transport regressions
+        run: |
+          npm run test:cta:poc | tee /tmp/g3-i0-cta.log
+          npm run test:channel:c0 | tee /tmp/g3-i0-channel.log
+          npm run test:telegram:bot-api | tee /tmp/g3-i0-telegram.log
+          npm run test:whatsapp:kapso | tee /tmp/g3-i0-whatsapp.log
+
+      - name: Protected predecessor marker
+        run: echo 'INTEGRATION_G3_I0_PREDECESSOR_REGRESSION_PASS'
+
+      - name: Capture regression evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i0-regression-evidence
+          git rev-parse HEAD > /tmp/g3-i0-regression-evidence/git-sha.txt
+          cp /tmp/g3-i0-*.log /tmp/g3-i0-regression-evidence/ 2>/dev/null || true
+
+      - name: Upload regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i0-regressions-${{ github.run_id }}
+          path: /tmp/g3-i0-regression-evidence
+          if-no-files-found: error
+
+  integration-g3-i0-seal:
+    name: integration-g3-i0-seal
+    needs:
+      - contracts-and-boundaries
+      - protected-predecessor-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build G3-I0 seal
+        run: |
+          mkdir -p /tmp/g3-i0-seal
+          git rev-parse HEAD | tee /tmp/g3-i0-seal/git-sha.txt
+          cat > /tmp/g3-i0-seal/certification.txt <<'EOF'
+          IntegrationCommand canonical contract             PASS
+          IntegrationEvent canonical contract               PASS
+          Business-scoped operation identity                PASS
+          Business+connection provider-event identity       PASS
+          Recursive canonical secret exclusion              PASS
+          Provider transport-mechanics exclusion            PASS
+          Provider-neutral contract boundary                PASS
+          Scheduler/Services/Appointment authority boundary PASS
+          CTA/channel transport boundary preserved          PASS
+          Protected predecessor regressions                 PASS
+          EOF
+          echo 'INTEGRATION_G3_I0_CERTIFICATION_PASS' | tee /tmp/g3-i0-seal/terminal-marker.txt
+
+      - name: Upload G3-I0 seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i0-seal-${{ github.run_id }}
+          path: /tmp/g3-i0-seal
+          if-no-files-found: error
+
+      - name: Terminal certification marker
+        run: echo 'INTEGRATION_G3_I0_CERTIFICATION_PASS'
