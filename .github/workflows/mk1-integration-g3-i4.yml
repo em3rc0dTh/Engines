@@ -18,6 +18,7 @@ on:
       - 'mk1/Test/g3-integration-engine-i4-human-runbook.md'
       - 'mk1/Test/g3-integration-certification-ledger.json'
       - 'mk1/Design/07-integration-engine-contract.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
       - '.github/workflows/mk1-integration-g3-i4.yml'
   pull_request:
     branches:
@@ -52,6 +53,21 @@ jobs:
       - run: npm ci
       - name: TypeScript
         run: npm run check | tee /tmp/g3-i4-typescript.log
+      - name: TypeScript live-provider harness
+        run: |
+          npx tsc --noEmit \
+            --target ES2022 \
+            --module NodeNext \
+            --moduleResolution NodeNext \
+            --strict \
+            --noUncheckedIndexedAccess \
+            --exactOptionalPropertyTypes \
+            --esModuleInterop \
+            --forceConsistentCasingInFileNames \
+            --skipLibCheck \
+            --types node \
+            scripts/certify-integration-g3-i4-live-session.ts \
+            | tee /tmp/g3-i4-live-typescript.log
       - name: Sequential Integration ledger remains I4 NEXT
         run: |
           npm run verify:integration:g3 | tee /tmp/g3-i4-ledger.log
