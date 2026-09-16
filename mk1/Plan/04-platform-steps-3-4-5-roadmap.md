@@ -2,11 +2,11 @@
 
 ## Status
 
-**SCHEDULER G2-S0..G2-S9 CERTIFIED — G2 CLOSED**
+**SCHEDULER G2 CLOSED + MERGED — INTEGRATION G3-I0 CERTIFIED / G3-I1 NEXT**
 
 This roadmap advances the platform while preserving certified authority boundaries. Scheduler and Integration remain separate engines; later gates never inherit claims merely because earlier contracts or schema exist.
 
-Exact-final-head evidence is kept on PR #32 after documentation-complete branch seals. The branch itself is not mutated merely to copy final run IDs/digests, because that would create a new unsealed head.
+Scheduler G2 exact-final-head evidence is preserved on merged PR #32. Integration G3 now continues on the separate canonical branch `build/g3-integration` and draft PR #33.
 
 ## Current certified baseline
 
@@ -38,17 +38,25 @@ Step 4 Scheduler Engine
   G2-S7 Appointment integration         ✅ CERTIFIED
   G2-S8 Multi-resource atomicity        ✅ CERTIFIED
   G2-S9 Final clean certification       ✅ CERTIFIED
-  Scheduler G2                         ✅ CLOSED
+  Scheduler G2                         ✅ CLOSED + MERGED
 
-Step 5 Integration Engine               BOUNDARY DESIGN / BUILD LATER
+Step 5 Integration Engine
+  G3-I0 Canonical contracts/boundary    ✅ CERTIFIED
+  G3-I1 Connection/provider registry    NEXT
+  G3-I2 Outbound delivery ledger        OPEN
+  G3-I3 Inbound webhook/dedup            OPEN
+  G3-I4 First real provider adapter     OPEN
+  G3-I5 Temporal composition/recovery   OPEN
 ```
 
-## Canonical Scheduler branch policy
+## Canonical Scheduler closure
 
 ```text
-ACTIVE BRANCH  build/g2-scheduler
-ACTIVE PR      #32 — Scheduler G2 canonical track
-BASE           feature/pre-scheduler-node-edge-certification
+FINAL BRANCH  build/g2-scheduler
+FINAL PR      #32 — MERGED
+FINAL HEAD    1a3d0f438a4f41602131a6029d25d7a9f22c1331
+MERGE COMMIT  3b1d43d87ef7bb9805e01bcaaf8260008327b1f1
+BASE          feature/pre-scheduler-node-edge-certification
 
 Historical per-gate PRs
   #29 G2-S0   CLOSED / UNMERGED / evidence preserved
@@ -56,7 +64,7 @@ Historical per-gate PRs
   #31 G2-S2   CLOSED / UNMERGED / evidence preserved
 ```
 
-From G2-S3 through final closure, normal Scheduler development stayed on `build/g2-scheduler`. No normal per-gate branch was created. Each gate received its own workflow, executable proof, receipt, machine-ledger transition, artifact evidence and exact-final-head rerun. Certification still does not authorize merge.
+From G2-S3 through final closure, normal Scheduler development stayed on `build/g2-scheduler`. No normal per-gate branch was created. Each gate received its own workflow, executable proof, receipt, machine-ledger transition, artifact evidence and exact-final-head rerun. Scheduler G2 is frozen after merge except for separately scoped fixes/regressions.
 
 ## Mandatory Scheduler certification rule
 
@@ -98,7 +106,7 @@ G1 Services Engine                               ✅ CERTIFIED
 
 ## Track B — Scheduler design/build
 
-**CLOSED after G2-S9 exact-final-head certification.**
+**CLOSED AND MERGED after G2-S9 exact-final-head certification.**
 
 Scheduler owns concrete time/resource allocation; Services owns catalog/commercial and abstract scheduling semantics; Temporal owns durable orchestration.
 
@@ -225,39 +233,13 @@ general reservation cancellation/completion lifecycle
 
 G2-S9 adds no normal feature scope. It re-proves the complete Scheduler G2 graph from pristine persistence and then audits the combined durable state.
 
-Candidate proof head:
+Final exact Scheduler head:
 
 ```text
-3ad95d39d69c39c0ff8bc44f959f4087d75cc52c
+1a3d0f438a4f41602131a6029d25d7a9f22c1331
 ```
 
-Candidate dedicated runs:
-
-```text
-Push 35129373821  SUCCESS
-PR   35129379874  SUCCESS
-```
-
-The terminal gate verifies:
-
-```text
-fresh PostgreSQL/Mongo laboratory
-full migration chain
-ledger/receipt/design consistency
-G2-S0 foundation
-G2-S1 management
-G2-S2 availability
-G2-S3 one-resource atomic reservation
-G2-S4 holds
-G2-S5 multi-business
-G2-S6 frozen Services handoff
-G2-S8 multi-resource atomicity
-Temporal + worker + CTA + channel runtime
-G2-S7 Appointment orchestration
-CTA orchestration regression
-final relational truth audit
-final evidence artifact + terminal seal
-```
+Final dedicated runs are preserved on merged PR #32. The terminal gate verifies the fresh persistence/migration chain, S0-S8 proof graph, protected platform integration and final relational truth audit.
 
 The final relational audit additionally requires zero orphan reservation assignments, zero legacy Appointment capacity shadows, one-resource integrity on the protected G2-S7 Appointment path, BAY+TECHNICIAN integrity on G2-S8 reservations, multi-business fixture survival, and command-ledger identity integrity.
 
@@ -274,22 +256,65 @@ Scheduler producer/core layers may not import or branch on Appointment/provider-
 
 G2-S9 also runs protected Services, Appointment, CTA/channel, Telegram and WhatsApp contract regressions and a full shared-persistence proof chain.
 
-## Track C — Integration boundary
+## Track C — Integration Engine G3
 
-Integration remains separate from core scheduling.
+Integration remains separate from core scheduling and interactive CTA/channel ingress.
 
-Future Integration work may use the already-frozen boundary:
+Canonical track:
 
 ```text
-I0 Integration command/event contracts
-I1 connection/provider registry + secret references
-I2 durable outbound command/retry ledger
-I3 authenticated inbound webhook/idempotency ledger
-I4 first real provider adapter
-I5 Temporal composition + failure/recovery proof
+ACTIVE BRANCH  build/g3-integration
+ACTIVE PR      #33 — Integration G3 canonical track
+BASE           feature/pre-scheduler-node-edge-certification @ Scheduler merge 3b1d43d87ef7bb9805e01bcaaf8260008327b1f1
 ```
 
-No Integration gate is implied certified by Scheduler completion.
+Sequential gate state:
+
+```text
+G3-I0 canonical command/event contracts + authority boundary   ✅ CERTIFIED
+G3-I1 connection/provider registry + secret references         NEXT
+G3-I2 durable outbound command + retry/idempotency ledger       OPEN
+G3-I3 authenticated inbound webhook + deduplication ledger      OPEN
+G3-I4 first real provider adapter                               OPEN
+G3-I5 Temporal composition + failure/recovery certification     OPEN
+```
+
+### G3-I0 — CERTIFIED
+
+G3-I0 freezes the provider-neutral executable contracts:
+
+```text
+Temporal/domain
+  → IntegrationCommand
+  → Integration Engine boundary
+
+provider-authenticated/normalized input
+  → IntegrationEvent
+  → Temporal/domain
+```
+
+Certified invariants:
+
+```text
+exact canonical top-level command/event shape
+stable business-scoped operation identity
+stable business + connection scoped provider-event identity
+exactly one subjectRef or targetRef on an IntegrationCommand
+recursive secret-like material rejection from canonical payloads
+provider HTTP/SDK mechanics rejected from canonical payloads
+Integration canonical contracts do not couple to Scheduler/Services/CTA/Temporal implementations
+protected predecessor regressions remain green
+```
+
+The first candidate was correctly rejected by TypeScript `TS2456` for recursive JSON aliases. The recursive JSON contract was repaired using a readonly interface; the proof boundary was not weakened.
+
+G3-I0 does **not** claim a connection registry, secret storage, outbound delivery/retry persistence, inbound webhook/auth/dedup persistence, real provider acceptance, a provider adapter, Temporal Integration composition or production readiness.
+
+Candidate evidence: `mk1/Build/evidence/integration-g3-i0-certification-2026-09-16.md`.
+
+### G3-I1 — NEXT
+
+G3-I1 may introduce the business-scoped connection/provider registry and secret-reference semantics only. It must not jump ahead into outbound delivery, inbound webhook transport or a real provider adapter.
 
 ## Cross-track dependency rules
 
@@ -300,7 +325,8 @@ Integration is not a prerequisite for core scheduling.
 Appointment migration is complete at G2-S7.
 Persistence ownership stays explicit across PostgreSQL / MongoDB / Object Store.
 Agent/MCP waits until deterministic core gates are sufficiently mature.
-Scheduler G2 is frozen after terminal certification except for explicitly scoped fixes/regressions.
+Scheduler G2 is frozen after terminal certification/merge except for explicitly scoped fixes/regressions.
+Integration gates advance sequentially under their own G3 ledger/policy.
 ```
 
 ## Frozen authority boundaries
@@ -318,13 +344,11 @@ Object Store = attachment bytes/content integrity
 
 ## Next executable work
 
-Before any new platform track begins:
-
 ```text
-1. Re-run the dedicated G2-S9 gate on the exact documentation-complete head for push + PR.
-2. Require the terminal machine ledger to pass with currentNext = null.
-3. Preserve final G2-S9 run IDs/artifact digests on PR #32 without mutating the sealed head.
-4. Keep PR #32 draft/unmerged; certification does not authorize merge.
-5. Do not add normal Scheduler features after closure without opening a separately scoped post-G2 change.
-6. Only after owner direction choose merge/review disposition for PR #32 or start the next platform track.
+1. Re-run the dedicated G3-I0 gate on the documentation-complete exact head for push + PR.
+2. Require the machine ledger to report G3-I0 CERTIFIED / G3-I1 NEXT.
+3. Require protected predecessor regressions to remain green on that exact head.
+4. Preserve final G3-I0 run IDs/artifact digests on PR #33 without mutating the sealed head.
+5. Keep PR #33 draft/unmerged; certification does not authorize merge.
+6. Only after the exact-head G3-I0 seal may G3-I1 implementation begin.
 ```
