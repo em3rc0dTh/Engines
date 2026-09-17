@@ -1,0 +1,179 @@
+name: MK1 Integration G3-I5 Temporal Composition Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/orchestration/temporal/activities/integration-delivery.*'
+      - 'mk1/runtime/src/orchestration/temporal/workflows/integration.workflows.ts'
+      - 'mk1/runtime/src/orchestration/temporal/workers/integration.worker.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i5.ts'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-integration-g3-i5.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i5-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+  TEMPORAL_ADDRESS: localhost:7233
+  TEMPORAL_NAMESPACE: default
+
+jobs:
+  i5-contract-and-authority:
+    name: g3-i5-contract-and-authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: TypeScript
+        run: npm run check
+      - name: Require I5 is sequentially next during candidate proof
+        run: |
+          npm run verify:integration:g3 | tee /tmp/g3-i5-ledger.log
+          grep -F 'Integration next gate: G3-I5' /tmp/g3-i5-ledger.log
+          grep -F 'Integration certified gates: 5' /tmp/g3-i5-ledger.log
+      - name: Workflow authority boundary
+        run: |
+          if grep -E "providers/|secret-resolution|KAPSO_|rawBody|webhookSecret|apiKey" \
+            src/orchestration/temporal/workflows/integration.workflows.ts; then
+            echo 'I5 workflow crossed the provider/secret/raw-webhook authority boundary' >&2
+            exit 1
+          fi
+          grep -F 'executeIntegrationDelivery' src/orchestration/temporal/workflows/integration.workflows.ts
+          grep -F 'operationId' src/orchestration/temporal/workflows/integration.workflows.ts
+          grep -F 'nextAttemptAt' src/orchestration/temporal/workflows/integration.workflows.ts
+          grep -F 'leaseExpiresAt' src/orchestration/temporal/workflows/integration.workflows.ts
+          echo 'INTEGRATION_G3_I5_AUTHORITY_BOUNDARY_PASS'
+
+  i5-temporal-recovery:
+    name: g3-i5-temporal-recovery
+    needs: i5-contract-and-authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Start PostgreSQL and Temporal
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up -d --build postgres temporal
+          for i in $(seq 1 60); do
+            if docker compose exec -T postgres pg_isready -U engines -d engines_mk0 >/dev/null 2>&1 \
+              && docker compose exec -T temporal temporal operator cluster health >/dev/null 2>&1; then
+              echo 'G3_I5_INFRA_READY'
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              docker compose ps
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Apply I1-I3 migrations
+        run: |
+          npx tsx scripts/migrate-postgres-integration-g3-i1.ts
+          npx tsx scripts/migrate-postgres-integration-g3-i2.ts
+          npx tsx scripts/migrate-postgres-integration-g3-i3.ts
+      - name: Run actual Temporal failure/recovery certification
+        run: npx tsx scripts/certify-integration-g3-i5.ts | tee /tmp/g3-i5-cert.log
+      - name: Require I5 certification markers
+        run: |
+          grep -F 'INTEGRATION_G3_I5_ACTIVITY_RETRY_TERMINAL_REPLAY_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_I2_RETRY_AUTHORITY_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_TERMINAL_FAILURE_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_CANONICAL_EVENT_HANDOFF_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_WORKFLOW_REPLAY_NO_DUPLICATE_PROVIDER_ATTEMPT_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_WORKFLOW_HISTORY_BOUNDARY_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_CERTIFICATION_PASS' /tmp/g3-i5-cert.log
+      - name: Capture candidate evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i5-candidate-evidence
+          git rev-parse HEAD > /tmp/g3-i5-candidate-evidence/git-sha.txt
+          cp /tmp/g3-i5-cert.log /tmp/g3-i5-candidate-evidence/ 2>/dev/null || true
+          docker compose ps > /tmp/g3-i5-candidate-evidence/compose-ps.txt 2>&1 || true
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i5-candidate-${{ github.run_id }}
+          path: /tmp/g3-i5-candidate-evidence
+          if-no-files-found: error
+      - name: Stop candidate infrastructure
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  i5-protected-regressions:
+    name: g3-i5-protected-regressions
+    needs: i5-contract-and-authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Re-certify protected contracts
+        run: |
+          npm run test:integration:g3:i0
+          npx tsx --test src/integration/registry.test.ts
+          npm run test:scheduler:g2:s0
+          npm run test:scheduler:g2:s6
+          npm run test:services:s1
+          npm run test:appointment
+          npm run test:cta:poc
+          npm run test:channel:c0
+          npm run test:whatsapp:kapso
+          echo 'INTEGRATION_G3_I5_PROTECTED_REGRESSION_PASS'
+
+  i5-candidate-seal:
+    name: integration-g3-i5-candidate-seal
+    needs:
+      - i5-temporal-recovery
+      - i5-protected-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Candidate terminal marker
+        run: |
+          git rev-parse HEAD
+          echo 'INTEGRATION_G3_I5_CANDIDATE_PASS'
