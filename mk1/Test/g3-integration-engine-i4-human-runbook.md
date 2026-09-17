@@ -43,6 +43,25 @@ docker compose down -v --remove-orphans
 docker compose up -d postgres
 ```
 
+The repository Compose contract publishes PostgreSQL only to the local machine at `127.0.0.1:5432` by default. The runtime default connection string therefore resolves correctly from a host-side Node process:
+
+```text
+postgresql://engines:engines@localhost:5432/engines_mk0
+```
+
+The host port can be changed before `docker compose up` with `ENGINES_POSTGRES_HOST_PORT`; if changed, `POSTGRES_URL` must point to the same host port.
+
+Verify PostgreSQL before running any Integration migration.
+
+PowerShell:
+
+```powershell
+docker compose ps postgres
+Test-NetConnection 127.0.0.1 -Port 5432
+```
+
+The TCP test must report `TcpTestSucceeded : True`.
+
 Apply Integration migrations in sequence:
 
 ```bash
@@ -51,7 +70,9 @@ npx tsx scripts/migrate-postgres-integration-g3-i2.ts
 npx tsx scripts/migrate-postgres-integration-g3-i3.ts
 ```
 
-Set the real provider values locally. Do not commit them:
+Set the real provider values locally. Do not commit them.
+
+Bash:
 
 ```bash
 export KAPSO_API_KEY='...'
@@ -59,6 +80,18 @@ export KAPSO_WEBHOOK_SECRET='...'
 export KAPSO_PHONE_NUMBER_ID='...'
 export KAPSO_TEST_RECIPIENT='+<authorized test number>'
 ```
+
+PowerShell:
+
+```powershell
+$env:KAPSO_API_KEY='...'
+$env:KAPSO_WEBHOOK_SECRET='...'
+$env:KAPSO_PHONE_NUMBER_ID='...'
+$env:KAPSO_TEST_RECIPIENT='+<authorized test number>'
+$env:KAPSO_I4_RECEIPT_FILE = Join-Path $env:TEMP 'engines-g3-i4-real-provider-receipt.json'
+```
+
+The explicit Windows receipt path avoids relying on a Unix `/tmp` directory.
 
 ---
 
@@ -99,10 +132,18 @@ cloudflared tunnel --url http://localhost:8792
 
 Keep that tunnel running and copy its generated HTTPS base URL.
 
-Set the complete public webhook URL including the Integration path:
+Set the complete public webhook URL including the Integration path.
+
+Bash:
 
 ```bash
 export KAPSO_I4_PUBLIC_WEBHOOK_URL='https://<your-tunnel>/webhooks/integration-g3-i4'
+```
+
+PowerShell:
+
+```powershell
+$env:KAPSO_I4_PUBLIC_WEBHOOK_URL='https://<your-tunnel>/webhooks/integration-g3-i4'
 ```
 
 ## 2. Start the armed Integration harness
@@ -120,6 +161,8 @@ INTEGRATION_G3_I4_LIVE_LISTENER_READY
 ```
 
 It then pauses before sending the outbound message. This pause is intentional: it removes the race between starting the local listener, registering the public endpoint and receiving the real provider callback.
+
+If the process fails before `INTEGRATION_G3_I4_LIVE_LISTENER_READY`, verify the PostgreSQL container, host port and I1-I3 migrations first. The listener is created only after the provider/connection registry can access PostgreSQL successfully.
 
 ## 3. Configure the Kapso number webhook while the listener is armed
 
@@ -141,6 +184,12 @@ For non-interactive automation only, the pause may be bypassed with:
 
 ```bash
 export KAPSO_I4_AUTO_START=true
+```
+
+PowerShell:
+
+```powershell
+$env:KAPSO_I4_AUTO_START='true'
 ```
 
 Use that only when the public webhook is already configured and reachable.
@@ -169,16 +218,16 @@ The outbound marker requires a real provider message ID. The inbound marker is e
 
 ## 5. Sanitized receipt
 
-On PASS, the harness writes by default:
+On PASS, the harness writes by default on Unix-like environments:
 
 ```text
 /tmp/engines-g3-i4-real-provider-receipt.json
 ```
 
-Override only the destination if necessary:
+On Windows, set the receipt file before launching the harness:
 
-```bash
-export KAPSO_I4_RECEIPT_FILE='/tmp/engines-g3-i4-real-provider-receipt.json'
+```powershell
+$env:KAPSO_I4_RECEIPT_FILE = Join-Path $env:TEMP 'engines-g3-i4-real-provider-receipt.json'
 ```
 
 The generated receipt intentionally contains only promotion-safe evidence:
