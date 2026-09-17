@@ -31,6 +31,7 @@ env:
   POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
   TEMPORAL_ADDRESS: localhost:7233
   TEMPORAL_NAMESPACE: default
+  G3_I5_CERT_REF: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   i5-contract-and-authority:
@@ -43,6 +44,8 @@ jobs:
         shell: bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I5_CERT_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
@@ -81,6 +84,8 @@ jobs:
         shell: bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I5_CERT_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
@@ -125,6 +130,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/g3-i5-certification-evidence
+          test "$(git rev-parse HEAD)" = "$G3_I5_CERT_REF"
           git rev-parse HEAD > /tmp/g3-i5-certification-evidence/git-sha.txt
           cp /tmp/g3-i5-cert.log /tmp/g3-i5-certification-evidence/ 2>/dev/null || true
           docker compose ps > /tmp/g3-i5-certification-evidence/compose-ps.txt 2>&1 || true
@@ -150,6 +156,8 @@ jobs:
         shell: bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I5_CERT_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
@@ -178,7 +186,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I5_CERT_REF }}
       - name: Exact-head terminal certification marker
         run: |
+          test "$(git rev-parse HEAD)" = "$G3_I5_CERT_REF"
           git rev-parse HEAD
           echo 'INTEGRATION_G3_I5_CERTIFICATION_PASS'
