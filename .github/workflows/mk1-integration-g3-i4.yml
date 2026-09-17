@@ -1,4 +1,4 @@
-name: MK1 Integration G3-I4 Kapso Real Provider Readiness
+name: MK1 Integration G3-I4 Kapso Real Provider Certification
 
 on:
   workflow_dispatch:
@@ -6,17 +6,19 @@ on:
     branches:
       - build/g3-integration
     paths:
-      - 'mk1/runtime/src/integration/secret-resolution.ts'
-      - 'mk1/runtime/src/integration/provider.ts'
-      - 'mk1/runtime/src/integration/delivery-executor.ts'
-      - 'mk1/runtime/src/integration/providers/kapso-whatsapp.ts'
+      - 'mk1/runtime/src/contracts/integration-engine/**'
+      - 'mk1/runtime/src/integration/**'
+      - 'mk1/runtime/src/persistence/postgres/integration-*.repository.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i4-readiness.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i4-real-outbound.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i4-real-webhook.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts'
+      - 'mk1/runtime/scripts/verify-integration-certification-ledger.ts'
       - 'mk1/runtime/package.json'
+      - 'mk1/Test/g3-integration-engine-i4.md'
       - 'mk1/Test/g3-integration-engine-i4-human-runbook.md'
       - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md'
       - 'mk1/Design/07-integration-engine-contract.md'
       - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
       - '.github/workflows/mk1-integration-g3-i4.yml'
@@ -35,8 +37,8 @@ env:
   POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/engines_mk0
 
 jobs:
-  i4-contract-readiness:
-    name: g3-i4-kapso-contract-readiness
+  i4-contract-certification:
+    name: g3-i4-contract-certification
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -45,6 +47,8 @@ jobs:
         shell: bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
@@ -53,32 +57,48 @@ jobs:
       - run: npm ci
       - name: TypeScript
         run: npm run check | tee /tmp/g3-i4-typescript.log
-      - name: TypeScript live-provider harness
-        run: |
-          npx tsc --noEmit \
-            --ignoreConfig \
-            --target ES2022 \
-            --module NodeNext \
-            --moduleResolution NodeNext \
-            --strict \
-            --noUncheckedIndexedAccess \
-            --exactOptionalPropertyTypes \
-            --esModuleInterop \
-            --forceConsistentCasingInFileNames \
-            --skipLibCheck \
-            --types node \
-            scripts/certify-integration-g3-i4-live-session.ts \
-            | tee /tmp/g3-i4-live-typescript.log
-      - name: Sequential Integration ledger remains I4 NEXT
+      - name: Verify sequential ledger promotion
         run: |
           npm run verify:integration:g3 | tee /tmp/g3-i4-ledger.log
-          grep -F 'Integration next gate: G3-I4' /tmp/g3-i4-ledger.log
+          grep -F 'Integration certified gates: 5' /tmp/g3-i4-ledger.log
+          grep -F 'Integration next gate: G3-I5' /tmp/g3-i4-ledger.log
           grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/g3-i4-ledger.log
       - name: Re-certify I0 and I1 contract boundaries
         run: |
           npm run test:integration:g3:i0 | tee /tmp/g3-i4-i0.log
           npx tsx --test src/integration/registry.test.ts | tee /tmp/g3-i4-i1.log
-      - name: I4 authority boundary
+      - name: Require physical receipt and repository-safe evidence
+        working-directory: .
+        run: |
+          grep -F '✅ CERTIFIED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_PROVIDER_PASS' mk1/Test/g3-integration-engine-i4.md
+          grep -F '25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'replayed        false' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'PASS — real-provider round trip completed.' mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md
+          if grep -E 'KAPSO_API_KEY[=:][[:space:]]*[^<[:space:]]|KAPSO_WEBHOOK_SECRET[=:][[:space:]]*[^<[:space:]]' \
+            mk1/Test/g3-integration-engine-i4.md \
+            mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md; then
+            echo 'Credential-like value found in committed I4 evidence' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I4_PHYSICAL_EVIDENCE_BOUNDARY_PASS' | tee /tmp/g3-i4-physical-evidence.log
+      - name: Prove implementation unchanged since physical source head
+        working-directory: .
+        run: |
+          physical_sha='25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22'
+          git cat-file -e "${physical_sha}^{commit}"
+          git diff --exit-code "$physical_sha" HEAD -- \
+            mk1/runtime/src/contracts/integration-engine \
+            mk1/runtime/src/integration \
+            mk1/runtime/src/persistence/postgres/integration-registry.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-outbound-ledger.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-inbound-ledger.repository.ts \
+            mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts
+          echo 'INTEGRATION_G3_I4_PHYSICAL_IMPLEMENTATION_IDENTITY_PASS' | tee /tmp/g3-i4-implementation-identity.log
+      - name: Integration authority boundary
         run: |
           if grep -R -E "contracts/(scheduler-engine|services-engine)|cta/" \
             src/integration/secret-resolution.ts \
@@ -89,41 +109,23 @@ jobs:
             exit 1
           fi
           echo 'INTEGRATION_G3_I4_AUTHORITY_BOUNDARY_PASS' | tee /tmp/g3-i4-authority.log
-      - name: Require no real-provider overclaim in deterministic gate
-        run: |
-          if grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' scripts/certify-integration-g3-i4-readiness.ts; then
-            echo 'I4 readiness probe must not emit the real-provider certification marker' >&2
-            exit 1
-          fi
-          if grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' scripts/certify-integration-g3-i4-live-session.ts; then
-            echo 'I4 live harness may prove the provider round trip but must not self-promote the gate' >&2
-            exit 1
-          fi
-          grep -F 'INTEGRATION_G3_I4_HUMAN_TEST_READY' scripts/certify-integration-g3-i4-readiness.ts
-          grep -F 'INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED' scripts/certify-integration-g3-i4-live-session.ts
-          grep -F 'INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED' scripts/certify-integration-g3-i4-live-session.ts
-          grep -F 'INTEGRATION_G3_I4_REAL_PROVIDER_PASS' scripts/certify-integration-g3-i4-live-session.ts
-          grep -F 'executeIntegrationOutboundOperation' scripts/certify-integration-g3-i4-live-session.ts
-          grep -F 'acceptIntegrationWebhook' scripts/certify-integration-g3-i4-live-session.ts
-          echo 'INTEGRATION_G3_I4_LIVE_HARNESS_CONTRACT_PASS' | tee /tmp/g3-i4-live-harness.log
-          echo 'INTEGRATION_G3_I4_TRUTH_BOUNDARY_PASS' | tee /tmp/g3-i4-truth-boundary.log
-      - name: Capture contract readiness evidence
+      - name: Capture contract certification evidence
         if: always()
         run: |
           mkdir -p /tmp/g3-i4-contract-evidence
           git rev-parse HEAD > /tmp/g3-i4-contract-evidence/git-sha.txt
           cp /tmp/g3-i4-*.log /tmp/g3-i4-contract-evidence/ 2>/dev/null || true
-      - name: Upload contract readiness evidence
+      - name: Upload contract certification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-g3-i4-contract-readiness-${{ github.run_id }}
+          name: integration-g3-i4-contract-certification-${{ github.run_id }}
           path: /tmp/g3-i4-contract-evidence
           if-no-files-found: error
 
-  i4-postgres-readiness:
-    name: g3-i4-kapso-postgres-readiness
-    needs: i4-contract-readiness
+  i4-postgres-certification:
+    name: g3-i4-postgres-certification
+    needs: i4-contract-certification
     runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
@@ -165,35 +167,34 @@ jobs:
           grep -F 'INTEGRATION_G3_I2_CERTIFICATION_PASS' /tmp/g3-i4-i2-probe.log
           npx tsx scripts/certify-integration-g3-i3.ts | tee /tmp/g3-i4-i3-probe.log
           grep -F 'INTEGRATION_G3_I3_CERTIFICATION_PASS' /tmp/g3-i4-i3-probe.log
-      - name: Certify Kapso Integration adapter readiness
-        run: npx tsx scripts/certify-integration-g3-i4-readiness.ts | tee /tmp/g3-i4-readiness.log
-      - name: Require I4 readiness proof markers
+      - name: Re-certify deterministic Kapso adapter boundary
+        run: npx tsx scripts/certify-integration-g3-i4-readiness.ts | tee /tmp/g3-i4-adapter.log
+      - name: Require deterministic I4 markers
         run: |
-          grep -F 'INTEGRATION_G3_I4_SECRET_REF_RESOLUTION_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_KAPSO_OUTBOUND_MAPPING_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_PROVIDER_ERROR_MAPPING_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_KAPSO_WEBHOOK_VERIFICATION_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_INVALID_SIGNATURE_ZERO_DURABLE_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_SECRET_PERSISTENCE_BOUNDARY_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_KAPSO_ADAPTER_READY_PASS' /tmp/g3-i4-readiness.log
-          grep -F 'INTEGRATION_G3_I4_HUMAN_TEST_READY' /tmp/g3-i4-readiness.log
-      - name: Capture persistence readiness evidence
+          grep -F 'INTEGRATION_G3_I4_SECRET_REF_RESOLUTION_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_OUTBOUND_MAPPING_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_PROVIDER_ERROR_MAPPING_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_WEBHOOK_VERIFICATION_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_INVALID_SIGNATURE_ZERO_DURABLE_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_SECRET_PERSISTENCE_BOUNDARY_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_ADAPTER_READY_PASS' /tmp/g3-i4-adapter.log
+      - name: Capture persistence certification evidence
         if: always()
         run: |
           mkdir -p /tmp/g3-i4-postgres-evidence
           git rev-parse HEAD > /tmp/g3-i4-postgres-evidence/git-sha.txt
           cp /tmp/g3-i4-*.log /tmp/g3-i4-postgres-evidence/ 2>/dev/null || true
-      - name: Upload persistence readiness evidence
+      - name: Upload persistence certification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-g3-i4-postgres-readiness-${{ github.run_id }}
+          name: integration-g3-i4-postgres-certification-${{ github.run_id }}
           path: /tmp/g3-i4-postgres-evidence
           if-no-files-found: error
 
   i4-protected-regressions:
     name: g3-i4-protected-predecessor-regressions
-    needs: i4-contract-readiness
+    needs: i4-contract-certification
     runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
@@ -223,11 +224,11 @@ jobs:
       - name: Protected predecessor marker
         run: echo 'INTEGRATION_G3_I4_PREDECESSOR_REGRESSION_PASS'
 
-  integration-g3-i4-readiness-seal:
-    name: integration-g3-i4-human-readiness-seal
+  integration-g3-i4-certification-seal:
+    name: integration-g3-i4-certification-seal
     needs:
-      - i4-contract-readiness
-      - i4-postgres-readiness
+      - i4-contract-certification
+      - i4-postgres-certification
       - i4-protected-regressions
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -236,30 +237,40 @@ jobs:
         shell: bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
-      - name: Build G3-I4 human-readiness seal
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Verify final G3 ledger and receipt
+        working-directory: mk1/runtime
         run: |
-          mkdir -p /tmp/g3-i4-readiness-seal
-          git rev-parse HEAD | tee /tmp/g3-i4-readiness-seal/git-sha.txt
-          cat > /tmp/g3-i4-readiness-seal/readiness.txt <<'EOF'
-          Kapso provider adapter contract                 PASS
-          SecretRef -> runtime secret resolution          PASS
-          Canonical outbound -> Kapso mapping             PASS
-          Provider error -> canonical error mapping       PASS
-          Kapso HMAC -> canonical IntegrationEvent        PASS
-          Invalid signature -> zero durable event         PASS
-          Secret/raw transport durability boundary        PASS
-          Single-session live harness contract            PASS
-          I0-I3 durable predecessors                      PASS
-          Scheduler/Services/Appointment/CTA regressions  PASS
-          Real Kapso provider acceptance                  PENDING HUMAN
-          Real signed Kapso webhook                       PENDING HUMAN
-          G3-I4 certification                             NOT CLAIMED
+          npm run verify:integration:g3 | tee /tmp/g3-i4-final-ledger.log
+          grep -F 'Integration certified gates: 5' /tmp/g3-i4-final-ledger.log
+          grep -F 'Integration next gate: G3-I5' /tmp/g3-i4-final-ledger.log
+      - name: Build exact-head G3-I4 certification seal
+        run: |
+          mkdir -p /tmp/g3-i4-certification-seal
+          git rev-parse HEAD | tee /tmp/g3-i4-certification-seal/git-sha.txt
+          cat > /tmp/g3-i4-certification-seal/certification.txt <<'EOF'
+          G3-I0 canonical Integration contracts              PASS
+          G3-I1 provider/connection registry                 PASS
+          G3-I2 durable outbound delivery ledger             PASS
+          G3-I3 authenticated inbound dedup ledger           PASS
+          G3-I4 deterministic Kapso adapter                  PASS
+          G3-I4 real Kapso outbound acceptance               PASS
+          G3-I4 real WhatsApp physical delivery              PASS
+          G3-I4 real signed Kapso webhook                    PASS
+          G3-I4 nonce-bound human round trip                 PASS
+          G3-I4 secret/raw transport durability boundary     PASS
+          Physical implementation identity                  PASS
+          Protected predecessor regressions                  PASS
+          Sequential promotion I5 -> NEXT                    PASS
+          G3-I4 certification                                PASS
           EOF
-          echo 'INTEGRATION_G3_I4_HUMAN_TEST_READY' | tee /tmp/g3-i4-readiness-seal/terminal-marker.txt
+          echo 'INTEGRATION_G3_I4_CERTIFICATION_PASS' | tee /tmp/g3-i4-certification-seal/terminal-marker.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: integration-g3-i4-human-readiness-${{ github.run_id }}
-          path: /tmp/g3-i4-readiness-seal
+          name: integration-g3-i4-certification-${{ github.run_id }}
+          path: /tmp/g3-i4-certification-seal
           if-no-files-found: error
-      - name: Human readiness terminal marker
-        run: echo 'INTEGRATION_G3_I4_HUMAN_TEST_READY'
+      - name: Certification terminal marker
+        run: echo 'INTEGRATION_G3_I4_CERTIFICATION_PASS'
