@@ -1,4 +1,4 @@
-name: MK1 Integration G3-I5 Temporal Composition Candidate
+name: MK1 Integration G3-I5 Temporal Composition Certification
 
 on:
   workflow_dispatch:
@@ -10,7 +10,9 @@ on:
       - 'mk1/runtime/src/orchestration/temporal/workflows/integration.workflows.ts'
       - 'mk1/runtime/src/orchestration/temporal/workers/integration.worker.ts'
       - 'mk1/runtime/scripts/certify-integration-g3-i5.ts'
+      - 'mk1/Test/g3-integration-engine-i5.md'
       - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i5-certification-2026-09-17.md'
       - 'mk1/Design/07-integration-engine-contract.md'
       - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
       - '.github/workflows/mk1-integration-g3-i5.yml'
@@ -49,11 +51,12 @@ jobs:
       - run: npm ci
       - name: TypeScript
         run: npm run check
-      - name: Require I5 is sequentially next during candidate proof
+      - name: Require terminal G3 closure during I5 re-certification
         run: |
           npm run verify:integration:g3 | tee /tmp/g3-i5-ledger.log
-          grep -F 'Integration next gate: G3-I5' /tmp/g3-i5-ledger.log
-          grep -F 'Integration certified gates: 5' /tmp/g3-i5-ledger.log
+          grep -F 'Integration certified gates: 6' /tmp/g3-i5-ledger.log
+          grep -F 'Integration next gate: none' /tmp/g3-i5-ledger.log
+          grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/g3-i5-ledger.log
       - name: Workflow authority boundary
         run: |
           if grep -E "providers/|secret-resolution|KAPSO_|rawBody|webhookSecret|apiKey" \
@@ -68,7 +71,7 @@ jobs:
           echo 'INTEGRATION_G3_I5_AUTHORITY_BOUNDARY_PASS'
 
   i5-temporal-recovery:
-    name: g3-i5-temporal-recovery
+    name: g3-i5-temporal-recovery-and-idempotency
     needs: i5-contract-and-authority
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -105,7 +108,7 @@ jobs:
           npx tsx scripts/migrate-postgres-integration-g3-i1.ts
           npx tsx scripts/migrate-postgres-integration-g3-i2.ts
           npx tsx scripts/migrate-postgres-integration-g3-i3.ts
-      - name: Run actual Temporal failure/recovery certification
+      - name: Run actual Temporal failure/recovery/idempotency certification
         run: npx tsx scripts/certify-integration-g3-i5.ts | tee /tmp/g3-i5-cert.log
       - name: Require I5 certification markers
         run: |
@@ -114,23 +117,25 @@ jobs:
           grep -F 'INTEGRATION_G3_I5_TERMINAL_FAILURE_PASS' /tmp/g3-i5-cert.log
           grep -F 'INTEGRATION_G3_I5_CANONICAL_EVENT_HANDOFF_PASS' /tmp/g3-i5-cert.log
           grep -F 'INTEGRATION_G3_I5_WORKFLOW_REPLAY_NO_DUPLICATE_PROVIDER_ATTEMPT_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_CONCURRENT_IDEMPOTENCY_PASS' /tmp/g3-i5-cert.log
+          grep -F 'INTEGRATION_G3_I5_IDEMPOTENCY_CONFLICT_PASS' /tmp/g3-i5-cert.log
           grep -F 'INTEGRATION_G3_I5_WORKFLOW_HISTORY_BOUNDARY_PASS' /tmp/g3-i5-cert.log
           grep -F 'INTEGRATION_G3_I5_CERTIFICATION_PASS' /tmp/g3-i5-cert.log
-      - name: Capture candidate evidence
+      - name: Capture exact-head certification evidence
         if: always()
         run: |
-          mkdir -p /tmp/g3-i5-candidate-evidence
-          git rev-parse HEAD > /tmp/g3-i5-candidate-evidence/git-sha.txt
-          cp /tmp/g3-i5-cert.log /tmp/g3-i5-candidate-evidence/ 2>/dev/null || true
-          docker compose ps > /tmp/g3-i5-candidate-evidence/compose-ps.txt 2>&1 || true
-      - name: Upload candidate evidence
+          mkdir -p /tmp/g3-i5-certification-evidence
+          git rev-parse HEAD > /tmp/g3-i5-certification-evidence/git-sha.txt
+          cp /tmp/g3-i5-cert.log /tmp/g3-i5-certification-evidence/ 2>/dev/null || true
+          docker compose ps > /tmp/g3-i5-certification-evidence/compose-ps.txt 2>&1 || true
+      - name: Upload exact-head certification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-g3-i5-candidate-${{ github.run_id }}
-          path: /tmp/g3-i5-candidate-evidence
+          name: integration-g3-i5-certification-${{ github.run_id }}
+          path: /tmp/g3-i5-certification-evidence
           if-no-files-found: error
-      - name: Stop candidate infrastructure
+      - name: Stop certification infrastructure
         if: always()
         run: docker compose down -v --remove-orphans || true
 
@@ -164,8 +169,8 @@ jobs:
           npm run test:whatsapp:kapso
           echo 'INTEGRATION_G3_I5_PROTECTED_REGRESSION_PASS'
 
-  i5-candidate-seal:
-    name: integration-g3-i5-candidate-seal
+  i5-certification-seal:
+    name: integration-g3-i5-certification-seal
     needs:
       - i5-temporal-recovery
       - i5-protected-regressions
@@ -173,7 +178,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Candidate terminal marker
+      - name: Exact-head terminal certification marker
         run: |
           git rev-parse HEAD
-          echo 'INTEGRATION_G3_I5_CANDIDATE_PASS'
+          echo 'INTEGRATION_G3_I5_CERTIFICATION_PASS'
