@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "engine": "Integration",
+  "track": "G3",
+  "policy": "sequential-hard-gates",
+  "currentNext": null,
+  "gates": [
+    {
+      "id": "G3-I0",
+      "status": "CERTIFIED",
+      "predecessor": null,
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i0.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i0.yml",
+      "terminalMarker": "INTEGRATION_G3_I0_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G3-I1",
+      "status": "CERTIFIED",
+      "predecessor": "G3-I0",
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i1.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i1.yml",
+      "terminalMarker": "INTEGRATION_G3_I1_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G3-I2",
+      "status": "CERTIFIED",
+      "predecessor": "G3-I1",
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i2.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i2.yml",
+      "terminalMarker": "INTEGRATION_G3_I2_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G3-I3",
+      "status": "CERTIFIED",
+      "predecessor": "G3-I2",
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i3.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i3.yml",
+      "terminalMarker": "INTEGRATION_G3_I3_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G3-I4",
+      "status": "CERTIFIED",
+      "predecessor": "G3-I3",
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i4.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i4.yml",
+      "terminalMarker": "INTEGRATION_G3_I4_CERTIFICATION_PASS"
+    },
+    {
+      "id": "G3-I5",
+      "status": "CERTIFIED",
+      "predecessor": "G3-I4",
+      "expectedReceipt": "mk1/Test/g3-integration-engine-i5.md",
+      "expectedWorkflow": ".github/workflows/mk1-integration-g3-i5.yml",
+      "terminalMarker": "INTEGRATION_G3_I5_CERTIFICATION_PASS"
+    }
+  ]
+}
