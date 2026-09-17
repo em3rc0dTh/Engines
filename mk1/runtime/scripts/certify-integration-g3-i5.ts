@@ -6,7 +6,10 @@ import { Pool } from 'pg';
 import { loadRuntimeConfig } from '../src/config/runtime-config.js';
 import type { IntegrationCommand, IntegrationEvent } from '../src/contracts/integration-engine/index.js';
 import { IntegrationProviderAdapterRegistry, type IntegrationProviderAdapter } from '../src/integration/provider.js';
-import { PostgresIntegrationOutboundLedger } from '../src/persistence/postgres/integration-outbound-ledger.repository.js';
+import {
+  IntegrationOutboundLedgerError,
+  PostgresIntegrationOutboundLedger,
+} from '../src/persistence/postgres/integration-outbound-ledger.repository.js';
 import { PostgresIntegrationRegistryRepository } from '../src/persistence/postgres/integration-registry.repository.js';
 import { createIntegrationDeliveryActivities } from '../src/orchestration/temporal/activities/integration-delivery.activities.js';
 import type { IntegrationTemporalActivities } from '../src/orchestration/temporal/activities/integration-delivery.types.js';
@@ -113,6 +116,7 @@ async function run(): Promise<void> {
       'i5-post-commit-recovery',
       'i5-retry-then-success',
       'i5-permanent-failure',
+      'i5-concurrent-idempotency',
     ]) {
       await ledger.enqueue(command(operationId, connectionRef), 3);
     }
@@ -196,7 +200,60 @@ async function run(): Promise<void> {
     assert.equal(providerCalls.get('i5-post-commit-recovery'), 1);
     console.log('INTEGRATION_G3_I5_WORKFLOW_REPLAY_NO_DUPLICATE_PROVIDER_ATTEMPT_PASS');
 
-    const durableProjection = JSON.stringify({ recovery, retry, permanent, handoff });
+    const concurrentOperationId = 'i5-concurrent-idempotency';
+    const [concurrentA, concurrentB] = await Promise.all([
+      client.workflow.execute(integrationDeliveryWorkflow, {
+        taskQueue: TASK_QUEUE,
+        workflowId: `g3-i5-concurrent-a-${Date.now()}`,
+        args: [{ businessSlug: 'g3-i5-cert-business', operationId: concurrentOperationId }],
+      }),
+      client.workflow.execute(integrationDeliveryWorkflow, {
+        taskQueue: TASK_QUEUE,
+        workflowId: `g3-i5-concurrent-b-${Date.now()}`,
+        args: [{ businessSlug: 'g3-i5-cert-business', operationId: concurrentOperationId }],
+      }),
+    ]);
+    assert.equal(concurrentA.status, 'SUCCEEDED');
+    assert.equal(concurrentB.status, 'SUCCEEDED');
+    assert.equal(providerCalls.get(concurrentOperationId), 1);
+    const concurrentAttempts = await ledger.listAttempts('g3-i5-cert-business', concurrentOperationId);
+    assert.equal(concurrentAttempts.length, 1);
+    assert.equal(concurrentAttempts[0]?.outcome, 'SUCCEEDED');
+    console.log('INTEGRATION_G3_I5_CONCURRENT_IDEMPOTENCY_PASS');
+
+    const identicalReplay = await ledger.enqueue(command(concurrentOperationId, connectionRef), 3);
+    assert.equal(identicalReplay.status, 'SUCCEEDED');
+    assert.equal(providerCalls.get(concurrentOperationId), 1);
+
+    const conflictingCommand: IntegrationCommand = {
+      ...command(concurrentOperationId, connectionRef),
+      payload: { certification: false, conflictProbe: true },
+    };
+    await assert.rejects(
+      () => ledger.enqueue(conflictingCommand, 3),
+      (error: unknown) => error instanceof IntegrationOutboundLedgerError
+        && error.code === 'IDEMPOTENCY_CONFLICT',
+    );
+    const afterConflict = await ledger.get('g3-i5-cert-business', concurrentOperationId);
+    assert.equal(afterConflict?.status, 'SUCCEEDED');
+    assert.equal(afterConflict?.command.payload.certification, true);
+    assert.equal(providerCalls.get(concurrentOperationId), 1);
+    const attemptsAfterConflict = await ledger.listAttempts('g3-i5-cert-business', concurrentOperationId);
+    assert.equal(attemptsAfterConflict.length, 1);
+    assert.equal(attemptsAfterConflict[0]?.outcome, 'SUCCEEDED');
+    console.log('INTEGRATION_G3_I5_IDEMPOTENCY_CONFLICT_PASS');
+
+    const durableProjection = JSON.stringify({
+      recovery,
+      retry,
+      permanent,
+      handoff,
+      recoveryReplay,
+      concurrentA,
+      concurrentB,
+      identicalReplay,
+      afterConflict,
+    });
     for (const forbidden of ['api_key', 'access_token', 'authorization', 'webhook_secret', 'raw_body', 'headers']) {
       assert.equal(durableProjection.toLowerCase().includes(forbidden), false);
     }
