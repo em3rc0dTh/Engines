@@ -240,6 +240,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install runtime dependencies
+        working-directory: mk1/runtime
+        run: npm ci
       - name: Verify final G3 ledger and receipt
         working-directory: mk1/runtime
         run: |
