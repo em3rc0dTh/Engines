@@ -2,7 +2,7 @@
 
 ## Status
 
-**G3-I0 CERTIFIED · G3-I1 CERTIFIED · G3-I2 CERTIFIED · G3-I3 CERTIFIED · G3-I4 NEXT**
+**G3-I0 CERTIFIED · G3-I1 CERTIFIED · G3-I2 CERTIFIED · G3-I3 CERTIFIED · G3-I4 CERTIFIED · G3-I5 NEXT**
 
 Scheduler G2 is terminally closed and merged into the baseline. Integration Engine remains a separate authority boundary on `build/g3-integration` / PR #33. Certification status is valid only on an exact head that passes the corresponding dedicated gate.
 
@@ -48,8 +48,8 @@ I0  canonical command/event contracts + authority boundary        ✅ CERTIFIED
 I1  connection/provider registry + secret references              ✅ CERTIFIED
 I2  durable outbound command + retry/idempotency ledger           ✅ CERTIFIED
 I3  authenticated inbound webhook + deduplication ledger          ✅ CERTIFIED
-I4  first real provider adapter                                   NEXT
-I5  Temporal composition + failure/recovery certification         OPEN
+I4  first real provider adapter                                   ✅ CERTIFIED
+I5  Temporal composition + failure/recovery certification         NEXT
 ```
 
 ## G3-I0 canonical contracts
@@ -296,7 +296,7 @@ receivedAt
 
 Only the provider verifier receives headers/raw body. The durable Integration ledger does not persist raw bodies, signatures, headers or credential material.
 
-A concrete real-provider verifier and actual secret resolution remain I4 responsibilities. I3 uses a deterministic proof verifier only to certify engine ordering and persistence behavior.
+A concrete real-provider verifier and actual secret resolution are I4 responsibilities. I3 uses a deterministic proof verifier only to certify engine ordering and persistence behavior.
 
 ### Durable provider-event identity
 
@@ -360,6 +360,76 @@ raw_response
 
 Provider routes, provider delivery-attempt mechanics, webhook headers and verification signatures must not escape into ordinary domain behavior.
 
+## G3-I4 real provider adapter — CERTIFIED
+
+Kapso WhatsApp is the first concrete Integration provider bound to the I0-I3 surfaces.
+
+Certified outbound path:
+
+```text
+IntegrationCommand
+→ I1 connection/secret references
+→ I2 durable outbound operation
+→ KapsoWhatsAppIntegrationAdapter
+→ real Kapso API
+→ real WhatsApp delivery
+→ provider receipt reference
+```
+
+Certified inbound path:
+
+```text
+real WhatsApp reply
+→ real signed Kapso v2 webhook
+→ KapsoWhatsAppWebhookVerifier
+→ authentication before durability
+→ I3 provider-event dedup ledger
+→ canonical IntegrationEvent
+```
+
+Certified invariants include:
+
+```text
+runtime-only secret resolution
+no raw API key/webhook secret in registry, command, event or ledger
+real provider acceptance
+real physical WhatsApp delivery
+real signed webhook verification
+phone-number-ID scope enforcement
+canonical event normalization
+first acceptance replayed=false
+invalid signature → zero durable event
+provider identifiers retained only as provider-neutral receipt/event identities
+```
+
+Physical proof source head:
+
+```text
+25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22
+```
+
+Physical markers:
+
+```text
+INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED
+INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED
+INTEGRATION_G3_I4_REAL_PROVIDER_PASS
+```
+
+Canonical receipt:
+
+```text
+mk1/Test/g3-integration-engine-i4.md
+```
+
+Repository-safe evidence:
+
+```text
+mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md
+```
+
+The physical preparation also observed a real WhatsApp customer-service-window rejection (HTTP 422) before the authorized recipient opened the 24-hour window. That provider policy is not elevated into Integration authority; I4 owns transport/error mapping, not conversation-policy orchestration.
+
 ## Error taxonomy baseline
 
 Provider-facing failures remain provider-neutral enough for Temporal/domain policy:
@@ -380,7 +450,7 @@ INVALID_PROVIDER_EVENT
 DUPLICATE_PROVIDER_EVENT
 ```
 
-Provider-specific error codes may later be retained as evidence but must map into canonical categories before leaving Integration Engine.
+Provider-specific error codes may be retained as evidence but must map into canonical categories before leaving Integration Engine.
 
 ## Directionality and ownership
 
@@ -389,6 +459,7 @@ Provider-specific error codes may later be retained as evidence but must map int
 ```text
 Temporal/domain owns intent and orchestration
 Integration owns connection resolution and provider delivery mechanics
+I2 owns durable delivery retry/attempt state
 Provider owns external acceptance semantics
 ```
 
@@ -456,37 +527,90 @@ mk1/runtime/scripts/certify-integration-g3-i3.ts
 I3 receipt: `mk1/Test/g3-integration-engine-i3.md`.
 Evidence: `mk1/Build/evidence/integration-g3-i3-certification-2026-09-16.md`.
 
+### I4
+
+```text
+mk1/runtime/src/integration/secret-resolution.ts
+mk1/runtime/src/integration/provider.ts
+mk1/runtime/src/integration/delivery-executor.ts
+mk1/runtime/src/integration/providers/kapso-whatsapp.ts
+mk1/runtime/scripts/certify-integration-g3-i4-readiness.ts
+mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts
+.github/workflows/mk1-integration-g3-i4.yml
+```
+
+I4 receipt: `mk1/Test/g3-integration-engine-i4.md`.
+Evidence: `mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md`.
+
 ## Existing channel truth boundary
 
 Existing interactive Telegram/WhatsApp channel transports remain CTA/channel evidence and are not silently reclassified as Integration Engine certification.
 
-Kapso evidence likewise remains within its existing CTA/channel transport claim unless I4 explicitly selects and certifies it as the first real provider adapter through the Integration contract.
+Kapso CTA/channel evidence remains predecessor evidence only. I4 certification is specifically the G3 Integration adapter/ledger path described above.
 
-## Explicit exclusions after I3
+## G3-I5 — Temporal composition contract
 
-Even after I3 certification, Integration Engine does **not** yet claim:
+I5 is the next and final G3 gate. It composes already-certified Integration mechanics through Temporal without duplicating I2 delivery authority.
+
+Required authority split:
 
 ```text
-secret values stored by Engines
-concrete secret-manager retrieval/rotation
-real provider HTTP/SDK outbound delivery
-real provider webhook authentication success
-provider-specific signing/key-rotation policy
-provider-specific idempotency headers/keys
-real provider acceptance
-real provider sandbox/production evidence
-Temporal Integration composition
+Temporal workflow
+  owns orchestration intent, waiting, replay and process progression
+
+Integration activity boundary
+  owns calls into certified Integration engine surfaces
+
+I2 outbound ledger
+  remains the single authority for provider delivery attempts,
+  retry schedule, bounded attempts and lease recovery
+
+I3 inbound ledger
+  remains the single authority for authenticated inbound acceptance/dedup
+```
+
+I5 MUST NOT add a second provider retry loop in workflow code. Temporal activity retries may recover transport/process execution failures, but they must not independently multiply provider delivery attempts outside I2 state.
+
+I5 must prove:
+
+```text
+workflow starts from provider-neutral Integration intent
+workflow history contains no raw credentials or raw webhook material
+activity replay does not duplicate a terminal I2 provider operation
+Temporal recovery can resume after activity/worker interruption
+terminal provider failure becomes deterministic workflow outcome
+retryable I2 state is observed/resumed rather than reimplemented
+inbound canonical IntegrationEvent can be handed into orchestration without raw provider coupling
+workflow replay/recovery preserves business + operation identity
+protected I0-I4 regressions remain green
+```
+
+I5 certification must include an exact-head failure/recovery workflow proof and terminal marker:
+
+```text
+INTEGRATION_G3_I5_CERTIFICATION_PASS
+```
+
+I5 does not imply production rollout or PR #33 merge authorization.
+
+## Explicit exclusions after I4
+
+Even after I4 certification, Integration Engine does **not** yet claim:
+
+```text
 production security/readiness
+all WhatsApp message types or provider policies
+all provider failure classes
+multiple real providers
+Temporal Integration composition/recovery certification
 Agent behavior
 MCP behavior
 ```
 
-## Next gate — G3-I4
+Those Temporal composition/recovery claims belong to I5.
 
-G3-I4 is the first real-provider gate. It must select one actual external provider and bind its real adapter to the existing I0-I3 surfaces without weakening the authority boundaries.
+## Next gate — G3-I5
 
-At minimum I4 must provide real-provider evidence for the selected capability, including the applicable real authentication/credential path and at least one provider-observed request/event or acceptance artifact. Mocks or deterministic fixtures may remain as tests but cannot satisfy the real-provider certification claim.
-
-The selected provider, capability and credential/sandbox availability are therefore explicit inputs to I4 rather than facts to invent in this contract.
+G3-I5 is the only next Integration gate under the sequential-hard-gate policy.
 
 No merge authorization is implied by any Integration certification gate. PR #33 remains draft/open/unmerged until explicit owner authorization.
