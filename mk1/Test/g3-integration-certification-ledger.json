@@ -3,7 +3,7 @@
   "engine": "Integration",
   "track": "G3",
   "policy": "sequential-hard-gates",
-  "currentNext": "G3-I5",
+  "currentNext": null,
   "gates": [
     {
       "id": "G3-I0",
@@ -47,7 +47,7 @@
     },
     {
       "id": "G3-I5",
-      "status": "NEXT",
+      "status": "CERTIFIED",
       "predecessor": "G3-I4",
       "expectedReceipt": "mk1/Test/g3-integration-engine-i5.md",
       "expectedWorkflow": ".github/workflows/mk1-integration-g3-i5.yml",
