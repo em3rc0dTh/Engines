@@ -17,8 +17,8 @@ G3-I0 canonical command/event contracts + authority boundary   ✅ CERTIFIED
 G3-I1 connection/provider registry + secret references         ✅ CERTIFIED
 G3-I2 durable outbound command + retry/idempotency ledger       ✅ CERTIFIED
 G3-I3 authenticated inbound webhook + deduplication ledger      ✅ CERTIFIED
-G3-I4 first real provider adapter — Kapso WhatsApp              🟡 HUMAN TEST READY / NEXT
-G3-I5 Temporal composition + failure/recovery certification     🔒 LOCKED UNTIL I4 CERTIFIED
+G3-I4 first real provider adapter — Kapso WhatsApp              ✅ CERTIFIED
+G3-I5 Temporal composition + failure/recovery certification     🟡 NEXT
 ```
 
 ## G3-I0 — CERTIFIED
@@ -98,16 +98,16 @@ transient raw webhook + headers
 
 Raw signed request material and secrets are not durable canonical event state.
 
-## G3-I4 — HUMAN TEST READY / NEXT
+## G3-I4 — CERTIFIED
 
 The first concrete Integration provider is Kapso WhatsApp.
 
-Implemented and deterministically green:
+Deterministic surfaces certified:
 
 ```text
 SecretRef → runtime-only API key / webhook secret resolution
 canonical messaging.send/send_text → Kapso HTTPS request mapping
-real-provider HTTP error → canonical Integration error mapping
+provider HTTP outcome → canonical Integration outcome mapping
 provider message ID → providerReceiptRef
 Kapso HMAC-SHA256 raw-body verification
 Kapso v2 message normalization
@@ -119,15 +119,13 @@ sanitized receipt generation
 protected Scheduler/Services/Appointment/CTA/channel regressions
 ```
 
-Deterministic readiness marker:
+Physical source head:
 
 ```text
-INTEGRATION_G3_I4_HUMAN_TEST_READY
+25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22
 ```
 
-This marker is intentionally **not** certification.
-
-The remaining real-provider evidence must be produced by the current G3 Integration implementation:
+Observed real-provider markers:
 
 ```text
 INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED
@@ -135,14 +133,7 @@ INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED
 INTEGRATION_G3_I4_REAL_PROVIDER_PASS
 ```
 
-Preferred execution:
-
-```text
-cd mk1/runtime
-npm run probe:integration:g3:i4:live
-```
-
-That bounded session proves:
+The physical session proved:
 
 ```text
 current IntegrationCommand
@@ -150,33 +141,38 @@ current IntegrationCommand
 → I2 durable outbound ledger
 → current Kapso Integration adapter
 → real Kapso API
-→ real WhatsApp receipt
+→ real WhatsApp delivery
 → nonce-bound human reply
 → real signed Kapso webhook
 → current Kapso Integration verifier
 → I3 inbound dedup ledger
 → canonical IntegrationEvent
-→ sanitized receipt
+→ repository-safe sanitized certification receipt
 ```
 
-Historical Kapso CTA/channel physical evidence remains valid predecessor evidence, but it cannot be relabelled as G3-I4 certification because it did not execute this G3 Integration adapter/ledger boundary.
+The first direct provider preflight correctly exposed a closed WhatsApp 24-hour customer-service window as HTTP 422. After the authorized recipient opened that service window with an inbound message, the current G3 Integration path completed the outbound and signed inbound round trip successfully.
 
-Promotion remains:
+This does not grant I4 ownership over WhatsApp conversation-policy orchestration. It certifies the provider adapter and real signed round-trip boundary only.
+
+Certification receipt:
 
 ```text
-real provider round trip PASS
-→ review sanitized receipt
-→ write I4 certification receipt
-→ machine ledger: I4 CERTIFIED / I5 NEXT
-→ rerun dedicated I4 gate on documentation-complete exact head
-→ only then unlock I5
+mk1/Test/g3-integration-engine-i4.md
 ```
 
-## G3-I5 — LOCKED
+Repository-safe physical evidence:
 
-I5 may compose Integration through Temporal only after I4 reaches `CERTIFIED` under the sequential hard-gate policy.
+```text
+mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md
+```
 
-Intended I5 scope remains:
+Historical CTA/channel Kapso evidence remains predecessor evidence only; G3-I4 certification is based on the current G3 Integration adapter/ledger path.
+
+## G3-I5 — NEXT
+
+I5 is now unlocked by sequential promotion and is the only next G3 gate.
+
+Intended I5 scope:
 
 ```text
 Temporal activity/workflow composition around IntegrationCommand delivery
@@ -186,7 +182,15 @@ inbound IntegrationEvent orchestration handoff
 exact-head failure/recovery certification
 ```
 
-I5 must not begin early merely because deterministic I4 readiness is green.
+I5 must preserve these authority boundaries:
+
+```text
+I2 owns durable provider delivery attempts, retry schedule and lease recovery
+Temporal owns orchestration/replay and business-process progression
+I5 must not create a second provider retry authority inside Temporal
+I3 remains the durable authenticated inbound acceptance boundary
+provider secrets/raw webhook material remain outside workflow history and canonical payloads
+```
 
 ## Cross-track dependency rules
 
@@ -217,13 +221,12 @@ Object Store = attachment bytes/content integrity
 ## Next executable work
 
 ```text
-1. Require the documentation-complete current G3-I4 readiness workflow to remain green.
-2. Run the preferred single-session real Kapso harness locally with owner-held credentials.
-3. Require a real Kapso outbound message ID from the current Integration adapter.
-4. Require a real signed Kapso v2 inbound message through the current I3 ledger.
-5. Preserve only the generated sanitized receipt; never commit secrets/raw provider payloads.
-6. Promote I4 only after both real markers are present from the same configured connection.
-7. Re-run G3-I4 on the promoted documentation-complete exact head.
-8. Only after that exact-head seal may G3-I5 implementation begin.
-9. Keep PR #33 draft/unmerged; certification does not authorize merge.
+1. Seal G3-I4 on the documentation-complete exact branch head.
+2. Require the I4 workflow to re-certify deterministic I0-I4 boundaries and protected regressions.
+3. Require the committed I4 receipt + physical-evidence projection to pass truth-boundary checks.
+4. Require the I4 workflow to emit INTEGRATION_G3_I4_CERTIFICATION_PASS.
+5. Only after that exact-head seal, begin G3-I5 implementation.
+6. Build Temporal composition without duplicating I2 retry authority.
+7. Certify workflow replay/recovery and inbound IntegrationEvent handoff.
+8. Keep PR #33 draft/unmerged; certification does not authorize merge.
 ```
