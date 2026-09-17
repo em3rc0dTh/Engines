@@ -1,0 +1,531 @@
+name: MK1 Platform Solidity Pre-Agent Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cert/platform-solidity-pre-agent
+    paths:
+      - 'mk1/**'
+      - '.github/workflows/mk1-platform-solidity-pre-agent.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-platform-solidity-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLATFORM_CERT_REF: ${{ github.sha }}
+
+jobs:
+  static-contracts-and-ledgers:
+    name: platform-static-contracts-and-ledgers
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: TypeScript
+        run: npm run check
+      - name: Execute complete deterministic test inventory
+        run: find src -name '*.test.ts' -print0 | xargs -0 node --import tsx --test | tee /tmp/platform-all-tests.log
+      - name: Verify terminal Scheduler and Integration ledgers
+        run: |
+          npx tsx scripts/verify-scheduler-certification-ledger.ts | tee /tmp/platform-scheduler-ledger.log
+          grep -F 'SCHEDULER_G2_CERTIFICATION_LEDGER_PASS' /tmp/platform-scheduler-ledger.log
+          npm run verify:integration:g3 | tee /tmp/platform-integration-ledger.log
+          grep -F 'Integration certified gates: 6' /tmp/platform-integration-ledger.log
+          grep -F 'Integration next gate: none' /tmp/platform-integration-ledger.log
+          grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/platform-integration-ledger.log
+      - name: Protect provider-neutral core boundaries
+        run: |
+          scheduler_matches="$(grep -RniE 'telegram|whatsapp|tiktok|webchat|kapso|messenger|facebook' \
+            src/contracts/scheduler-engine src/scheduler src/persistence/postgres/scheduler-foundation.repository.ts || true)"
+          if [ -n "$scheduler_matches" ]; then
+            echo "$scheduler_matches"
+            echo 'Provider/channel mechanics leaked into Scheduler core.' >&2
+            exit 1
+          fi
+
+          appointment_matches="$(grep -nEi 'telegram|whatsapp|messenger|facebook|tiktok|webchat|kapso' \
+            src/orchestration/temporal/workflows/register-new-appointment.workflow.ts || true)"
+          if [ -n "$appointment_matches" ]; then
+            echo "$appointment_matches"
+            echo 'Provider-specific logic leaked into Appointment workflow.' >&2
+            exit 1
+          fi
+
+          if grep -E 'providers/|secret-resolution|KAPSO_|rawBody|webhookSecret|apiKey' \
+            src/orchestration/temporal/workflows/integration.workflows.ts; then
+            echo 'Provider secret/raw-webhook mechanics leaked into Temporal workflow.' >&2
+            exit 1
+          fi
+          echo 'PLATFORM_PROVIDER_NEUTRAL_BOUNDARY_PASS'
+      - name: Preserve physical I4 proof identity
+        working-directory: .
+        run: |
+          physical_sha='25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22'
+          grep -F 'INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_PROVIDER_PASS' mk1/Test/g3-integration-engine-i4.md
+          git cat-file -e "${physical_sha}^{commit}"
+          git diff --exit-code "$physical_sha" HEAD -- \
+            mk1/runtime/src/contracts/integration-engine \
+            mk1/runtime/src/integration \
+            mk1/runtime/src/persistence/postgres/integration-registry.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-outbound-ledger.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-inbound-ledger.repository.ts \
+            mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts
+          echo 'PLATFORM_I4_PHYSICAL_IDENTITY_PASS'
+      - name: Static terminal marker
+        run: echo 'PLATFORM_STATIC_SOLIDITY_PASS'
+      - name: Capture static evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-static-evidence
+          git rev-parse HEAD > /tmp/platform-static-evidence/git-sha.txt
+          cp /tmp/platform-*.log /tmp/platform-static-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-static-${{ github.run_id }}
+          path: /tmp/platform-static-evidence
+          if-no-files-found: error
+
+  services-g1-solidity:
+    name: services-g1-full-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Execute pristine G1 S0-S8 closure
+        run: |
+          set -euo pipefail
+          exec > >(tee /tmp/platform-services.log) 2>&1
+
+          wait_lab() {
+            for attempt in $(seq 1 75); do
+              if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+                && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+                return 0
+              fi
+              sleep 1
+            done
+            docker compose ps -a
+            docker compose logs worker cta temporal migrate
+            return 1
+          }
+
+          reset_lab() {
+            docker compose down -v --remove-orphans || true
+            docker compose up --build -d
+            wait_lab
+          }
+
+          reset_lab
+          ENGINES_CTA_URL=http://127.0.0.1:8787 npx tsx scripts/certify-register-new-appointment.ts
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s1
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s2
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s3
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s4
+          docker compose exec -T worker npm run probe:services:s4:safety
+          docker compose exec -T worker npm run probe:services:s5:prepare
+          before="$(docker compose exec -T worker cat /tmp/engines-mk0-worker-ready | tr -d '\r')"
+          test -n "$before"
+          docker compose restart worker
+          after="$before"
+          for attempt in $(seq 1 75); do
+            if docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              after="$(docker compose exec -T worker cat /tmp/engines-mk0-worker-ready | tr -d '\r')"
+              if [ -n "$after" ] && [ "$after" != "$before" ]; then
+                break
+              fi
+            fi
+            sleep 1
+          done
+          test "$after" != "$before"
+          docker compose exec -T worker npm run probe:services:s5:complete
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s4
+          docker compose exec -T worker npm run probe:services:s4:safety
+          docker compose exec -T worker npm run probe:services:s6
+
+          reset_lab
+          docker compose exec -T worker npm run probe:services:s6
+          ENGINES_CTA_URL=http://127.0.0.1:8787 npm run probe:services:s7
+
+          echo 'SERVICES_S8_G1_CERTIFICATION_PASS'
+          echo 'SERVICES_G1_SOLIDITY_PASS'
+      - name: Capture Services evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-services-evidence
+          git rev-parse HEAD > /tmp/platform-services-evidence/git-sha.txt
+          cp /tmp/platform-services.log /tmp/platform-services-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-services-g1-${{ github.run_id }}
+          path: /tmp/platform-services-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  scheduler-g2-solidity:
+    name: scheduler-g2-full-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Start pristine Scheduler laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo
+          docker compose run --rm migrate | tee /tmp/platform-scheduler-migrate.log
+      - name: Re-certify Scheduler S0-S6 and S8
+        run: |
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s0 | tee /tmp/platform-scheduler-s0.log
+          grep -F 'SCHEDULER_G2_S0_CONTRACT_PERSISTENCE_PASS' /tmp/platform-scheduler-s0.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npx tsx scripts/certify-scheduler-g2-s1.ts | tee /tmp/platform-scheduler-s1.log
+          grep -F 'SCHEDULER_G2_S1_MANAGEMENT_PASS' /tmp/platform-scheduler-s1.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npx tsx scripts/certify-scheduler-g2-s2.ts | tee /tmp/platform-scheduler-s2.log
+          grep -F 'SCHEDULER_G2_S2_AVAILABILITY_PASS' /tmp/platform-scheduler-s2.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s3 | tee /tmp/platform-scheduler-s3.log
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' /tmp/platform-scheduler-s3.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s4 | tee /tmp/platform-scheduler-s4.log
+          grep -F 'SCHEDULER_G2_S4_HOLD_LIFECYCLE_PASS' /tmp/platform-scheduler-s4.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s5 | tee /tmp/platform-scheduler-s5.log
+          grep -F 'SCHEDULER_G2_S5_MULTIBUSINESS_PASS' /tmp/platform-scheduler-s5.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s6 | tee /tmp/platform-scheduler-s6.log
+          grep -F 'SCHEDULER_G2_S6_SERVICES_HANDOFF_PASS' /tmp/platform-scheduler-s6.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npx tsx scripts/certify-scheduler-g2-s8.ts | tee /tmp/platform-scheduler-s8.log
+          grep -F 'SCHEDULER_G2_S8_MULTI_RESOURCE_PASS' /tmp/platform-scheduler-s8.log
+          grep -F 'SCHEDULER_G2_S8_ALL_OR_NOTHING_CONCURRENCY_PASS' /tmp/platform-scheduler-s8.log
+      - name: Start Temporal Appointment and CTA runtime
+        run: |
+          docker compose up --build -d temporal worker cta channel-core
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://127.0.0.1:8787/health >/tmp/platform-scheduler-cta-health.json \
+              && curl -fsS http://127.0.0.1:8788/health >/tmp/platform-scheduler-channel-health.json \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta channel-core temporal migrate
+          exit 1
+      - name: Re-certify Appointment/Services/Scheduler composition
+        run: |
+          npx tsx scripts/certify-register-new-appointment.ts | tee /tmp/platform-scheduler-appointment.log
+          grep -F 'MK0_REGISTER_NEW_APPOINTMENT_PASS' /tmp/platform-scheduler-appointment.log
+          npm run probe:services:s7 | tee /tmp/platform-scheduler-services-s7.log
+          grep -F 'SERVICES_S7_APPOINTMENT_INTEGRATION_PASS' /tmp/platform-scheduler-services-s7.log
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npm run probe:scheduler:g2:s7 | tee /tmp/platform-scheduler-s7.log
+          grep -F 'SCHEDULER_G2_S7_APPOINTMENT_ORCHESTRATION_PASS' /tmp/platform-scheduler-s7.log
+      - name: Re-certify CTA replay/compensation with Scheduler authority
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/platform-scheduler-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/platform-scheduler-cta.log
+          grep -F '"capacityAuthority":"SCHEDULER"' /tmp/platform-scheduler-cta.log
+          grep -F '"failureCompensation":true' /tmp/platform-scheduler-cta.log
+      - name: Final Scheduler truth audit
+        run: |
+          docker compose run --rm --no-deps -T -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 cta npx tsx scripts/certify-scheduler-g2-s9.ts | tee /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_PERSISTENCE_TRUTH_PASS' /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_APPOINTMENT_AUTHORITY_PASS' /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_MULTI_RESOURCE_INTEGRITY_PASS' /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_MULTIBUSINESS_INTEGRITY_PASS' /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_COMMAND_LEDGER_INTEGRITY_PASS' /tmp/platform-scheduler-final.log
+          grep -F 'SCHEDULER_G2_S9_FINAL_AUDIT_PASS' /tmp/platform-scheduler-final.log
+          echo 'SCHEDULER_G2_SOLIDITY_PASS'
+      - name: Capture Scheduler evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-scheduler-evidence
+          git rev-parse HEAD > /tmp/platform-scheduler-evidence/git-sha.txt
+          cp /tmp/platform-scheduler-* /tmp/platform-scheduler-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-scheduler-g2-${{ github.run_id }}
+          path: /tmp/platform-scheduler-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  integration-g3-solidity:
+    name: integration-g3-recovery-idempotency-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+      TEMPORAL_ADDRESS: localhost:7233
+      TEMPORAL_NAMESPACE: default
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Start PostgreSQL and Temporal
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up -d --build postgres temporal
+          for i in $(seq 1 60); do
+            if docker compose exec -T postgres pg_isready -U engines -d engines_mk0 >/dev/null 2>&1 \
+              && docker compose exec -T temporal temporal operator cluster health >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
+      - name: Apply Integration migrations
+        run: |
+          npx tsx scripts/migrate-postgres-integration-g3-i1.ts
+          npx tsx scripts/migrate-postgres-integration-g3-i2.ts
+          npx tsx scripts/migrate-postgres-integration-g3-i3.ts
+      - name: Re-certify I1-I4 deterministic boundaries
+        run: |
+          npx tsx scripts/certify-integration-g3-i1.ts | tee /tmp/platform-integration-i1.log
+          grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/platform-integration-i1.log
+          npx tsx scripts/certify-integration-g3-i2.ts | tee /tmp/platform-integration-i2.log
+          grep -F 'INTEGRATION_G3_I2_CERTIFICATION_PASS' /tmp/platform-integration-i2.log
+          npx tsx scripts/certify-integration-g3-i3.ts | tee /tmp/platform-integration-i3.log
+          grep -F 'INTEGRATION_G3_I3_CERTIFICATION_PASS' /tmp/platform-integration-i3.log
+          npx tsx scripts/certify-integration-g3-i4-readiness.ts | tee /tmp/platform-integration-i4.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_ADAPTER_READY_PASS' /tmp/platform-integration-i4.log
+          grep -F 'INTEGRATION_G3_I4_INVALID_SIGNATURE_ZERO_DURABLE_PASS' /tmp/platform-integration-i4.log
+      - name: Execute real Temporal I5 failure/recovery/idempotency proof
+        run: npx tsx scripts/certify-integration-g3-i5.ts | tee /tmp/platform-integration-i5.log
+      - name: Require I5 robustness markers
+        run: |
+          grep -F 'INTEGRATION_G3_I5_ACTIVITY_RETRY_TERMINAL_REPLAY_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_I2_RETRY_AUTHORITY_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_TERMINAL_FAILURE_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_CANONICAL_EVENT_HANDOFF_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_WORKFLOW_REPLAY_NO_DUPLICATE_PROVIDER_ATTEMPT_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_CONCURRENT_IDEMPOTENCY_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_IDEMPOTENCY_CONFLICT_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_WORKFLOW_HISTORY_BOUNDARY_PASS' /tmp/platform-integration-i5.log
+          grep -F 'INTEGRATION_G3_I5_CERTIFICATION_PASS' /tmp/platform-integration-i5.log
+          echo 'INTEGRATION_G3_SOLIDITY_PASS'
+      - name: Capture Integration evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-integration-evidence
+          git rev-parse HEAD > /tmp/platform-integration-evidence/git-sha.txt
+          cp /tmp/platform-integration-*.log /tmp/platform-integration-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-integration-g3-${{ github.run_id }}
+          path: /tmp/platform-integration-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  persistence-composition-solidity:
+    name: cta-temporal-postgres-mongo-minio-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Start pristine composed persistence stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d postgres mongo minio temporal
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm minio-init
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml up --build -d migrate worker cta channel-core
+      - name: Wait for composed runtime
+        run: |
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://127.0.0.1:8787/health >/tmp/platform-persistence-cta-health.json \
+              && curl -fsS http://127.0.0.1:8788/health >/tmp/platform-persistence-channel-health.json \
+              && docker compose -f docker-compose.yml -f docker-compose.layer6.yml exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml ps -a
+          exit 1
+      - name: Re-certify CTA replay and compensation on composed runtime
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/platform-persistence-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/platform-persistence-cta.log
+      - name: Re-certify PostgreSQL + MongoDB + S3-compatible object integrity
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e LAYER6_S3_ENDPOINT=http://minio:9000 \
+            -e LAYER6_S3_REGION=us-east-1 \
+            -e LAYER6_S3_BUCKET=engines-layer6 \
+            -e LAYER6_S3_ACCESS_KEY_ID=engines \
+            -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret \
+            cta npm run probe:layer6:v4 | tee /tmp/platform-persistence-layer6.log
+          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/platform-persistence-layer6.log
+          echo 'PERSISTENCE_SOLIDITY_PASS'
+      - name: Capture persistence evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-persistence-evidence
+          git rev-parse HEAD > /tmp/platform-persistence-evidence/git-sha.txt
+          cp /tmp/platform-persistence-* /tmp/platform-persistence-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-persistence-${{ github.run_id }}
+          path: /tmp/platform-persistence-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+
+  platform-solidity-seal:
+    name: platform-exact-head-solidity-seal
+    needs:
+      - static-contracts-and-ledgers
+      - services-g1-solidity
+      - scheduler-g2-solidity
+      - integration-g3-solidity
+      - persistence-composition-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - name: Require exact certification head
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Build platform solidity receipt
+        run: |
+          mkdir -p /tmp/platform-solidity-seal
+          git rev-parse HEAD | tee /tmp/platform-solidity-seal/git-sha.txt
+          cat > /tmp/platform-solidity-seal/certification.txt <<'EOF'
+          CTA/channel canonical contracts and replay                PASS
+          Temporal orchestration/recovery                           PASS
+          Services G1 pristine closure                              PASS
+          Scheduler G2 full closure and concurrency                 PASS
+          Integration G3 retry/recovery/idempotency                 PASS
+          PostgreSQL operational truth                              PASS
+          MongoDB operational document/audit boundary               PASS
+          S3-compatible object integrity                            PASS
+          Failure compensation                                      PASS
+          Cross-boundary provider neutrality                        PASS
+          Physical G3-I4 implementation identity preserved          PASS
+          Exact-head certification                                  PASS
+          Agent/MCP                                                 NOT IN SCOPE
+          Production HA/backup/restore                              NOT IN SCOPE
+          Meta/TikTok unactivated physical provider breadth         EXTERNAL/DEFERRED
+          EOF
+          echo 'CTA_CORE_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/cta-marker.txt
+          echo 'TEMPORAL_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/temporal-marker.txt
+          echo 'SERVICES_G1_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/services-marker.txt
+          echo 'SCHEDULER_G2_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/scheduler-marker.txt
+          echo 'INTEGRATION_G3_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/integration-marker.txt
+          echo 'PERSISTENCE_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/persistence-marker.txt
+          echo 'CROSS_BOUNDARY_IDEMPOTENCY_PASS' | tee /tmp/platform-solidity-seal/idempotency-marker.txt
+          echo 'PLATFORM_EXACT_HEAD_SEAL_PASS' | tee /tmp/platform-solidity-seal/exact-head-marker.txt
+          echo 'PLATFORM_CORE_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platform-solidity-seal-${{ github.run_id }}
+          path: /tmp/platform-solidity-seal
+          if-no-files-found: error
+      - name: Terminal marker
+        run: echo 'PLATFORM_CORE_SOLIDITY_PASS'
