@@ -616,3 +616,4 @@ jobs:
           if-no-files-found: error
       - name: Terminal marker
         run: echo 'PLATFORM_CORE_SOLIDITY_PASS'
+# Final pre-Agent exact-head revalidation trigger.
