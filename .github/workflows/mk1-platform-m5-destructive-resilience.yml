@@ -7,6 +7,7 @@ on:
       - cert/platform-solidity-pre-agent
     paths:
       - 'mk1/runtime/src/**'
+      - 'mk1/runtime/docker-compose*.yml'
       - 'mk1/runtime/scripts/certify-platform-m5-destructive-resilience.ts'
       - '.github/workflows/mk1-platform-m5-destructive-resilience.yml'
 

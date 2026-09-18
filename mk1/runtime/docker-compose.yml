@@ -28,7 +28,9 @@ services:
   temporal:
     build:
       context: .
-    command: ["temporal", "server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233"]
+    command: ["temporal", "server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233", "--db-filename", "/var/lib/temporal/temporal.db"]
+    volumes:
+      - engines_mk0_temporal:/var/lib/temporal
     ports:
       - "7233:7233"
       - "8233:8233"
@@ -211,3 +213,4 @@ volumes:
   engines_mk0_postgres:
   engines_mk0_mongo:
   engines_mk0_attachments:
+  engines_mk0_temporal:
