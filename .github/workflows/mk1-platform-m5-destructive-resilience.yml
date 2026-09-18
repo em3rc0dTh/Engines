@@ -1,0 +1,203 @@
+name: MK1 Platform M5 Destructive Resilience
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cert/platform-solidity-pre-agent
+    paths:
+      - 'mk1/runtime/src/**'
+      - 'mk1/runtime/docker-compose*.yml'
+      - 'mk1/runtime/scripts/certify-platform-m5-destructive-resilience.ts'
+      - '.github/workflows/mk1-platform-m5-destructive-resilience.yml'
+
+permissions:
+  contents: read
+
+env:
+  PLATFORM_M5_CERT_REF: ${{ github.sha }}
+
+jobs:
+  destructive-resilience:
+    name: platform-m5-destructive-resilience
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_M5_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head and TypeScript guards
+        run: |
+          test "$(git rev-parse HEAD)" = "$PLATFORM_M5_CERT_REF"
+          npm run check
+      - name: Start pristine full persistence runtime
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose down -v --remove-orphans || true
+          $compose up --build -d postgres mongo minio temporal
+          $compose run --rm minio-init
+          $compose up --build -d migrate worker cta channel-core
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null               && curl -fsS http://127.0.0.1:8788/health >/dev/null               && $compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          $compose ps -a
+          exit 1
+      - name: Start WebChat adapter
+        run: |
+          nohup npm run webchat:server >/tmp/m5-webchat.log 2>&1 &
+          echo $! >/tmp/m5-webchat.pid
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8790/health >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Prepare active workflow before failure injection
+        env:
+          M5_PHASE: prepare
+          M5_STATE_FILE: /tmp/engines-platform-m5-state.json
+        run: npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-prepare.log
+      - name: Kill Worker while an accepted user action is waiting
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose stop worker
+          M5_PHASE=submit-product M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts >/tmp/m5-worker-recovery.log 2>&1 &
+          request_pid=$!
+          echo "$request_pid" >/tmp/m5-worker-request.pid
+          sleep 3
+          kill -0 "$request_pid"
+          echo 'PLATFORM_M5_WORKER_OUTAGE_PENDING_ACTION_PASS'
+          $compose start worker
+          for attempt in $(seq 1 60); do
+            $compose exec -T worker test -f /tmp/engines-mk0-worker-ready && break
+            sleep 1
+          done
+          wait "$request_pid"
+          cat /tmp/m5-worker-recovery.log
+          grep -F 'PLATFORM_M5_WORKER_LOSS_RECOVERY_PASS' /tmp/m5-worker-recovery.log
+      - name: Kill Channel Core and retry the same user event after recovery
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose stop channel-core
+          M5_PHASE=expect-date-transport-failure M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-channel-down.log
+          grep -F 'PLATFORM_M5_CHANNEL_OUTAGE_OBSERVED_PASS' /tmp/m5-channel-down.log
+          $compose start channel-core
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8788/health >/dev/null && break
+            sleep 1
+          done
+          M5_PHASE=submit-date M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-channel-recovery.log
+          grep -F 'PLATFORM_M5_CHANNEL_CORE_RECOVERY_PASS' /tmp/m5-channel-recovery.log
+      - name: Restart PostgreSQL before Scheduler reservation
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose restart postgres
+          for attempt in $(seq 1 60); do
+            if $compose exec -T postgres pg_isready -U engines -d engines_mk0 >/dev/null               && curl -fsS http://127.0.0.1:8788/health >/dev/null; then break; fi
+            sleep 1
+          done
+          M5_PHASE=submit-slot M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-postgres-recovery.log
+          grep -F 'PLATFORM_M5_POSTGRES_RESTART_RECOVERY_PASS' /tmp/m5-postgres-recovery.log
+      - name: Restart Temporal itself and recover the same active workflow
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose stop worker
+          $compose restart temporal
+          for attempt in $(seq 1 75); do
+            $compose exec -T temporal temporal operator cluster health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          $compose start worker
+          for attempt in $(seq 1 75); do
+            $compose exec -T worker test -f /tmp/engines-mk0-worker-ready && break
+            sleep 1
+          done
+          M5_PHASE=verify-ready M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-temporal-recovery.log
+          grep -F 'PLATFORM_M5_TEMPORAL_RESTART_RECOVERY_PASS' /tmp/m5-temporal-recovery.log
+      - name: Restart MongoDB and MinIO while the workflow is still active
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose restart mongo minio
+          mongo_ready=0
+          minio_ready=0
+          for attempt in $(seq 1 60); do
+            if $compose exec -T mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; then mongo_ready=1; fi
+            if $compose exec -T minio curl -fsS http://localhost:9000/minio/health/live >/dev/null 2>&1; then minio_ready=1; fi
+            if [ "$mongo_ready" = 1 ] && [ "$minio_ready" = 1 ]; then break; fi
+            sleep 1
+          done
+          test "$mongo_ready" = 1
+          test "$minio_ready" = 1
+          $compose run --rm minio-init
+          echo 'PLATFORM_M5_MONGO_MINIO_RESTART_RECOVERY_PASS'
+      - name: Restart CTA and prove canonical CTA remains executable
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose restart cta
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8787/health >/dev/null && break
+            sleep 1
+          done
+          $compose run --rm --no-deps -T             -e ENGINES_CHANNEL_URL=http://channel-core:8788             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run probe:cta:poc | tee /tmp/m5-cta-recovery.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/m5-cta-recovery.log
+          echo 'PLATFORM_M5_CTA_RESTART_RECOVERY_PASS'
+      - name: Finalize once after all failures and replay safely
+        env:
+          M5_PHASE: finalize
+          M5_STATE_FILE: /tmp/engines-platform-m5-state.json
+        run: |
+          npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-finalize.log
+          grep -F 'PLATFORM_M5_TERMINAL_SINGLE_EFFECT_PASS' /tmp/m5-finalize.log
+          grep -F 'PLATFORM_M5_DESTRUCTIVE_RESILIENCE_PASS' /tmp/m5-finalize.log
+      - name: Re-prove Layer 6 integrity after terminal Appointment creation
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e LAYER6_S3_ENDPOINT=http://minio:9000 \
+            -e LAYER6_S3_REGION=us-east-1 \
+            -e LAYER6_S3_BUCKET=engines-layer6 \
+            -e LAYER6_S3_ACCESS_KEY_ID=engines \
+            -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret \
+            cta npm run probe:layer6:v4 | tee /tmp/m5-persistence-recovery.log
+          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/m5-persistence-recovery.log
+          echo 'PLATFORM_M5_LAYER6_POST_RESTART_INTEGRITY_PASS'
+      - name: Capture destructive evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/platform-m5-evidence
+          git rev-parse HEAD > /tmp/platform-m5-evidence/git-sha.txt
+          cp /tmp/m5-*.log /tmp/platform-m5-evidence/ 2>/dev/null || true
+          cp /tmp/engines-platform-m5-state.json /tmp/platform-m5-evidence/state.json 2>/dev/null || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml ps -a > /tmp/platform-m5-evidence/compose-ps.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-m5-destructive-resilience-${{ github.run_id }}
+          path: /tmp/platform-m5-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/m5-webchat.pid ]; then kill "$(cat /tmp/m5-webchat.pid)" 2>/dev/null || true; fi
+          pkill -f 'tsx src/cta/webchat/server-c1b.ts' 2>/dev/null || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
+      - name: Terminal marker
+        run: echo 'PLATFORM_M5_DESTRUCTIVE_RESILIENCE_PASS'
+# Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.

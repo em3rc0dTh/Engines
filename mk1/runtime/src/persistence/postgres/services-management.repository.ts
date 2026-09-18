@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import { canonicalJson } from '../../contracts/register-new-customer/index.js';
 import type {
@@ -697,7 +698,7 @@ let defaultPool: Pool | undefined;
 let defaultRepository: PostgresServicesManagementRepository | undefined;
 
 export function servicesManagementRepository(): PostgresServicesManagementRepository {
-  defaultPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  defaultPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'services-management-repository');
   defaultRepository ??= new PostgresServicesManagementRepository(defaultPool);
   return defaultRepository;
 }

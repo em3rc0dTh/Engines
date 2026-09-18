@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type {
   EligibilityRuleSet,
@@ -304,7 +305,7 @@ let defaultPool: Pool | undefined;
 let defaultRepository: PostgresServicesRepository | undefined;
 
 export function servicesRepository(): PostgresServicesRepository {
-  defaultPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  defaultPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'services-repository');
   defaultRepository ??= new PostgresServicesRepository(defaultPool);
   return defaultRepository;
 }

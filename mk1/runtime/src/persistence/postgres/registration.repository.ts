@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import {
   normalizeCustomerDraft,
   serializeInitialStartFingerprintMaterial,
@@ -23,7 +24,7 @@ const EMAIL_SELECTOR = 'customer.contact.email' as const;
 let pool: Pool | undefined;
 
 function db(): Pool {
-  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'registration-repository');
   return pool;
 }
 

@@ -1,6 +1,13 @@
 export const WEBCHAT_CONVERSATION_STORAGE_KEY: string;
 
+export type RecoveredTranscriptMessage = Readonly<{
+  kind: 'system' | 'user' | 'meta';
+  text: string;
+}>;
+
 export function isRecoverableStaleConversationError(error: unknown): boolean;
+
+export function projectRecoveredTranscript(snapshot: unknown): RecoveredTranscriptMessage[];
 
 export function clearStaleConversationSession<
   T extends {
@@ -11,6 +18,7 @@ export function clearStaleConversationSession<
     inputMode: unknown;
     lastPromptKey: string;
     lastPhaseSignature: string;
+    transcriptHydrated?: boolean;
   },
 >(
   state: T,

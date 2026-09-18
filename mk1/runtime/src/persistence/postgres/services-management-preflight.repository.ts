@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type {
   ServiceDependency,
@@ -56,7 +57,7 @@ let defaultPool: Pool | undefined;
 let defaultRepository: PostgresServicesManagementPreflightRepository | undefined;
 
 export function servicesManagementPreflightRepository(): PostgresServicesManagementPreflightRepository {
-  defaultPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 });
+  defaultPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 }, 'services-management-preflight-repository');
   defaultRepository ??= new PostgresServicesManagementPreflightRepository(defaultPool);
   return defaultRepository;
 }

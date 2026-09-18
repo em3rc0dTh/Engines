@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { createResilientPostgresPool } from '../../../persistence/postgres/resilient-pool.js';
 import { loadRuntimeConfig } from '../../../config/runtime-config.js';
 import { executeIntegrationOutboundOperation } from '../../../integration/delivery-executor.js';
 import { IntegrationProviderAdapterRegistry } from '../../../integration/provider.js';
@@ -61,7 +61,7 @@ export function createRuntimeIntegrationDeliveryActivities(): Readonly<{
   close: () => Promise<void>;
 }> {
   const config = loadRuntimeConfig();
-  const pool = new Pool({ connectionString: config.postgresUrl, max: 6 });
+  const pool = createResilientPostgresPool({ connectionString: config.postgresUrl, max: 6 }, 'integration-delivery-activities');
   const connections = new PostgresIntegrationRegistryRepository(pool);
   const ledger = new PostgresIntegrationOutboundLedger(pool);
   const secrets = new EnvironmentIntegrationSecretResolver(process.env);

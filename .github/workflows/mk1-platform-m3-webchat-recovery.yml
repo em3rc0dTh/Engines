@@ -1,0 +1,138 @@
+name: MK1 Platform M3 WebChat Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cert/platform-solidity-pre-agent
+    paths:
+      - 'mk1/runtime/src/cta/webchat/**'
+      - 'mk1/runtime/scripts/certify-platform-m3-webchat-recovery.ts'
+      - '.github/workflows/mk1-platform-m3-webchat-recovery.yml'
+
+permissions:
+  contents: read
+
+env:
+  PLATFORM_M3_CERT_REF: ${{ github.sha }}
+
+jobs:
+  m3-webchat-recovery:
+    name: platform-m3-webchat-recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_M3_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_M3_CERT_REF"
+      - name: TypeScript and WebChat recovery unit contract
+        run: |
+          npm run check
+          npm run test:channel:c1b
+      - name: Start pristine durable runtime
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8788/health >/dev/null               && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          exit 1
+      - name: Start WebChat adapter
+        run: |
+          nohup npm run webchat:server >/tmp/m3-webchat.log 2>&1 &
+          echo $! >/tmp/m3-webchat.pid
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8790/health >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/m3-webchat.log
+          exit 1
+      - name: Prepare durable conversation at READY_TO_FINALIZE
+        env:
+          M3_PHASE: prepare
+          M3_STATE_FILE: /tmp/engines-platform-m3-state.json
+          POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+        run: npx tsx scripts/certify-platform-m3-webchat-recovery.ts | tee /tmp/m3-prepare.log
+      - name: Replace WebChat adapter process
+        run: |
+          kill "$(cat /tmp/m3-webchat.pid)" 2>/dev/null || true
+          pkill -f 'tsx src/cta/webchat/server-c1b.ts' 2>/dev/null || true
+          for attempt in $(seq 1 30); do
+            if ! curl -fsS http://127.0.0.1:8790/health >/dev/null 2>&1; then break; fi
+            sleep 0.2
+          done
+          if curl -fsS http://127.0.0.1:8790/health >/dev/null 2>&1; then
+            echo 'WebChat adapter never became unavailable' >&2
+            exit 1
+          fi
+          echo 'PLATFORM_M3_ADAPTER_DOWN_OBSERVED_PASS'
+          nohup npm run webchat:server >/tmp/m3-webchat-restarted.log 2>&1 &
+          echo $! >/tmp/m3-webchat.pid
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8790/health >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Verify visible transcript rehydration in real headless Chrome
+        run: |
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          conversation_id="$(node -e "const s=require('/tmp/engines-platform-m3-state.json'); process.stdout.write(s.conversationId)")"
+          "$chrome" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=4000 --dump-dom             "http://127.0.0.1:8790/webchat/?conversationId=$conversation_id" > /tmp/m3-dom.html
+          grep -F 'Platform M3 Customer' /tmp/m3-dom.html
+          grep -F 'Step 06 — Select a Service loaded by the Workflow.' /tmp/m3-dom.html
+          grep -F 'Step 07 — Select an Offering / Product for the selected Service.' /tmp/m3-dom.html
+          grep -F 'READY_TO_FINALIZE' /tmp/m3-dom.html
+          grep -F 'Finalize Appointment' /tmp/m3-dom.html
+          echo 'PLATFORM_M3_TRANSCRIPT_REHYDRATION_PASS'
+      - name: Finalize recovered conversation and prove one durable effect
+        env:
+          M3_PHASE: verify
+          M3_STATE_FILE: /tmp/engines-platform-m3-state.json
+          POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+        run: |
+          npx tsx scripts/certify-platform-m3-webchat-recovery.ts | tee /tmp/m3-verify.log
+          grep -F 'PLATFORM_M3_SAME_WORKFLOW_CONTINUITY_PASS' /tmp/m3-verify.log
+          grep -F 'PLATFORM_M3_TERMINAL_SINGLE_EFFECT_PASS' /tmp/m3-verify.log
+          grep -F 'PLATFORM_M3_WEBCHAT_RECOVERY_PASS' /tmp/m3-verify.log
+      - name: Capture M3 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/platform-m3-evidence
+          git rev-parse HEAD > /tmp/platform-m3-evidence/git-sha.txt
+          cp /tmp/m3-*.log /tmp/platform-m3-evidence/ 2>/dev/null || true
+          cp /tmp/m3-dom.html /tmp/platform-m3-evidence/ 2>/dev/null || true
+          cp /tmp/engines-platform-m3-state.json /tmp/platform-m3-evidence/state.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-m3-webchat-recovery-${{ github.run_id }}
+          path: /tmp/platform-m3-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/m3-webchat.pid ]; then kill "$(cat /tmp/m3-webchat.pid)" 2>/dev/null || true; fi
+          pkill -f 'tsx src/cta/webchat/server-c1b.ts' 2>/dev/null || true
+          docker compose down -v --remove-orphans || true
+      - name: Terminal marker
+        run: echo 'PLATFORM_M3_WEBCHAT_RECOVERY_PASS'
+# Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.
