@@ -476,6 +476,80 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
 
+  observability-governance-solidity:
+    name: observability-governance-core-solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      ENGINES_OBSERVER_ADMIN_TOKEN: og0-ci-operator-token
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_CERT_REF"
+      - name: Start operational observability plane
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose down -v --remove-orphans || true
+          $compose up --build -d postgres mongo minio temporal
+          $compose run --rm minio-init
+          $compose up --build -d migrate worker cta channel-core
+          $compose up --build -d platform-observer prometheus grafana otel-collector
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8890/health >/dev/null               && curl -fsS http://127.0.0.1:9090/-/ready >/dev/null               && curl -fsS http://127.0.0.1:3000/api/health >/dev/null               && curl -fsS http://127.0.0.1:13133/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Generate audit evidence and certify OG0
+        env:
+          MONGO_URL: mongodb://127.0.0.1:27017
+          MONGO_DB: engines_mk0
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml             run --rm --no-deps -T             -e ENGINES_CHANNEL_URL=http://channel-core:8788             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run probe:cta:poc >/tmp/platform-og0-cta.log
+          npx tsx scripts/certify-platform-og0-observability-governance.ts | tee /tmp/platform-og0.log
+          grep -F 'OBSERVABILITY_GOVERNANCE_CORE_PASS' /tmp/platform-og0.log
+      - name: Prove observer sees an actual component outage
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose stop channel-core
+          for attempt in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8890/metrics | grep -F 'engines_component_up{component="channel-core"} 0' && break
+            sleep 1
+          done
+          $compose start channel-core
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8890/metrics | grep -F 'engines_component_up{component="channel-core"} 1' && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8890/health >/dev/null
+          echo 'OBSERVABILITY_GOVERNANCE_SOLIDITY_PASS'
+      - name: Capture OG0 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/platform-og0-evidence
+          git rev-parse HEAD > /tmp/platform-og0-evidence/git-sha.txt
+          cp /tmp/platform-og0* /tmp/platform-og0-evidence/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-og0-${{ github.run_id }}
+          path: /tmp/platform-og0-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml down -v --remove-orphans || true
+
   platform-solidity-seal:
     name: platform-exact-head-solidity-seal
     needs:
@@ -484,6 +558,7 @@ jobs:
       - scheduler-g2-solidity
       - integration-g3-solidity
       - persistence-composition-solidity
+      - observability-governance-solidity
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -505,6 +580,7 @@ jobs:
           PostgreSQL operational truth                              PASS
           MongoDB operational document/audit boundary               PASS
           S3-compatible object integrity                            PASS
+          Observability/Governance operational core                  PASS
           Failure compensation                                      PASS
           Cross-boundary provider neutrality                        PASS
           Physical G3-I4 implementation identity preserved          PASS
@@ -519,6 +595,7 @@ jobs:
           echo 'SCHEDULER_G2_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/scheduler-marker.txt
           echo 'INTEGRATION_G3_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/integration-marker.txt
           echo 'PERSISTENCE_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/persistence-marker.txt
+          echo 'OBSERVABILITY_GOVERNANCE_CORE_PASS' | tee /tmp/platform-solidity-seal/observability-marker.txt
           echo 'CROSS_BOUNDARY_IDEMPOTENCY_PASS' | tee /tmp/platform-solidity-seal/idempotency-marker.txt
           echo 'PLATFORM_EXACT_HEAD_SEAL_PASS' | tee /tmp/platform-solidity-seal/exact-head-marker.txt
           echo 'PLATFORM_CORE_SOLIDITY_PASS' | tee /tmp/platform-solidity-seal/terminal-marker.txt

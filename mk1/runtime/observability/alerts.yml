@@ -1,0 +1,17 @@
+groups:
+  - name: engines-platform
+    rules:
+      - alert: EnginesComponentDown
+        expr: engines_component_up == 0
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Engines component is unavailable"
+      - alert: EnginesObserverMissing
+        expr: up{job="engines-platform-observer"} == 0
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Engines platform observer is unavailable"

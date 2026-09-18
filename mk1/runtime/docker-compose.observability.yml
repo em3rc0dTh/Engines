@@ -1,0 +1,73 @@
+services:
+  platform-observer:
+    build:
+      context: .
+    environment:
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: engines_mk0
+      ENGINES_OBSERVER_CTA_URL: http://cta:8787/health
+      ENGINES_OBSERVER_CHANNEL_URL: http://channel-core:8788/health
+      ENGINES_OBSERVER_MINIO_URL: http://minio:9000/minio/health/live
+      ENGINES_OBSERVER_TEMPORAL_HOST: temporal
+      ENGINES_OBSERVER_TEMPORAL_PORT: "7233"
+      ENGINES_OBSERVER_PORT: "8890"
+      ENGINES_OBSERVER_ADMIN_TOKEN: ${ENGINES_OBSERVER_ADMIN_TOKEN:?ENGINES_OBSERVER_ADMIN_TOKEN required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      cta:
+        condition: service_healthy
+      channel-core:
+        condition: service_healthy
+    command: ["npm", "run", "observer:platform"]
+    ports:
+      - "127.0.0.1:8890:8890"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8890/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    depends_on:
+      platform-observer:
+        condition: service_started
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    depends_on:
+      - platform-observer
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:13133:13133"

@@ -95,7 +95,8 @@
     "probe:layer6:v4": "tsx scripts/certify-layer6-v4-persistence.ts",
     "worker:appointment": "tsx src/orchestration/temporal/workers/appointment.worker.ts",
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
-    "probe:stores": "tsx src/runtime/probe-stores.ts"
+    "probe:stores": "tsx src/runtime/probe-stores.ts",
+    "observer:platform": "tsx src/observability/platform-observer.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
