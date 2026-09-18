@@ -9,6 +9,10 @@ on:
       - 'mk1/runtime/src/observability/**'
       - 'mk1/runtime/observability/**'
       - 'mk1/runtime/docker-compose.observability.yml'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/runtime/docker-compose.layer6.yml'
+      - 'mk1/runtime/Dockerfile'
+      - 'mk1/runtime/src/persistence/postgres/resilient-pool.ts'
       - 'mk1/runtime/scripts/certify-platform-og0-observability-governance.ts'
       - '.github/workflows/mk1-platform-og0-observability-governance.yml'
 
