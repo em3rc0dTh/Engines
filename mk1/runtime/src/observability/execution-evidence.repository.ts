@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from '../persistence/postgres/resilient-pool.js';
 import { loadRuntimeConfig } from '../config/runtime-config.js';
 
 export type MongoAuditEvidence = Readonly<{
@@ -75,7 +76,7 @@ function mongo(): MongoClient {
 }
 
 function postgres(): Pool {
-  postgresPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 });
+  postgresPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 }, 'execution-evidence');
   return postgresPool;
 }
 

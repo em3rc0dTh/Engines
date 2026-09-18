@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
-import { Pool } from 'pg';
+import { createResilientPostgresPool } from '../persistence/postgres/resilient-pool.js';
 import { MongoClient } from 'mongodb';
 
 const PORT = Number.parseInt(process.env.ENGINES_OBSERVER_PORT ?? '8890', 10);
@@ -21,7 +21,7 @@ type ProbeState = Readonly<{ up: boolean; checkedAt: string; latencyMs: number }
 
 const components: readonly Component[] = ['cta', 'channel-core', 'temporal', 'postgres', 'mongo', 'minio'];
 const state = new Map<Component, ProbeState>();
-const pool = new Pool({ connectionString: POSTGRES_URL, max: 2 });
+const pool = createResilientPostgresPool({ connectionString: POSTGRES_URL, max: 2 }, 'platform-observer');
 const mongo = new MongoClient(MONGO_URL, { maxPoolSize: 2 });
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
