@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type {
   AppointmentResult,
@@ -31,7 +32,7 @@ const HOUR_MS = 60 * 60_000;
 let pool: Pool | undefined;
 
 function db(): Pool {
-  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 12 });
+  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 12 }, 'appointment-scheduler-repository');
   return pool;
 }
 

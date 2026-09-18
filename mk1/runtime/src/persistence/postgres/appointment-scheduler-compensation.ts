@@ -1,10 +1,11 @@
-import { Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 
 let pool: Pool | undefined;
 
 function db(): Pool {
-  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 });
+  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 }, 'appointment-scheduler-compensation');
   return pool;
 }
 

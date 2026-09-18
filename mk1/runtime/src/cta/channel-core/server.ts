@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { Pool } from 'pg';
+import { createResilientPostgresPool } from '../../persistence/postgres/resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import { getAppointmentStateQuery } from '../../orchestration/temporal/workflows/register-new-appointment.workflow.js';
@@ -81,7 +81,7 @@ function projectTerminalTemporalFailure(
 
 async function run(): Promise<void> {
   const config = loadRuntimeConfig();
-  const pool = new Pool({ connectionString: config.postgresUrl, max: 8 });
+  const pool = createResilientPostgresPool({ connectionString: config.postgresUrl, max: 8 }, 'channel-core');
   const repository = new PostgresChannelRepository(pool);
   const ingressRepository = new PostgresCTAIngressRepository(pool);
   const servicesRepository = new PostgresServicesRepository(pool);
