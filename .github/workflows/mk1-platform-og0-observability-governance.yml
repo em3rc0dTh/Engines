@@ -118,3 +118,4 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml down -v --remove-orphans || true
       - name: Terminal marker
         run: echo 'OBSERVABILITY_GOVERNANCE_CORE_PASS'
+# Final pre-Agent exact-head revalidation trigger.
