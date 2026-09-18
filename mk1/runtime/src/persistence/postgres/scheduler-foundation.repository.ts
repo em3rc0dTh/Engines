@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type {
   ResourceCapability,
@@ -486,7 +487,7 @@ let defaultPool: Pool | undefined;
 let defaultRepository: PostgresSchedulerFoundationRepository | undefined;
 
 export function schedulerFoundationRepository(): PostgresSchedulerFoundationRepository {
-  defaultPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  defaultPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'scheduler-foundation-repository');
   defaultRepository ??= new PostgresSchedulerFoundationRepository(defaultPool);
   return defaultRepository;
 }

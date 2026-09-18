@@ -1,11 +1,12 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { CommittedAttachmentMetadata } from '../attachments/attachment-store.types.js';
 
 let pool: Pool | undefined;
 
 function db(): Pool {
-  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 });
+  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 4 }, 'customer-attachment-repository');
   return pool;
 }
 
