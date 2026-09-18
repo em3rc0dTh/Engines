@@ -9,8 +9,8 @@ export function createResilientPostgresPool(
     console.warn(JSON.stringify({
       event: 'POSTGRES_POOL_BACKGROUND_ERROR',
       component,
-      code: typeof (error as { code?: unknown }).code === 'string'
-        ? (error as { code: string }).code
+      code: typeof (error as Error & { code?: unknown }).code === 'string'
+        ? (error as Error & { code?: string }).code
         : undefined,
       message: error.message,
       recoverable: true,
