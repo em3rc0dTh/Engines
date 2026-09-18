@@ -72,7 +72,8 @@ jobs:
         run: npx tsx scripts/certify-platform-m3-webchat-recovery.ts | tee /tmp/m3-prepare.log
       - name: Replace WebChat adapter process
         run: |
-          kill "$(cat /tmp/m3-webchat.pid)"
+          kill "$(cat /tmp/m3-webchat.pid)" 2>/dev/null || true
+          pkill -f 'tsx src/cta/webchat/server-c1b.ts' 2>/dev/null || true
           for attempt in $(seq 1 30); do
             if ! curl -fsS http://127.0.0.1:8790/health >/dev/null 2>&1; then break; fi
             sleep 0.2
@@ -129,6 +130,7 @@ jobs:
         if: always()
         run: |
           if [ -f /tmp/m3-webchat.pid ]; then kill "$(cat /tmp/m3-webchat.pid)" 2>/dev/null || true; fi
+          pkill -f 'tsx src/cta/webchat/server-c1b.ts' 2>/dev/null || true
           docker compose down -v --remove-orphans || true
       - name: Terminal marker
         run: echo 'PLATFORM_M3_WEBCHAT_RECOVERY_PASS'
