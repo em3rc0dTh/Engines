@@ -19,7 +19,7 @@ export type CTAChannel =
   | 'tiktok';
 
 export type CanonicalCTAAction = 'register_appointment';
-export type CanonicalCTAEventType = 'button' | 'postback' | 'form' | 'comment' | 'command' | 'api_action';
+export type CanonicalCTAEventType = 'button' | 'postback' | 'message' | 'form' | 'comment' | 'command' | 'api_action';
 
 /**
  * Provider-neutral ingress contract. Authentication and webhook parsing have
