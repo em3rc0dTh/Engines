@@ -200,3 +200,4 @@ jobs:
       - name: Terminal marker
         run: echo 'PLATFORM_M5_DESTRUCTIVE_RESILIENCE_PASS'
 # Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.

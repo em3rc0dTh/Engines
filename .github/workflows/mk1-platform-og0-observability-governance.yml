@@ -119,3 +119,4 @@ jobs:
       - name: Terminal marker
         run: echo 'OBSERVABILITY_GOVERNANCE_CORE_PASS'
 # Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.

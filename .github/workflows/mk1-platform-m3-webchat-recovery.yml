@@ -135,3 +135,4 @@ jobs:
       - name: Terminal marker
         run: echo 'PLATFORM_M3_WEBCHAT_RECOVERY_PASS'
 # Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.

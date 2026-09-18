@@ -617,3 +617,4 @@ jobs:
       - name: Terminal marker
         run: echo 'PLATFORM_CORE_SOLIDITY_PASS'
 # Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.
