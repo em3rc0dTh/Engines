@@ -1,0 +1,31 @@
+{
+  "version": "meta.m1.transport.v0",
+  "provider": "messenger",
+  "callbackPath": "/webhooks/meta/messenger",
+  "callbackShape": "https://<worker>.<workers-subdomain>.workers.dev/webhooks/meta/messenger",
+  "subscriptions": [
+    "messages",
+    "messaging_postbacks"
+  ],
+  "requiredSecrets": [
+    "META_WEBHOOK_VERIFY_TOKEN",
+    "META_PAGE_ACCESS_TOKEN",
+    "META_APP_SECRET"
+  ],
+  "inbound": {
+    "marker": "TEST-ENGINES-001",
+    "expectedStatus": 200,
+    "senderPsid": "REDACTED"
+  },
+  "outbound": {
+    "marker": "TEST-OUTBOUND-001",
+    "expectedReply": "Engines received: \"TEST-OUTBOUND-001\" ✅"
+  },
+  "gates": {
+    "bidirectionalTransport": "PASS",
+    "canonicalNormalization": "PASS_DETERMINISTIC",
+    "deployedSignatureRejection": "OPEN",
+    "canonicalTemporalPersistencePhysical": "OPEN",
+    "publicAppReview": "OPEN"
+  }
+}
