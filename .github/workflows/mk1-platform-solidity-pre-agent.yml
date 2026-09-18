@@ -512,12 +512,22 @@ jobs:
           done
           exit 1
       - name: Generate audit evidence and certify OG0
-        env:
-          MONGO_URL: mongodb://127.0.0.1:27017
-          MONGO_DB: engines_mk0
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml             run --rm --no-deps -T             -e ENGINES_CHANNEL_URL=http://channel-core:8788             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run probe:cta:poc >/tmp/platform-og0-cta.log
-          npx tsx scripts/certify-platform-og0-observability-governance.ts | tee /tmp/platform-og0.log
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc >/tmp/platform-og0-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/platform-og0-cta.log
+          $compose run --rm --no-deps -T \
+            -e ENGINES_OBSERVER_URL=http://platform-observer:8890 \
+            -e ENGINES_PROMETHEUS_URL=http://prometheus:9090 \
+            -e ENGINES_GRAFANA_URL=http://grafana:3000 \
+            -e ENGINES_OTEL_HEALTH_URL=http://otel-collector:13133 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e ENGINES_OBSERVER_ADMIN_TOKEN="$ENGINES_OBSERVER_ADMIN_TOKEN" \
+            cta npx tsx scripts/certify-platform-og0-observability-governance.ts | tee /tmp/platform-og0.log
           grep -F 'OBSERVABILITY_GOVERNANCE_CORE_PASS' /tmp/platform-og0.log
       - name: Prove observer sees an actual component outage
         run: |
