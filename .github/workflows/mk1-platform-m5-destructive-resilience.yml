@@ -127,17 +127,21 @@ jobs:
           done
           M5_PHASE=verify-ready M5_STATE_FILE=/tmp/engines-platform-m5-state.json             npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-temporal-recovery.log
           grep -F 'PLATFORM_M5_TEMPORAL_RESTART_RECOVERY_PASS' /tmp/m5-temporal-recovery.log
-      - name: Restart MongoDB and MinIO and re-prove persistence integrity
+      - name: Restart MongoDB and MinIO while the workflow is still active
         run: |
           compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
           $compose restart mongo minio
+          mongo_ready=0
+          minio_ready=0
           for attempt in $(seq 1 60); do
-            if $compose exec -T mongo mongosh --quiet --eval "db.adminCommand('ping').ok" | grep -q 1               && $compose exec -T minio curl -fsS http://localhost:9000/minio/health/live >/dev/null; then break; fi
+            if $compose exec -T mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; then mongo_ready=1; fi
+            if $compose exec -T minio curl -fsS http://localhost:9000/minio/health/live >/dev/null 2>&1; then minio_ready=1; fi
+            if [ "$mongo_ready" = 1 ] && [ "$minio_ready" = 1 ]; then break; fi
             sleep 1
           done
+          test "$mongo_ready" = 1
+          test "$minio_ready" = 1
           $compose run --rm minio-init
-          $compose run --rm --no-deps -T             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             -e MONGO_URL=mongodb://mongo:27017             -e MONGO_DB=engines_mk0             -e LAYER6_S3_ENDPOINT=http://minio:9000             -e LAYER6_S3_REGION=us-east-1             -e LAYER6_S3_BUCKET=engines-layer6             -e LAYER6_S3_ACCESS_KEY_ID=engines             -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret             cta npm run probe:layer6:v4 | tee /tmp/m5-persistence-recovery.log
-          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/m5-persistence-recovery.log
           echo 'PLATFORM_M5_MONGO_MINIO_RESTART_RECOVERY_PASS'
       - name: Restart CTA and prove canonical CTA remains executable
         run: |
@@ -158,6 +162,21 @@ jobs:
           npx tsx scripts/certify-platform-m5-destructive-resilience.ts | tee /tmp/m5-finalize.log
           grep -F 'PLATFORM_M5_TERMINAL_SINGLE_EFFECT_PASS' /tmp/m5-finalize.log
           grep -F 'PLATFORM_M5_DESTRUCTIVE_RESILIENCE_PASS' /tmp/m5-finalize.log
+      - name: Re-prove Layer 6 integrity after terminal Appointment creation
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml'
+          $compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e LAYER6_S3_ENDPOINT=http://minio:9000 \
+            -e LAYER6_S3_REGION=us-east-1 \
+            -e LAYER6_S3_BUCKET=engines-layer6 \
+            -e LAYER6_S3_ACCESS_KEY_ID=engines \
+            -e LAYER6_S3_SECRET_ACCESS_KEY=engines-layer6-secret \
+            cta npm run probe:layer6:v4 | tee /tmp/m5-persistence-recovery.log
+          grep -F 'LAYER6_V4_PERSISTENCE_PASS' /tmp/m5-persistence-recovery.log
+          echo 'PLATFORM_M5_LAYER6_POST_RESTART_INTEGRITY_PASS'
       - name: Capture destructive evidence
         if: always()
         run: |
