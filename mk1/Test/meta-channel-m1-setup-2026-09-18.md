@@ -19,7 +19,8 @@ Date: 2026-09-18
 12. Send a physical message from an allowed personal profile to the Page.
 13. Confirm the callback receives a POST with `object=page`, sender id, Page id, message id, and text.
 14. Test a Page Send API reply inside the permitted response window.
-15. Before production, validate `X-Hub-Signature-256` using `META_APP_SECRET` and complete the required App Review/access process.
+15. Run the external-user negative control described below.
+16. Before production, validate `X-Hub-Signature-256` using `META_APP_SECRET` and complete the required App Review/access process.
 
 ## Why the URL matters
 
@@ -58,6 +59,30 @@ Observed reply:
 ```text
 Engines received: "TEST-OUTBOUND-001" ✅
 ```
+
+## External-user negative control
+
+To distinguish internal development-role access from public access:
+
+1. keep the app in development mode;
+2. use a Facebook account that is not an app administrator, developer, or tester and has no project relationship;
+3. send a message to the same connected Page;
+4. monitor the permanent webhook logs.
+
+Observed on 2026-09-18:
+
+```text
+message sent to DevAthom
+webhook log: no corresponding event
+```
+
+Record this as:
+
+```text
+META_M1_EXTERNAL_USER_DEV_MODE_BLOCK_CONFIRMED
+```
+
+Do not interpret the absence of an external-user webhook as a Worker outage if role-bound traffic has already proven the same callback. For this setup, it is the expected pre-production access boundary.
 
 ## Non-claims
 
