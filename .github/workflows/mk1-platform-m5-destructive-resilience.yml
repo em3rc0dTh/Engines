@@ -199,3 +199,4 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.layer6.yml down -v --remove-orphans || true
       - name: Terminal marker
         run: echo 'PLATFORM_M5_DESTRUCTIVE_RESILIENCE_PASS'
+# Final pre-Agent exact-head revalidation trigger.
