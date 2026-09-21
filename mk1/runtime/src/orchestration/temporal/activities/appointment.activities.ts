@@ -1,3 +1,4 @@
+import { Context } from '@temporalio/activity';
 import { todayInTimeZone } from '../../../contracts/register-new-appointment/index.js';
 import type { CustomerDraft } from '../../../contracts/register-new-customer/index.js';
 import {
@@ -5,13 +6,21 @@ import {
   resolveAppointmentCustomerByName,
 } from '../../../persistence/postgres/appointment-customer-name.repository.js';
 import {
-  bookAppointment,
   closeAppointmentRepository,
-  getAppointmentById,
-  listAppointmentSlots,
   reserveAppointmentCommand,
   resolveAppointmentCustomer,
 } from '../../../persistence/postgres/appointment.repository.js';
+import {
+  closeAppointmentSchedulerCompensation,
+  compensateFailedAppointmentSchedulerReservation,
+} from '../../../persistence/postgres/appointment-scheduler-compensation.js';
+import {
+  bookAppointmentViaScheduler,
+  closeAppointmentSchedulerRepository,
+  freezeAppointmentSchedulingDemands,
+  getSchedulerBackedAppointmentById,
+  listAppointmentSlotsViaScheduler,
+} from '../../../persistence/postgres/appointment-scheduler.repository.js';
 import {
   closeManagedEntityRepository,
   createManagedEntityForCustomer,
@@ -24,6 +33,14 @@ import {
 } from '../../../services/appointment-catalog.compat.js';
 import type { AppointmentActivities } from './appointment.types.js';
 import { servicesReadActivities } from './services-read.activities.js';
+
+const APPOINTMENT_ACTIVITY_MAX_ATTEMPTS = 3;
+
+function currentWorkflowId(): string {
+  const workflowExecution = Context.current().info.workflowExecution;
+  if (!workflowExecution) throw new Error('APPOINTMENT_ACTIVITY_WORKFLOW_EXECUTION_MISSING');
+  return workflowExecution.workflowId;
+}
 
 function hasStrongCustomerIdentity(customer: CustomerDraft | undefined): boolean {
   if (!customer) return false;
@@ -72,20 +89,53 @@ export const appointmentActivities: AppointmentActivities = {
   },
 
   async listAppointmentProducts(input) {
-    const offerings = await servicesReadActivities.listOfferings({
+    const [service, offerings] = await Promise.all([
+      servicesReadActivities.getService({
+        businessSlug: input.businessSlug,
+        serviceIdOrCode: input.serviceId,
+      }),
+      servicesReadActivities.listOfferings({
+        businessSlug: input.businessSlug,
+        serviceId: input.serviceId,
+      }),
+    ]);
+    if (!service || service.status !== 'ACTIVE') return [];
+
+    const schedulable = await freezeAppointmentSchedulingDemands({
       businessSlug: input.businessSlug,
-      serviceId: input.serviceId,
+      workflowId: currentWorkflowId(),
+      service,
+      offerings,
     });
-    return offerings.map(toAppointmentProduct);
+    return schedulable.map(toAppointmentProduct);
   },
 
-  // Slot generation/final persistence remains the inherited compatibility
-  // boundary until G2 Scheduler. S7 changes catalog authority, not Scheduler
-  // ownership.
   listAppointmentSlots: (input) =>
-    listAppointmentSlots(input.businessSlug, input.productId, input.appointmentDate),
-  bookAppointment: (input) => bookAppointment(input),
-  getAppointment: (input) => getAppointmentById(input.appointmentId),
+    listAppointmentSlotsViaScheduler({
+      businessSlug: input.businessSlug,
+      workflowId: currentWorkflowId(),
+      productId: input.productId,
+      appointmentDate: input.appointmentDate,
+    }),
+  async bookAppointment(input) {
+    try {
+      return await bookAppointmentViaScheduler(input);
+    } catch (error) {
+      if (Context.current().info.attempt >= APPOINTMENT_ACTIVITY_MAX_ATTEMPTS) {
+        try {
+          await compensateFailedAppointmentSchedulerReservation({
+            businessSlug: input.businessSlug,
+            workflowId: input.workflowId,
+          });
+        } catch (compensationError) {
+          const detail = compensationError instanceof Error ? compensationError.message : String(compensationError);
+          throw new Error(`APPOINTMENT_SCHEDULER_COMPENSATION_FAILED:${detail}`);
+        }
+      }
+      throw error;
+    }
+  },
+  getAppointment: (input) => getSchedulerBackedAppointmentById(input.appointmentId),
 };
 
 export async function closeAppointmentActivities(): Promise<void> {
@@ -93,5 +143,7 @@ export async function closeAppointmentActivities(): Promise<void> {
     closeAppointmentRepository(),
     closeAppointmentCustomerNameRepository(),
     closeManagedEntityRepository(),
+    closeAppointmentSchedulerRepository(),
+    closeAppointmentSchedulerCompensation(),
   ]);
 }

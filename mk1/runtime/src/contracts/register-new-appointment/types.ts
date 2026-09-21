@@ -88,6 +88,12 @@ export type AppointmentProduct = Readonly<{
   eligibilityRuleSet?: EligibilityRuleSet;
 }>;
 
+/**
+ * Appointment renderer projection of Scheduler availability. `start`/`end`
+ * remain business-local HH:mm values so all existing channels stay compatible.
+ * The concrete Scheduler candidate remains internal to the Activity boundary
+ * and is re-resolved/revalidated during explicit Finalize.
+ */
 export type AppointmentSlot = Readonly<{
   start: string;
   end: string;
@@ -155,7 +161,10 @@ export type AppointmentResult = Readonly<{
   customerId: string;
   managedEntityId?: string;
   caseId?: string;
+  /** Legacy pre-G2 reservation reference; new G2-S7 writes leave this absent. */
   resourceReservationId?: string;
+  /** Canonical G2 Scheduler reservation that owns concrete capacity truth. */
+  schedulerReservationId?: string;
   serviceId: string;
   productId: string;
   appointmentDate: string;
