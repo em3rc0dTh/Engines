@@ -87,3 +87,35 @@ Do not interpret the absence of an external-user webhook as a Worker outage if r
 ## Non-claims
 
 This runbook does not claim public production approval, deployed signature enforcement, or physical CTA -> Temporal -> persistence completion.
+
+
+---
+
+## 2026-09-21 addendum — shared Page webhook for Messenger + Facebook Comments
+
+Meta configures one callback URL for the Graph API object `Page` inside the app. Keep the already-proven callback:
+
+~~~text
+https://<worker>.<workers-subdomain>.workers.dev/webhooks/meta/messenger
+~~~
+
+Do not configure Facebook Comments under the `User` object. For the Pages use case:
+
+1. open **Manage Pages / Administrar páginas**;
+2. open **Webhooks**;
+3. select product/object **Page**;
+4. keep the existing callback URL and verify token;
+5. subscribe the `feed` field;
+6. use **Test / Probar** on `feed`;
+7. confirm the Worker receives `entry[].changes[].field = "feed"`.
+
+The same Page callback can therefore receive both payload families:
+
+~~~text
+entry[].messaging[]                    -> Messenger
+entry[].changes[field="feed"]          -> Facebook Page feed / comments
+~~~
+
+The `User` object is not part of this CTA lane and should remain without the accidental `/facebook-comments` callback.
+
+See `meta-facebook-comments-setup-2026-09-21.md` for the complete reproduction path.
