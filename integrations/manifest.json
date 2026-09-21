@@ -60,7 +60,7 @@
       "mk": "mk1",
       "sourceRef": "main",
       "historicalProviderRef": "stage-20260918",
-      "status": "real-transport-verified-full-cta-open"
+      "status": "real-transport-and-deployed-hmac-verified-full-cta-open"
     },
     {
       "id": "facebook-comments",
@@ -69,7 +69,7 @@
       "mk": "mk1",
       "sourceRef": "main",
       "historicalProviderRef": "feature/cta-meta-facebook-comments-poc",
-      "status": "dashboard-and-synthetic-edge-verified-real-provider-open"
+      "status": "deployed-hmac-sealed-canonical-bridge-candidate-real-provider-open"
     },
     {
       "id": "tiktok",
