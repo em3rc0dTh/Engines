@@ -36,6 +36,8 @@ The former stacked PRs #27, #28 and #33 were closed during housekeeping after an
 | #37 | direct Meta WhatsApp Cloud API | MERGED |
 | #38 | CTA repository consolidation | MERGED |
 | #39 | integrated CTA baseline promotion to main | MERGED |
+| #40 | Meta Page HMAC + Facebook Comment canonical Temporal bridge | MERGED |
+| #41 | promote Meta HMAC / Facebook Comment bridge to main | MERGED |
 
 ## Historical refs safe to remove after evidence review
 
@@ -58,6 +60,8 @@ build/g2-scheduler
 feature/layer6-v4-persistence-complete
 feature/pre-scheduler-node-edge-certification
 build/g3-integration
+
+feature/meta-page-hmac-canonical-bridge
 ```
 
 Why these are removable:
@@ -68,6 +72,7 @@ Why these are removable:
 - Scheduler S0/S1/S2 are ancestors of the terminal G2 branch.
 - terminal G2 is already contained in the pre-Scheduler lineage.
 - Layer 6, pre-Scheduler and G3 are all ancestors of the active PR #34 branch.
+- `feature/meta-page-hmac-canonical-bridge` was merged through PR #40 and promoted to `main` through PR #41.
 
 Deleting a branch ref does not delete commits, merged/closed PR discussions, CI runs, artifacts or source-bound evidence SHAs.
 
@@ -89,9 +94,9 @@ CLI / HTTP-Postman                         certified laboratory
 WebChat                                    physically verified within PoC
 Telegram official Bot API                  physically verified
 WhatsApp / Kapso                           physically verified
-Messenger                                  real inbound + outbound transport verified
-Facebook Page.feed                         dashboard transport verified
-Facebook comment CTA                       synthetic edge replay verified
+Messenger                                  real inbound + outbound transport + deployed HMAC verified
+Facebook Page.feed                         signed dashboard transport verified
+Facebook comment CTA                       canonical bridge -> Temporal start -> persistence/idempotency certified
 WhatsApp direct Meta Cloud API             deterministic certified / physical open
 TikTok                                     deterministic only
 ```
