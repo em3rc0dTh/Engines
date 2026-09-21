@@ -118,6 +118,7 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
     const pool = new Pool({ connectionString: loadRuntimeConfig().postgresUrl });
     try {
       const managedEntityId = `men_fixture_${randomUUID()}`;
+      // ME1 requires display_name on all ManagedEntity rows, including certification-only compensation fixtures.
       await pool.query(
         `INSERT INTO managed_entities(
            managed_entity_id,
