@@ -79,16 +79,22 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
   const email = state.customer.customer?.contact?.email?.trim() || undefined;
   const phone = phoneValue(state)?.trim() || undefined;
   const customerSkip = customerResolved;
+  const strongerIdentityRequired = state.customer.status === 'AMBIGUOUS'
+    || state.issues.some((item) =>
+      item.code === 'CUSTOMER_INCOMPLETE'
+      || item.code === 'CUSTOMER_NOT_FOUND'
+      || item.code === 'CUSTOMER_AMBIGUOUS');
 
   const customerNameStatus = valueStatus(name, customerCaptureOpen && !name, customerSkip && !name);
   const customerEmailStatus = valueStatus(
     email,
-    customerCaptureOpen && Boolean(name) && !email,
+    customerCaptureOpen && Boolean(name) && !email && strongerIdentityRequired,
     customerSkip && !email,
   );
   const customerPhoneStatus = valueStatus(
     phone,
-    customerCaptureOpen && Boolean(name) && Boolean(email) && !phone,
+    customerCaptureOpen && Boolean(name) && Boolean(email) && !phone
+      && state.issues.some((item) => item.code === 'CUSTOMER_INCOMPLETE'),
     customerSkip && !phone,
   );
 
@@ -96,7 +102,7 @@ export function projectAppointmentWorkflow(state: AppointmentStateProjection): A
     ? 'COMPLETE'
     : state.phase === 'RESOLVING_CUSTOMER'
       ? 'ACTIVE'
-      : state.nextAction === 'RESOLVE_CUSTOMER' && Boolean(name) && Boolean(email) && Boolean(phone)
+      : state.nextAction === 'RESOLVE_CUSTOMER' && Boolean(name) && !strongerIdentityRequired
         ? 'ACTIVE'
         : 'PENDING';
 
