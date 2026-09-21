@@ -2,91 +2,71 @@
 
 Date: 2026-09-21
 
-No access token, app secret, verification token, personal account identifier, real sender identifier, or raw production credential is stored here.
+No secret, signature digest, Page identifier, sender identifier or credential is stored here.
 
-## Provider dashboard feed transport
-
-Meta Developers `Page -> feed -> Test` sent a webhook to the already-proven Page callback.
+## Signed Page.feed dashboard delivery
 
 Observed:
 
 ~~~text
 POST /webhooks/meta/messenger
-HTTP 200
+META_HMAC_VALID
 META_PAYLOAD
 FACEBOOK_FEED_EVENT
 FACEBOOK_FEED_NON_COMMENT
+HTTP 200
 ~~~
 
-The sanitized sample shape was:
+The sample remained item=status / verb=add, so it proves authenticated feed transport only.
 
-~~~text
-field=feed
-item=status
-verb=add
-published=1
-post_id present
-message="Example post content."
-~~~
-
-Marker:
-
-~~~text
-META_PAGE_FEED_DASHBOARD_TRANSPORT_PASS
-~~~
-
-## Messenger regression
-
-After the Worker learned to distinguish `entry[].messaging[]` from `entry[].changes[]`, a physical Messenger message still produced the expected Page reply.
-
-Marker:
-
-~~~text
-META_SHARED_PAGE_CALLBACK_MESSENGER_REGRESSION_PASS
-~~~
-
-## Synthetic Facebook comment edge replay
-
-A sanitized POST was replayed against the deployed Worker:
-
-~~~text
-object=page
-field=feed
-item=comment
-verb=add
-post_id=TEST_PAGE_TEST_POST
-comment_id=TEST_COMMENT_001
-sender_id=TEST_USER
-message=CITA
-~~~
+## Signed Messenger regression
 
 Observed:
 
 ~~~text
-HTTP 200
-EVENT_RECEIVED
-FACEBOOK_FEED_EVENT
-FACEBOOK_COMMENT_EVENT
-FACEBOOK_COMMENT_CTA
-type=START_APPOINTMENT
+META_HMAC_VALID
+MESSENGER_EVENT
+MESSENGER_MESSAGE
+META_SEND_RESULT status=200 ok=true
 ~~~
 
-Markers:
+## Negative controls
 
 ~~~text
-META_FACEBOOK_COMMENT_SYNTHETIC_REPLAY_PASS
-META_FACEBOOK_COMMENT_EDGE_CTA_CLASSIFICATION_PASS
+unsigned POST       -> HTTP 401 + META_HMAC_MISSING
+incorrect signature -> HTTP 403 + META_HMAC_INVALID
+~~~
+
+Detailed seal: mk1/Build/evidence/meta-page-hmac-security-seal-2026-09-21.md
+
+## Historical synthetic edge replay
+
+The earlier unsigned comment/add/CITA replay is retained only as pre-HMAC branch-shape provenance. Unsigned arbitrary replays are now intentionally rejected.
+
+## Current repository bridge
+
+Current candidate:
+
+~~~text
+Engines HMAC re-verification
+  -> FacebookCommentAdapter
+  -> CanonicalCTAEvent
+  -> CanonicalCTADispatcher
+  -> real Temporal workflow start
+  -> PostgreSQL CTA ingress + channel binding
+  -> exact replay dedupe
 ~~~
 
 ## Truth boundary
 
 ~~~text
-Page.feed dashboard delivery          PASS
-shared callback Messenger regression  PASS
-synthetic comment classification      PASS
-real Facebook comment delivery        OPEN
-deployed HMAC rejection               OPEN
-real CTA -> Temporal -> persistence   OPEN
-exact provider replay/idempotency     OPEN
-public production access              OPEN
+Page.feed signed dashboard delivery        PASS
+shared callback Messenger signed delivery  PASS
+deployed missing-signature rejection       PASS
+deployed invalid-signature rejection       PASS
+deployed HMAC enforcement                  SEALED
+real Facebook comment delivery             OPEN
+hosted Worker -> Engines bridge            OPEN
+private continuation                       OPEN
+public production access                   OPEN
 ~~~
