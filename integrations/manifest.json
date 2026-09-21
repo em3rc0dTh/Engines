@@ -69,7 +69,7 @@
       "mk": "mk1",
       "sourceRef": "main",
       "historicalProviderRef": "feature/cta-meta-facebook-comments-poc",
-      "status": "deployed-hmac-sealed-canonical-bridge-candidate-real-provider-open"
+      "status": "deployed-hmac-sealed-canonical-bridge-certified-real-provider-open"
     },
     {
       "id": "tiktok",
