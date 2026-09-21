@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
-import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import {
+  GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+  type AppointmentStateProjection,
+} from '../../contracts/register-new-appointment/index.js';
 import { WhatsAppAdapter } from './whatsapp.adapter.js';
 import {
   renderWhatsAppAppointment,
@@ -116,9 +119,20 @@ test('WA-APPT-003 interactive selections stay on canonical appointment actions',
 });
 
 test('WA-APPT-004 appointment renderer exposes service and only terminal completion states', () => {
+  const managedEntity = {
+    managedEntityId: 'men-1',
+    type: 'vehicle',
+    displayName: 'Renault Logan',
+  } as const;
   const serviceState = {
     workflowId: 'wf-1', workflowStatus: 'RUNNING', phase: 'WAITING_FOR_SERVICE',
     customer: { status: 'EXISTING', customerId: 'cus-1' },
+    managedEntity: {
+      status: 'SELECTED',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [managedEntity],
+      selected: managedEntity,
+    },
     services: [{ serviceId: 'svc_car_wash', code: 'car-wash', name: 'Car Wash' }],
     products: [], availableSlots: [], nextAction: 'SELECT_SERVICE', issues: [],
   } as AppointmentStateProjection;
@@ -133,7 +147,9 @@ test('WA-APPT-004 appointment renderer exposes service and only terminal complet
     nextAction: 'NONE',
     result: {
       appointmentId: 'apt-1', caseId: 'case-1', customerId: 'cus-1', managedEntityId: 'men-1',
-      resourceReservationId: 'rr-1', appointmentDate: '2026-09-12', slot: { start: '06:00', end: '06:30' },
+      resourceReservationId: 'rr-1', serviceId: 'svc_car_wash', productId: 'prd-1',
+      appointmentDate: '2026-09-12',
+      slot: { start: '06:00', end: '06:30', durationMinutes: 30 },
     },
   } as AppointmentStateProjection;
   assert.equal(whatsappAppointmentRenderIntent(createdButAuditing), 'WAIT');

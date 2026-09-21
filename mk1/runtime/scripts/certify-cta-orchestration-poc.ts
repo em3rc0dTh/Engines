@@ -55,10 +55,52 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
   const started = await event(conversationId, `${token}:start`, 'START_APPOINTMENT');
   assert(typeof started.workflowId === 'string', 'workflow identity missing');
   await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_CUSTOMER', 'customer');
-  await event(conversationId, `${token}:name`, 'PROVIDE_CUSTOMER', { customerPatch: { name: `CTA ${token}` } });
-  await event(conversationId, `${token}:email`, 'PROVIDE_CUSTOMER', { customerPatch: { contact: { email: `${token}@example.test` } } });
-  await event(conversationId, `${token}:resolve`, 'RESOLVE_CUSTOMER');
-  let current = await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_SERVICE', 'service');
+  const customerProvided = await event(
+    conversationId,
+    `${token}:customer`,
+    'PROVIDE_CUSTOMER',
+    {
+      customerPatch: {
+        name: `CTA ${token}`,
+        contact: { email: `${token}@example.test` },
+      },
+    },
+  );
+  assert(customerProvided.ok === true, `complete customer patch rejected: ${JSON.stringify(customerProvided)}`);
+
+  let current = await waitFor(
+    conversationId,
+    (v) => v.phase === 'WAITING_FOR_MANAGED_ENTITY' || v.phase === 'WAITING_FOR_SERVICE',
+    'managed-entity',
+  );
+
+  if (current.phase === 'WAITING_FOR_MANAGED_ENTITY') {
+    const managedEntity = record(current.managedEntity);
+    const candidates = list(managedEntity.candidates);
+    const selectable = candidates.find((candidate) => typeof candidate.managedEntityId === 'string');
+
+    if (managedEntity.status === 'NEEDS_SELECTION' && selectable) {
+      await event(
+        conversationId,
+        `${token}:managed-entity:select`,
+        'SELECT_MANAGED_ENTITY',
+        { managedEntityId: selectable.managedEntityId },
+      );
+    } else {
+      await event(
+        conversationId,
+        `${token}:managed-entity:create`,
+        'CREATE_MANAGED_ENTITY',
+        {
+          displayName: `CTA Vehicle ${token}`,
+          externalRef: `CTA-${token}`,
+          summary: 'Deterministic CTA orchestration certification vehicle',
+        },
+      );
+    }
+  }
+
+  current = await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_SERVICE', 'service');
   assert(list(current.services).some((v) => v.serviceId === 'svc_car_wash'), 'service fixture missing');
   await event(conversationId, `${token}:offering`, 'SELECT_OFFERING', { catalogOfferingId: 'prd_car_wash_basic' });
   await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_DATE', 'date');
@@ -76,10 +118,24 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
     const pool = new Pool({ connectionString: loadRuntimeConfig().postgresUrl });
     try {
       const managedEntityId = `men_fixture_${randomUUID()}`;
+      // ME1 requires display_name on all ManagedEntity rows, including certification-only compensation fixtures.
       await pool.query(
-        `INSERT INTO managed_entities(managed_entity_id,business_slug,customer_id,entity_type,external_ref)
-         VALUES($1,$2,$3,'COMPENSATION_FIXTURE',$4)`,
-        [managedEntityId,businessSlug,customerId,token],
+        `INSERT INTO managed_entities(
+           managed_entity_id,
+           business_slug,
+           customer_id,
+           entity_type,
+           external_ref,
+           display_name
+         )
+         VALUES($1,$2,$3,'COMPENSATION_FIXTURE',$4,$5)`,
+        [
+          managedEntityId,
+          businessSlug,
+          customerId,
+          token,
+          `CTA Compensation Fixture ${token}`,
+        ],
       );
       await pool.query(
         `INSERT INTO operational_cases(case_id,business_slug,customer_id,managed_entity_id,workflow_id,status)

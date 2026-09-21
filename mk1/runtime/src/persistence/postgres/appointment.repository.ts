@@ -52,6 +52,7 @@ export type BookAppointmentInput = Readonly<{
   workflowId: string;
   businessSlug: string;
   customerId: string;
+  managedEntityId: string;
   serviceId: string;
   productId: string;
   appointmentDate: string;
@@ -419,6 +420,17 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     );
     if ((customerOk.rowCount ?? 0) === 0) throw new Error('CUSTOMER_NOT_FOUND');
 
+    const managedEntityOk = await client.query(
+      `SELECT 1
+         FROM managed_entities
+        WHERE business_slug = $1
+          AND customer_id = $2
+          AND managed_entity_id = $3
+          AND status = 'ACTIVE'`,
+      [input.businessSlug, input.customerId, input.managedEntityId],
+    );
+    if ((managedEntityOk.rowCount ?? 0) === 0) throw new Error('MANAGED_ENTITY_NOT_FOUND');
+
     const productOk = await client.query(
       `SELECT 1
          FROM service_products p
@@ -447,17 +459,6 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     const resourceKey = resource.rows[0]?.resource_key;
     if (!resourceKey) throw new Error('APPOINTMENT_RESOURCE_NOT_FOUND');
 
-    const managedEntityCandidate = `men_${randomUUID()}`;
-    const managedEntity = await client.query<{ managed_entity_id: string }>(
-      `INSERT INTO managed_entities
-        (managed_entity_id,business_slug,customer_id,entity_type,external_ref)
-       VALUES ($1,$2,$3,'CUSTOMER_SUBJECT','default')
-       ON CONFLICT (business_slug,customer_id,entity_type,external_ref)
-       DO UPDATE SET status='ACTIVE' RETURNING managed_entity_id`,
-      [managedEntityCandidate, input.businessSlug, input.customerId],
-    );
-    const managedEntityId = managedEntity.rows[0]!.managed_entity_id;
-
     const existingReservation = await client.query<{ resource_reservation_id: string; status: string }>(
       `SELECT resource_reservation_id,status FROM resource_reservations
        WHERE business_slug=$1 AND workflow_id=$2 FOR UPDATE`,
@@ -472,8 +473,10 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     heldReservationId = existingReservation.rows[0]?.resource_reservation_id ?? `rr_${randomUUID()}`;
     if (existingReservation.rows[0]?.status === 'RELEASED') {
       await client.query(
-        `UPDATE resource_reservations SET status='HELD',release_reason=NULL,updated_at=NOW()
-         WHERE resource_reservation_id=$1`, [heldReservationId],
+        `UPDATE resource_reservations
+            SET status='HELD',managed_entity_id=$2,release_reason=NULL,updated_at=NOW()
+          WHERE resource_reservation_id=$1`,
+        [heldReservationId, input.managedEntityId],
       );
     } else if (!existingReservation.rows[0]) {
       try {
@@ -482,7 +485,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
             resource_reservation_id,business_slug,customer_id,managed_entity_id,catalog_offering_id,
             resource_key,reservation_date,start_time,end_time,workflow_id,status
           ) VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::time,$9::time,$10,'HELD')`,
-          [heldReservationId,input.businessSlug,input.customerId,managedEntityId,input.productId,resourceKey,
+          [heldReservationId,input.businessSlug,input.customerId,input.managedEntityId,input.productId,resourceKey,
             input.appointmentDate,selected.start,selected.end,input.workflowId],
         );
       } catch (error) {
@@ -502,7 +505,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     await client.query(
       `INSERT INTO operational_cases (case_id,business_slug,customer_id,managed_entity_id,workflow_id)
        VALUES ($1,$2,$3,$4,$5)`,
-      [caseId,input.businessSlug,input.customerId,managedEntityId,input.workflowId],
+      [caseId,input.businessSlug,input.customerId,input.managedEntityId,input.workflowId],
     );
 
     const appointmentId = `apt_${randomUUID()}`;
@@ -532,7 +535,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
           selected.end,
           input.timezone ?? 'America/Lima',
           weekday(input.appointmentDate),
-          managedEntityId,
+          input.managedEntityId,
           caseId,
           heldReservationId,
         ],
@@ -566,7 +569,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
         timeline_event_id,business_slug,case_id,appointment_id,resource_reservation_id,event_type,workflow_id,payload_json
        ) VALUES ($1,$2,$3,$4,$5,'APPOINTMENT_REGISTERED',$6,$7::jsonb)`,
       [`tle_${randomUUID()}`,input.businessSlug,caseId,appointmentId,heldReservationId,input.workflowId,
-        JSON.stringify({ customerId: input.customerId, managedEntityId, catalogOfferingId: input.productId })],
+        JSON.stringify({ customerId: input.customerId, managedEntityId: input.managedEntityId, catalogOfferingId: input.productId })],
     );
 
     await client.query(
@@ -583,7 +586,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
       appointment: {
         appointmentId,
         customerId: input.customerId,
-        managedEntityId,
+        managedEntityId: input.managedEntityId,
         caseId,
         resourceReservationId: heldReservationId,
         serviceId: input.serviceId,

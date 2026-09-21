@@ -82,7 +82,12 @@
     "probe:stores": "tsx src/runtime/probe-stores.ts",
     "test:whatsapp:cloud-api": "tsx --test src/cta/whatsapp/whatsapp.cloud-api.test.ts",
     "whatsapp:cloud-api": "tsx src/cta/whatsapp/whatsapp.cloud-api-runner.ts",
-    "probe:meta:facebook-comment": "tsx scripts/certify-meta-facebook-comment-cta.ts"
+    "probe:meta:facebook-comment": "tsx scripts/certify-meta-facebook-comment-cta.ts",
+    "test:managed-entity": "tsx --test src/contracts/register-new-appointment/managed-entity-policy.test.ts",
+    "migrate:managed-entity": "tsx scripts/migrate-postgres-managed-entity.ts",
+    "probe:managed-entity": "tsx scripts/certify-managed-entity-me1.ts",
+    "fixture:me1:physical": "tsx scripts/prepare-managed-entity-me1-physical.ts",
+    "verify:me1:physical": "tsx scripts/verify-managed-entity-me1-physical.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
