@@ -6,7 +6,7 @@ on:
       - feature/managed-entity-resolution-policy
   pull_request:
     branches:
-      - feature/cta-orchestration-register-appointment-poc
+      - developer
 
 permissions:
   contents: read
