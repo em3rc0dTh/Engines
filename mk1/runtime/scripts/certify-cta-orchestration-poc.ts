@@ -55,9 +55,18 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
   const started = await event(conversationId, `${token}:start`, 'START_APPOINTMENT');
   assert(typeof started.workflowId === 'string', 'workflow identity missing');
   await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_CUSTOMER', 'customer');
-  await event(conversationId, `${token}:name`, 'PROVIDE_CUSTOMER', { customerPatch: { name: `CTA ${token}` } });
-  await event(conversationId, `${token}:email`, 'PROVIDE_CUSTOMER', { customerPatch: { contact: { email: `${token}@example.test` } } });
-  await event(conversationId, `${token}:resolve`, 'RESOLVE_CUSTOMER');
+  const customerProvided = await event(
+    conversationId,
+    `${token}:customer`,
+    'PROVIDE_CUSTOMER',
+    {
+      customerPatch: {
+        name: `CTA ${token}`,
+        contact: { email: `${token}@example.test` },
+      },
+    },
+  );
+  assert(customerProvided.ok === true, `complete customer patch rejected: ${JSON.stringify(customerProvided)}`);
 
   let current = await waitFor(
     conversationId,
