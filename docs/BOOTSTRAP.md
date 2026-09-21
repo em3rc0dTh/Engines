@@ -42,14 +42,14 @@ docker compose down -v --remove-orphans
 docker compose up --build -d
 ```
 
-## 2. MK1 consolidated Customer/channel laboratory
+## 2. MK1 integrated CTA/channel laboratory
 
-Use the consolidated anchor rather than reconstructing old stacked branches:
+Use the canonical integrated line rather than reconstructing old stacked branches:
 
 ```bash
 cd Engines
 git fetch origin --prune
-git switch build/mk1-customer-channels-integrated
+git switch main
 git pull
 cd mk1/runtime
 npm ci
@@ -98,7 +98,7 @@ Source branch / historical certification line:
 build/mk1-c2-telegram-bot-api-official
 ```
 
-The implementation is also consolidated into `build/mk1-customer-channels-integrated`.
+The implementation is integrated into `main`.
 
 Environment:
 
@@ -126,10 +126,10 @@ Never print or commit `TELEGRAM_BOT_TOKEN`.
 
 ## 5. WhatsApp — Kapso Sandbox
 
-The physically verified implementation is now consolidated into:
+The physically verified implementation is integrated into:
 
 ```text
-build/mk1-customer-channels-integrated
+main
 ```
 
 Historical provider branch:
@@ -189,20 +189,14 @@ The Quick Tunnel is test infrastructure only. Keep the `cloudflared` process ali
 
 ## 6. WhatsApp — direct Meta Cloud API
 
-This implementation is intentionally isolated on:
+The modern direct Meta implementation is integrated into `main`. Historical provider refs remain available for exact evidence provenance, but current reproduction starts from the integrated line. Real direct-Meta physical delivery remains pending.
 
-```text
-build/mk1-c4p-whatsapp-cloud-api-official
-```
-
-It has deterministic CI evidence but the direct Meta physical gate remains pending.
-
-Switch explicitly:
+Use:
 
 ```bash
 cd Engines
 git fetch origin --prune
-git switch build/mk1-c4p-whatsapp-cloud-api-official
+git switch main
 git pull
 cd mk1/runtime
 npm ci
@@ -239,11 +233,11 @@ The callback path is defined by the Meta runner branch/runbook. Do not mark dire
 
 ## 7. WebChat
 
-WebChat is provider-neutral and lives on the MK1 channel runtime. For the latest consolidated customer/channel base:
+WebChat is provider-neutral and lives on the MK1 channel runtime. For the current integrated CTA/channel base:
 
 ```bash
 cd Engines
-git switch build/mk1-customer-channels-integrated
+git switch main
 cd mk1/runtime
 npm ci
 docker compose up --build -d
@@ -328,4 +322,30 @@ outbound campaign/template policy
 Scheduler runtime
 Agent / MCP / LLM routing
 production readiness
+```
+
+
+## 12. Messenger and Facebook Comments
+
+Both use the Meta Graph API `Page` object callback:
+
+```text
+/webhooks/meta/messenger
+  ├── entry[].messaging[]             -> Messenger
+  └── entry[].changes[field="feed"]   -> Facebook Comments
+```
+
+Use the exact runbooks:
+
+```text
+mk1/Test/meta-channel-m1-setup-2026-09-18.md
+mk1/Test/meta-facebook-comments-setup-2026-09-21.md
+```
+
+The Graph API `User` object is not part of this CTA path.
+
+For a cross-channel clean-clone sequence, use:
+
+```text
+mk1/CTA/REPRODUCE.md
 ```
