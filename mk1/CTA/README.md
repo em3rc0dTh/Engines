@@ -24,7 +24,7 @@ Provider edges own transport/authentication, not business intent.
 | WhatsApp / Kapso | provider sandbox | physically verified |
 | WhatsApp / Meta Cloud API | direct implementation + HMAC contract | deterministic; physical open |
 | Messenger | real Page transport + deployed HMAC | transport verified; full CTA open |
-| Facebook Comments | signed Page.feed + deployed HMAC + canonical bridge candidate | real provider comment open |
+| Facebook Comments | signed Page.feed + deployed HMAC + certified canonical bridge | real provider delivery deferred by Meta compliance |
 | TikTok | deterministic adapter | physical open |
 
 ## Meta Page topology
