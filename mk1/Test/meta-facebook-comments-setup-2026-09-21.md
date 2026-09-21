@@ -104,6 +104,6 @@ It does not prove real provider comment delivery or a completed Appointment. Pri
 
 Closed: Page.feed subscription, Messenger signed delivery, Page.feed signed dashboard delivery, missing-signature rejection, invalid-signature rejection, deployed X-Hub-Signature-256 enforcement.
 
-Repository candidate: signed canonical bridge + Temporal start + persistence + replay probe.
+Repository gate certified on exact source SHA 4da5e6e379f2d4b9022f1abaebfc40575caefe23: signed canonical bridge + real Temporal start + persistence + exact replay dedupe PASS.
 
 Provider-open: real Facebook comment delivery, hosted Worker -> Engines bridge, private continuation, applicable public production access/review.
