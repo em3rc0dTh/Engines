@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { type Pool, type PoolClient } from 'pg';
-import { createResilientPostgresPool } from './resilient-pool.js';
+import { Pool, type PoolClient } from 'pg';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import {
   todayInTimeZone,
@@ -18,7 +17,7 @@ import {
 let pool: Pool | undefined;
 
 function db(): Pool {
-  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'appointment-repository');
+  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
   return pool;
 }
 

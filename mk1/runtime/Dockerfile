@@ -13,7 +13,7 @@ RUN apt-get update \
     && rm /tmp/temporal.tar.gz
 
 WORKDIR /app
-RUN mkdir -p /data/attachments /data/temporal && chown -R node:node /app /data/attachments /data/temporal
+RUN mkdir -p /data/attachments && chown -R node:node /app /data/attachments
 
 COPY --chown=node:node package.json package-lock.json ./
 USER node
