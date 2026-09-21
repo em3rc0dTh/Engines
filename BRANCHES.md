@@ -2,159 +2,80 @@
 
 Snapshot: 2026-09-21
 
-This document records the current branch topology and the evidence/lineage rules after repository housekeeping. Deleting a branch ref does not delete commits, merged PRs, CI runs, artifacts, or evidence receipts.
+The branch model is intentionally simple: stable recognition lives on `main`, active integration starts from `developer`, and provider-specific CTA branches are temporary evidence-producing lanes.
 
-## CTA-relevant remote topology
+## Canonical topology
 
 ```text
 main
 └── developer
-    ├── feature/managed-entity-resolution-policy
-    └── build/mk1-c4p-whatsapp-cloud-api-official
+    └── new bounded feature/provider branches
 
 historical CTA evidence refs
 ├── feature/cta-orchestration-register-appointment-poc
 ├── stage-20260918
-└── feature/cta-meta-facebook-comments-poc
+├── feature/cta-meta-facebook-comments-poc
+└── feature/cta-whatsapp-meta-cloud-api
 ```
 
-The Register Appointment CTA line, Messenger M1 lane and Facebook Comments Page.feed lane are integrated into `developer`. Their source refs may remain temporarily for evidence/inspection, but new CTA work must start from the integrated line rather than extending those historical refs.
+Historical refs are not development bases. Their commits, PR discussions, CI runs and evidence remain inspectable.
 
-| Branch | CTA-related role | Current policy |
+## CTA integration receipts
+
+| PR | Lane | State |
 |---|---|---|
-| `main` | stable repository truth / canonical docs | KEEP |
-| `developer` | integration and staging line; integrated CTA authority | KEEP |
-| `feature/cta-orchestration-register-appointment-poc` | historical canonical CTA source line | NO NEW WORK; cleanup candidate after main promotion |
-| `stage-20260918` | historical Messenger M1 source | NO NEW WORK; cleanup candidate |
-| `feature/cta-meta-facebook-comments-poc` | historical Facebook Comments source | NO NEW WORK; cleanup candidate |
-| `build/mk1-c4p-whatsapp-cloud-api-official` | direct Meta WhatsApp alternate provider | MODERNIZE/INTEGRATE; physical gate remains open |
+| #24 | canonical Register Appointment CTA | MERGED into developer |
+| #35 | Meta Messenger M1 transport | MERGED into canonical CTA line |
+| #36 | Facebook Comments Page.feed | MERGED into canonical CTA line |
+| #37 | direct Meta WhatsApp Cloud API | MERGED into developer |
 
-## Developer synchronization
+All four lanes are part of the integrated CTA baseline promoted to `main`. Provider physical truth boundaries remain unchanged by merge.
 
-`developer` was synchronized with `main` on 2026-09-09 by merge commit:
+## Branch policy
 
-```text
-7fde58081ec0ac453c9b2eb269e55f93fb1ab79c
-```
+| Branch/ref | Role | Policy |
+|---|---|---|
+| `main` | stable repository truth and canonical CTA recognition | KEEP |
+| `developer` | active integration line / start point for new CTA work | KEEP |
+| canonical CTA historical feature refs | exact evidence lineage | NO NEW WORK |
+| provider-specific future feature branches | one bounded transport/security/certification scope | MERGE BACK then historical |
 
-After that merge, `developer` contains all current `main` history and remains ahead with the accumulated MK1 runtime/integration history. This synchronization does not merge PR #21, #24, or #26.
-
-## CTA integration state
-
-```text
-PR #24  Register Appointment CTA
-        source line integrated into developer on 2026-09-21
-
-PR #35  Messenger M1 physical transport baseline
-        MERGED into canonical CTA line
-
-PR #36  Facebook Comments Page.feed reproducible lane
-        MERGED into canonical CTA line
-
-PR #21  direct Meta WhatsApp Cloud API transport
-        legacy provider branch; deterministic pass
-        physical route not sealed
-        requires modernization onto current integrated line
-```
-
-PR #26 is ManagedEntity work rather than a CTA provider lane; after parent CTA integration its base must follow the current integration topology rather than a historical CTA ref.
-
-## Integration capability truth
-
-CLI, HTTP/Postman, WebChat, Telegram and WhatsApp/Kapso are capabilities of the integrated Engines lineage; they are not maintained as permanent independent active branches.
+## Integrated capability truth
 
 ```text
-CLI / HTTP-Postman                         ✅ historical/certified surfaces
-WebChat                                    ✅ certified + physical browser proof
-Telegram official Bot API                  ✅ physically verified / sealed
-WhatsApp through Kapso Sandbox             ✅ physically verified
-WhatsApp direct Meta Cloud API             ✅ deterministic pass / physical pending
+CLI / HTTP-Postman                         certified laboratory
+WebChat                                    physically verified within PoC
+Telegram official Bot API                  physically verified
+WhatsApp / Kapso                           physically verified
+Messenger                                  real inbound + outbound transport verified
+Facebook Page.feed                         dashboard transport verified
+Facebook comment CTA                       synthetic edge replay verified
+WhatsApp direct Meta Cloud API             deterministic certified / physical open
+TikTok                                     deterministic only
 ```
 
-Provider-specific transport remains below the canonical Engine boundary. Provider code may own authentication, provider identity, payload normalization, rendering and transport semantics; it may not own Customer, ManagedEntity, Services, Scheduler, Temporal business policy or canonical persistence.
+## Branch solidity rule
 
-## Historical branches
+A CTA/provider branch is considered solid only when it contains or references:
 
-The former MK0/MK1 gate, design, channel-stack and consolidated-anchor refs were removed during housekeeping once their ancestry/evidence had been preserved elsewhere. They remain recoverable from Git history, merged/closed PRs, commits and evidence receipts.
+1. executable implementation;
+2. deterministic regression coverage;
+3. simple clean-clone reproduction instructions;
+4. secret-name contract with no secret values committed;
+5. sanitized fixtures/evidence;
+6. explicit evidence class (deterministic, synthetic, dashboard, real provider, full E2E);
+7. explicit non-claims;
+8. a merge path back to `developer` and then `main`.
 
-Notable historical work retained in history includes:
+The canonical cross-channel checklist is `mk1/CTA/REPRODUCE.md`.
 
-```text
-MK0 CLI / HTTP-Postman / release milestones
-MK1 Services S0-S7 milestones
-WebChat C1A/C1B milestones
-Customer registration policy/channel-core stack
-Telegram registration + official Bot API proof
-WhatsApp registration + Kapso proof
-messaging-stack consolidation anchor
-repository integration-layout work
-```
+## Hygiene rules
 
-Branch deletion therefore means "no longer an active ref", not "evidence deleted".
-
-## Current construction sequence
-
-```text
-Repository housekeeping / developer-main synchronization       ✅ CLOSED
-Register Appointment CTA / PR #24 lineage                       ✅ CERTIFIED / INTEGRATED INTO DEVELOPER
-ManagedEntity resolution / PR #26                               🔧 ACTIVE
-Direct Meta Cloud API physical path / PR #21                    ⚪ OPTIONAL / OPEN
-Data Model v3 scheduling/capacity                               ⏭ after ManagedEntity seam
-Data Model v4 operational/corrective lifecycle                  ⏭ after v3
-Agent / MCP / LLM routing                                       ⏭ later
-```
-
-## Branch hygiene rules
-
-1. `main` is stable repository truth; `developer` is the integration/staging line.
-2. Feature/build branches are temporary and bounded by one explicit scope or certification gate.
-3. Do not create a permanent branch merely because a new channel/provider exists.
-4. Preserve proven channel integrations; normalize their outputs, not their internals.
-5. Runtime claims stay attached to the exact executed source SHA even when later merge/docs commits exist.
-6. CI green is not equivalent to external-provider physical certification.
-7. Before deleting a branch, verify PR state, ancestry and evidence reachability.
-8. `mk0/runtime` remains frozen.
-9. CTA provider branches must converge back into `developer`; do not create permanent provider-specific business forks.
-10. When a stacked parent is integrated, retarget remaining child PRs to the current integration line before further work.
-
-
-## CTA consolidation receipt — 2026-09-21
-
-The CTA provider lanes are organized as one business architecture with replaceable channel boundaries:
-
-```text
-WebChat
-Telegram
-WhatsApp / Kapso
-Messenger
-Facebook Comments
-TikTok
-API
-   │
-   ▼
-provider adapter
-   │
-   ▼
-canonical CTA
-   │
-   ▼
-Temporal
-   │
-   ▼
-domain + persistence
-```
-
-Merged provider-lane receipts:
-
-```text
-PR #35 Messenger M1                    MERGED
-PR #36 Facebook Comments Page.feed     MERGED
-```
-
-Canonical reproduction index:
-
-```text
-mk1/CTA/README.md
-```
-
-A CTA branch is considered solid only when it carries executable code, deterministic regression coverage, simple reproduction instructions, sanitized evidence and explicit non-claims.
+1. Do not create permanent business forks per provider.
+2. Provider adapters may own transport concerns, never domain policy.
+3. Exact runtime claims stay attached to the executed SHA/receipt.
+4. CI green does not imply provider physical certification.
+5. Synthetic replay does not imply real provider delivery.
+6. Preserve evidence before deleting historical refs.
+7. `mk0/runtime` remains frozen.
+8. New CTA work starts from `developer`, not from merged historical branches.
