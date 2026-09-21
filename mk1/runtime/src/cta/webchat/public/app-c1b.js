@@ -188,6 +188,22 @@ function renderInteraction() {
       return;
     }
 
+    const strongerIdentityRequired =
+      durable.customer?.status === 'AMBIGUOUS'
+      || (durable.issues ?? []).some((item) =>
+        ['CUSTOMER_INCOMPLETE', 'CUSTOMER_NOT_FOUND', 'CUSTOMER_AMBIGUOUS'].includes(item?.code),
+      );
+
+    // PROVIDE_CUSTOMER auto-requests deterministic Temporal resolution. During
+    // the short WAITING_FOR_CUSTOMER -> RESOLVING_CUSTOMER handoff, the durable
+    // draft already contains the name but there is not yet evidence that email
+    // is required. Do not render a false email prompt during that transient.
+    if (!contact.email && !strongerIdentityRequired) {
+      promptOnce('customer-name-auto-resolving', `Temporal está verificando si ya existe un cliente llamado ${draft.name}…`);
+      setInput(null, 'Verificando cliente…', false);
+      return;
+    }
+
     if (!contact.email) {
       const ambiguous = durable.customer?.status === 'AMBIGUOUS';
       promptOnce(
