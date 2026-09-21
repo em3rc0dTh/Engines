@@ -106,4 +106,30 @@ Closed: Page.feed subscription, Messenger signed delivery, Page.feed signed dash
 
 Repository gate certified on exact source SHA 4da5e6e379f2d4b9022f1abaebfc40575caefe23: signed canonical bridge + real Temporal start + persistence + exact replay dedupe PASS.
 
-Provider-open: real Facebook comment delivery, hosted Worker -> Engines bridge, private continuation, applicable public production access/review.
+Provider-real status: `DEFERRED_META_COMPLIANCE`. The Page-level `subscribed_apps` installation was verified with a Page Access Token and explicitly updated to include `feed,messages,messaging_postbacks`. A brand-new real comment created after that update still produced no provider POST while the app remained unpublished. Resume only after Meta Business Verification / Access Verification / applicable review / Live publication. Hosted Worker -> Engines bridge and private continuation also remain open.
+
+## Page-level subscribed_apps check
+
+Do not confuse app-level webhook field configuration with Page installation. Use a Page Access Token (not a User Access Token):
+
+~~~text
+GET /<page-id>/subscribed_apps
+~~~
+
+Require:
+
+~~~text
+feed
+messages
+messaging_postbacks
+~~~
+
+If `feed` is missing:
+
+~~~text
+POST /<page-id>/subscribed_apps?subscribed_fields=feed,messages,messaging_postbacks
+~~~
+
+Then verify with GET again. If `GET /me/accounts` is empty, `business_management` may be used diagnostically with `GET /<business-id>/owned_pages?fields=id,name,access_token` to obtain the Page Access Token. Never store or paste the token into documentation.
+
+Full provider diagnosis and future reproduction: `mk1/Build/evidence/meta-facebook-comments-provider-gate-deferred-2026-09-21.md`.
