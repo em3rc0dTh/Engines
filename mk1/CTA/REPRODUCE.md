@@ -62,7 +62,7 @@ ENGINES_META_PAGE_ROUTES_JSON
 Messenger real signed transport                PASS
 Facebook Page.feed signed dashboard transport  PASS
 deployed missing/invalid signature rejection   PASS / SEALED
-Facebook signed canonical bridge               repository candidate
+Facebook signed canonical bridge               deterministic runtime certified
 Facebook real provider comment                 OPEN
 production readiness                           not claimed
 ~~~
