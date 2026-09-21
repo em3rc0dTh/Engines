@@ -65,8 +65,12 @@ shared callback Messenger signed delivery  PASS
 deployed missing-signature rejection       PASS
 deployed invalid-signature rejection       PASS
 deployed HMAC enforcement                  SEALED
-real Facebook comment delivery             OPEN
+real Facebook comment delivery             DEFERRED_META_COMPLIANCE
 hosted Worker -> Engines bridge            OPEN
 private continuation                       OPEN
 public production access                   OPEN
 ~~~
+
+## Page installation diagnosis after this receipt
+
+The Page-level app installation was later inspected with a Page Access Token. It initially exposed only `messages` and `messaging_postbacks`. `feed` was added with `POST /<page-id>/subscribed_apps?subscribed_fields=feed,messages,messaging_postbacks`, returning `success=true`, and a subsequent GET confirmed all three fields. A fresh real comment still produced no provider POST while the app remained unpublished. See `meta-facebook-comments-provider-gate-deferred-2026-09-21.md` for the full diagnosis and future reproduction sequence.
