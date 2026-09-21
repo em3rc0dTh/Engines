@@ -10,11 +10,15 @@ Primary MK        MK1
 Status            ✅ PHYSICALLY VERIFIED / SEALED
 ```
 
-## Current source lineage
+## Canonical source after 2026-09-21
+
+Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
+
+## Architecture
 
 ```text
 Historical provider branch      build/mk1-c2-telegram-bot-api-official
-Consolidated current anchor      build/mk1-customer-channels-integrated
+Consolidated current anchor      main
 ```
 
 ## Canonical provider IDs
@@ -138,7 +142,7 @@ From the consolidated anchor:
 
 ```bash
 git fetch origin --prune
-git switch build/mk1-customer-channels-integrated
+git switch main
 cd mk1/runtime
 npm ci
 npm run check
