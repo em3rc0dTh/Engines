@@ -33,13 +33,18 @@ one CTA ingress record
 one active FACEBOOK_COMMENT binding
 ~~~
 
-## Provider-open
+## Provider-real — DEFERRED_META_COMPLIANCE
 
-1. Obtain a real Facebook provider comment event.
-2. Host Engines /meta/page/events and configure ENGINES_META_PAGE_INGRESS_URL at the Worker.
-3. Observe the real comment cross FacebookCommentAdapter.
-4. Provide private continuation.
-5. Complete applicable public production access/review.
+The Page `subscribed_apps` installation was corrected and verified to include `feed`, `messages`, and `messaging_postbacks`. A brand-new real Page comment created afterward still produced no webhook POST while the app remained unpublished. The remaining provider-real gate is intentionally deferred until Meta Business Verification / Access Verification / applicable review / Live publication is completed.
+
+When resumed:
+
+1. Complete the Meta compliance/publication requirements.
+2. Create a new real Facebook provider comment event.
+3. Require a real signed webhook at the Worker.
+4. Host Engines `/meta/page/events` and configure `ENGINES_META_PAGE_INGRESS_URL`.
+5. Observe the real comment cross FacebookCommentAdapter.
+6. Provide private continuation.
 
 ## Gate separation
 
