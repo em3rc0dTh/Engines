@@ -21,6 +21,11 @@ function digest(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex');
 }
 
+function eventTypeFor(envelope: CanonicalChannelEnvelope): CanonicalCTAEventType {
+  if (envelope.channel === 'MESSENGER' && envelope.payload.triggerSource === 'message') return 'message';
+  return EVENT_TYPES[envelope.channel];
+}
+
 export function toCanonicalCTAEvent(
   envelope: CanonicalChannelEnvelope,
   receivedAt: string,
@@ -39,7 +44,7 @@ export function toCanonicalCTAEvent(
     externalUserId: envelope.externalSenderId,
     externalConversationId: envelope.externalConversationId,
     action: 'register_appointment',
-    eventType: EVENT_TYPES[envelope.channel],
+    eventType: eventTypeFor(envelope),
     idempotencyKey: `cta:${digest(identity)}`,
     correlationId: envelope.externalConversationId,
     receivedAt,

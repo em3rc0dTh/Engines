@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - feature/cta-orchestration-register-appointment-poc
+      - feature/cta-meta-facebook-comments-poc
   pull_request:
     branches:
       - build/mk1-customer-channels-integrated
+      - feature/cta-orchestration-register-appointment-poc
+      - developer
+      - main
 
 permissions:
   contents: read
@@ -41,6 +45,8 @@ jobs:
       - name: Start clean Temporal and persistence stack
         run: |
           docker compose down -v --remove-orphans || true
+          META_APP_SECRET=meta-ci-secret \
+          ENGINES_META_PAGE_ROUTES_JSON='{"TEST_PAGE":"golden-business"}' \
           docker compose up --build -d postgres mongo temporal migrate worker cta channel-core
           docker compose ps
 
@@ -51,23 +57,26 @@ jobs:
             sleep 1
           done
           grep -F '"ok":true' /tmp/cta-channel-health.json
+          docker compose run --rm --no-deps -T             -e ENGINES_CHANNEL_URL=http://channel-core:8788             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run probe:cta:poc | tee /tmp/cta-orchestration-poc.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/cta-orchestration-poc.log
+
+      - name: Certify signed Facebook Comment to canonical CTA to Temporal
+        run: |
           docker compose run --rm --no-deps -T \
             -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
-            cta npm run probe:cta:poc | tee /tmp/cta-orchestration-poc.log
-          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/cta-orchestration-poc.log
+            -e META_APP_SECRET=meta-ci-secret \
+            cta npm run probe:meta:facebook-comment | tee /tmp/meta-facebook-comment-canonical.log
+          grep -F 'META_FACEBOOK_COMMENT_CANONICAL_BRIDGE_PASS' /tmp/meta-facebook-comment-canonical.log
 
       - name: Capture persistence evidence
         if: always()
         run: |
           mkdir -p /tmp/cta-orchestration-evidence
           cp /tmp/cta-orchestration-poc.log /tmp/cta-orchestration-evidence/ 2>/dev/null || true
-          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
-            "SELECT event_id,status,workflow_id,case_id,appointment_id,duplicate_count FROM cta_ingress_records ORDER BY created_at" \
-            > /tmp/cta-orchestration-evidence/cta-ingress.txt 2>&1 || true
-          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
-            "SELECT resource_reservation_id,status,case_id,appointment_id,release_reason FROM resource_reservations ORDER BY created_at" \
-            > /tmp/cta-orchestration-evidence/resource-reservations.txt 2>&1 || true
+          cp /tmp/meta-facebook-comment-canonical.log /tmp/cta-orchestration-evidence/ 2>/dev/null || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c             "SELECT event_id,status,workflow_id,case_id,appointment_id,duplicate_count FROM cta_ingress_records ORDER BY created_at"             > /tmp/cta-orchestration-evidence/cta-ingress.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c             "SELECT resource_reservation_id,status,case_id,appointment_id,release_reason FROM resource_reservations ORDER BY created_at"             > /tmp/cta-orchestration-evidence/resource-reservations.txt 2>&1 || true
           git rev-parse HEAD > /tmp/cta-orchestration-evidence/git-sha.txt
 
       - name: Upload evidence
@@ -81,4 +90,3 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose down -v --remove-orphans || true
-
