@@ -96,7 +96,7 @@ Telegram official Bot API                  physically verified
 WhatsApp / Kapso                           physically verified
 Messenger                                  real inbound + outbound transport + deployed HMAC verified
 Facebook Page.feed                         signed dashboard transport verified
-Facebook comment CTA                       canonical bridge -> Temporal start -> persistence/idempotency certified
+Facebook comment CTA                       canonical bridge -> Temporal start -> persistence/idempotency certified; provider-real deferred by Meta compliance
 WhatsApp direct Meta Cloud API             deterministic certified / physical open
 TikTok                                     deterministic only
 ```
