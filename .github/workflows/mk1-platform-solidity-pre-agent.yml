@@ -618,3 +618,4 @@ jobs:
         run: echo 'PLATFORM_CORE_SOLIDITY_PASS'
 # Final pre-Agent exact-head revalidation trigger.
 # Unified final-head certification trigger.
+# Unified exact-head revalidation trigger after ME1 physical seal reconciliation.

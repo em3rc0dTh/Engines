@@ -137,3 +137,4 @@ jobs:
         run: echo 'PLATFORM_M3_WEBCHAT_RECOVERY_PASS'
 # Final pre-Agent exact-head revalidation trigger.
 # Unified final-head certification trigger.
+# Unified exact-head revalidation trigger after ME1 physical seal reconciliation.
