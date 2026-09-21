@@ -169,3 +169,34 @@ PR #24 remains Draft until:
 ## Non-claims
 
 This test contract does not certify new live Meta, TikTok, Telegram or WhatsApp delivery. It does not certify production readiness, Services Engine completion or Scheduler Engine completion.
+
+
+---
+
+## 2026-09-18 addendum — Meta M1 physical Messenger transport
+
+The Messenger provider lane now has real bidirectional transport evidence:
+
+```text
+real inbound provider delivery     PASS
+payload visibility                 PASS
+real outbound Page reply           PASS
+permanent callback architecture    PASS
+messages subscription              PASS
+messaging_postbacks subscription   PASS
+```
+
+The repository also adds deterministic M1 normalization for explicit Messenger text CTA triggers and the existing appointment postback.
+
+This does **not** upgrade the full Messenger appointment physical gate to PASS. Still open:
+
+```text
+deployed raw-body signature enforcement
+real provider event -> CTA dispatcher
+Temporal RegisterNewAppointment
+operational persistence
+exact-event business replay/idempotency
+public App Review
+```
+
+Facebook Comments remains the next provider lane.

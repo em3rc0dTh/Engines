@@ -36,6 +36,15 @@ test('G10 unrelated Facebook comments are ignored', () => {
   assert.equal(event, undefined);
 });
 
+test('G10 explicit multi-word appointment trigger is accepted', () => {
+  const event = fromExistingAdapter(new FacebookCommentAdapter(), {
+    verified: true, pageId: 'page-1', postId: 'post-1', commentId: 'comment-3', senderId: 'user-1', text: 'AGENDAR CITA',
+  }, route, now);
+  assert.equal(event?.action, 'register_appointment');
+  assert.equal(event?.eventType, 'comment');
+  assert.equal(event?.payload.privateContinuationRequired, true);
+});
+
 test('G9/G10 Meta transport authenticates and decodes provider payloads before adapters', () => {
   const secret = 'meta-test-secret';
   const messengerBody = JSON.stringify({ entry: [{ id: 'page-1', messaging: [{

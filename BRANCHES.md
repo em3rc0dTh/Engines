@@ -1,170 +1,128 @@
-# Engines — Branch Lineage & Housekeeping
+# Engines — Branch / Integration Ledger
 
-## Status
+Snapshot: 2026-09-21
 
-**MESSAGING STACK CONSOLIDATED — TELEGRAM SEALED — KAPSO SANDBOX PHYSICALLY VERIFIED**
+Repository housekeeping keeps one stable line, one integration line, and only bounded active feature/certification branches.
 
-Snapshot date: 2026-09-07.
-
-No branch is deleted by this document. Historical proof remains in commits, merged PRs, CI runs, artifacts and evidence receipts.
-
-## Branch rule
-
-Every bounded architecture/build/certification gate gets its own branch.
-
-```text
-release/<milestone>
-design/<mk>-<architecture-scope>
-build/<mk>-<gate>-<bounded-scope>
-audit/<bounded-scope>
-```
-
-## Current narrative map
+## Canonical topology
 
 ```text
 main
-│
-├── developer
-│
-├── MK0
-│   ├── build/mk0-b3-cli-cta-adapter
-│   ├── build/mk0-http-postman-proof
-│   └── release/mk0-complete
-│
-└── MK1
-    ├── build/mk1-s5-services-snapshots
-    ├── build/mk1-s6-services-multibusiness
-    ├── build/mk1-s7-appointment-services-integration
-    ├── build/mk1-c0-c1-webchat
-    ├── build/mk1-c1b-durable-channel
-    ├── design/mk1-services-scheduler-integration
-    ├── design/mk1-telegram-whatsapp-official-channels
-    │
-    └── build/mk1-customer-channels-integrated
-          ├── Customer Registration Policy V2
-          ├── durable Customer channel core
-          ├── Telegram adapter
-          ├── WhatsApp adapter/transport port
-          ├── local Telegram/WhatsApp real-Temporal E2E
-          ├── B2 Customer soft-duplicate resolution
-          └── C2P Telegram official Bot API physical seal
-                ✅ CONSOLIDATED INTEGRATION ANCHOR
-                │
-                ├── build/mk1-c4p-whatsapp-cloud-api-official
-                │     Meta direct transport ✅ deterministic; physical open
-                │
-                └── build/mk1-c4p-kapso-official
-                      Kapso transport ✅ deterministic
-                      Kapso Sandbox   ✅ physically verified
+└── developer
+    ├── feature/managed-entity-resolution-policy
+    └── cert/platform-solidity-pre-agent
 ```
 
-## Consolidation result
+`main` and `developer` are kept synchronized at housekeeping boundaries. New bounded work starts from `developer`.
 
-The former stacked PR chain was retargeted in order to `build/mk1-customer-channels-integrated` and merged with merge commits so certified source SHAs remain in history:
+## Active pull requests
 
-```text
-PR #14 Customer Registration Policy V2                 ✅ MERGED
-PR #15 Durable Customer Registration Channel Core       ✅ MERGED
-PR #16 Telegram Customer Registration Transport         ✅ MERGED
-PR #17 WhatsApp Customer Registration Transport         ✅ MERGED
-PR #18 Local Interactive Customer Registration E2E      ✅ MERGED
-PR #19 Customer Soft-Duplicate Resolution               ✅ MERGED
-PR #20 Telegram Official Bot API Physical Transport     ✅ MERGED
-```
+| PR | Head | Base | Role | State |
+|---|---|---|---|---|
+| #26 | `feature/managed-entity-resolution-policy` | `developer` | ManagedEntity ME1 | ACTIVE / draft |
+| #34 | `cert/platform-solidity-pre-agent` | `main` | pre-Agent platform roll-up | ACTIVE / draft; reconciliation with newer main required |
 
-Terminal consolidation merge for PR #20:
+PR #34 is the single roll-up for the historical Layer 6 → pre-Scheduler → Scheduler G2 → Integration G3 → platform-solidity lineage.
 
-```text
-94f342d731e2272c025c28b007635eccfe5f7f8a
-```
+The former stacked PRs #27, #28 and #33 were closed during housekeeping after ancestry was verified. Their commits, CI runs, artifacts and evidence remain reachable through PR #34 and exact SHAs.
 
-`main`, `developer`, `release/mk0-complete` and `mk0/runtime` were not moved or modified by this consolidation.
+## CTA integration receipts
 
-## Canonical / meaningful branches
-
-| Meaning | Branch | Policy |
+| PR | Lane | State |
 |---|---|---|
-| Stable integrated base | `main` | KEEP |
-| Integration/staging line | `developer` | KEEP; never use as feature branch |
-| Frozen complete MK0 | `release/mk0-complete` | KEEP |
-| Historical CLI CTA surface | `build/mk0-b3-cli-cta-adapter` | KEEP |
-| Historical HTTP/Postman CTA surface | `build/mk0-http-postman-proof` | KEEP |
-| Services S0–S5 milestone | `build/mk1-s5-services-snapshots` | KEEP |
-| Services S6 multi-business gate | `build/mk1-s6-services-multibusiness` | KEEP UNTIL S8 HOUSEKEEPING |
-| Services S7 Appointment integration | `build/mk1-s7-appointment-services-integration` | KEEP / CERTIFIED MILESTONE |
-| WebChat C1A | `build/mk1-c0-c1-webchat` | KEEP |
-| Durable WebChat/channel C1B | `build/mk1-c1b-durable-channel` | KEEP |
-| Services/Scheduler architecture | `design/mk1-services-scheduler-integration` | KEEP |
-| Messaging architecture | `design/mk1-telegram-whatsapp-official-channels` | KEEP AS DESIGN RECORD |
-| Customer messaging integrated anchor | `build/mk1-customer-channels-integrated` | KEEP / CURRENT BASE |
-| Direct Meta Cloud API provider | `build/mk1-c4p-whatsapp-cloud-api-official` | KEEP / ALTERNATE PROVIDER; PHYSICAL OPEN |
-| Kapso official WhatsApp provider | `build/mk1-c4p-kapso-official` | KEEP / PHYSICALLY VERIFIED MILESTONE |
+| #24 | canonical Register Appointment CTA | MERGED |
+| #35 | Meta Messenger M1 transport | MERGED |
+| #36 | Facebook Comments Page.feed | MERGED |
+| #37 | direct Meta WhatsApp Cloud API | MERGED |
+| #38 | CTA repository consolidation | MERGED |
+| #39 | integrated CTA baseline promotion to main | MERGED |
+| #40 | Meta Page HMAC + Facebook Comment canonical Temporal bridge | MERGED |
+| #41 | promote Meta HMAC / Facebook Comment bridge to main | MERGED |
 
-Former stack branches #14–#20 are cleanup candidates only because their PRs are merged into the integrated anchor. They are not deleted automatically.
+## Historical refs safe to remove after evidence review
 
-## Current channel truth
+These refs are no longer valid development bases. Their PRs/history or descendant branches preserve the work.
 
 ```text
-C1A WebChat                                  ✅ CERTIFIED + HUMAN VERIFIED
-C1B durable WebChat                          ✅ CERTIFIED + HUMAN RESTART VERIFIED
-C2/C4 local real-Temporal messaging E2E      ✅ AUTOMATED + HUMAN VERIFIED
-B2 Customer soft-duplicate resolution        ✅ CERTIFIED
-C2P Telegram official Bot API                ✅ PHYSICALLY VERIFIED / SEALED
-Telegram Web native request_contact UI       ⚪ CLIENT-COMPATIBILITY NOTE ONLY
-C4P Meta Cloud API transport                 ✅ DETERMINISTIC PASS / PHYSICAL OPEN
-C4P Kapso transport                          ✅ DETERMINISTIC PASS
-C4P Kapso Sandbox real WhatsApp E2E          ✅ PHYSICALLY VERIFIED
+chore/cta-repository-consolidation-20260921
+feature/cta-whatsapp-meta-cloud-api
+feature/cta-orchestration-register-appointment-poc
+feature/cta-meta-facebook-comments-poc
+stage-20260918
+test-branch-20260918
+build/mk1-c4p-whatsapp-cloud-api-official
+
+build/g2-s0-scheduler-contract-persistence
+build/g2-s1-scheduler-management
+build/g2-s2-deterministic-availability
+build/g2-scheduler
+
+feature/layer6-v4-persistence-complete
+feature/pre-scheduler-node-edge-certification
+build/g3-integration
+
+feature/meta-page-hmac-canonical-bridge
 ```
 
-## WhatsApp provider rule
+Why these are removable:
 
-Only official WhatsApp Business Platform routes are acceptable.
+- CTA refs were merged or explicitly superseded by the integrated `main` lineage.
+- `test-branch-20260918` has no unique work and was an accidental setup branch.
+- the legacy direct-Meta WhatsApp ref was superseded by PR #37.
+- Scheduler S0/S1/S2 are ancestors of the terminal G2 branch.
+- terminal G2 is already contained in the pre-Scheduler lineage.
+- Layer 6, pre-Scheduler and G3 are all ancestors of the active PR #34 branch.
+- `feature/meta-page-hmac-canonical-bridge` was merged through PR #40 and promoted to `main` through PR #41.
+
+Deleting a branch ref does not delete commits, merged/closed PR discussions, CI runs, artifacts or source-bound evidence SHAs.
+
+## Branches that must remain
 
 ```text
-WhatsAppTransportPort
-  ├── Meta Cloud API      ← direct official transport, deterministic proof complete
-  └── Kapso               ← official BSP transport, Sandbox physically verified
+main
+developer
+feature/managed-entity-resolution-policy
+cert/platform-solidity-pre-agent
 ```
 
-Provider code may handle webhook verification, provider identity, payload normalization and outbound rendering. It may not own Customer, Services, Scheduler, Temporal business logic or canonical persistence.
+Do not delete either active feature/certification branch while PR #26 or PR #34 remains open.
 
-Explicitly rejected:
+## Integrated capability truth
 
 ```text
-WhatsApp Web automation
-QR-session scraping
-browser emulation
-reverse-engineered private clients
+CLI / HTTP-Postman                         certified laboratory
+WebChat                                    physically verified within PoC
+Telegram official Bot API                  physically verified
+WhatsApp / Kapso                           physically verified
+Messenger                                  real inbound + outbound transport + deployed HMAC verified
+Facebook Page.feed                         signed dashboard transport verified
+Facebook comment CTA                       canonical bridge -> Temporal start -> persistence/idempotency certified; provider-real deferred by Meta compliance
+WhatsApp direct Meta Cloud API             deterministic certified / physical open
+TikTok                                     deterministic only
 ```
 
-## C4P physical evidence boundary
+## Branch solidity rule
 
-Kapso Sandbox now proves one real WhatsApp provider path end-to-end through the same Engine. The observed physical run included interactive registration consent, Customer name/email capture, verified sender-phone prefill with no redundant phone prompt, and terminal registration completion returned to WhatsApp.
+A branch is considered solid only when it carries or references:
 
-Certification receipt:
+1. executable implementation;
+2. deterministic regression coverage;
+3. simple clean-clone reproduction instructions;
+4. secret-name contract without committed secret values;
+5. sanitized fixtures/evidence;
+6. explicit evidence class;
+7. explicit non-claims;
+8. a merge path back to `developer` / `main`.
 
-`mk1/Build/evidence/c4p-kapso-sandbox-physical-certification-2026-09-07.md`
+The canonical CTA reproduction index is `mk1/CTA/REPRODUCE.md`.
 
-This does **not** certify a Kapso dedicated production number or the direct Meta Cloud API physical route.
+## Hygiene rules
 
-## Current construction sequence
-
-```text
-C2P Telegram official Bot API                ✅ CLOSED / SEALED
-messaging stack consolidation                ✅ CLOSED
-C4P Kapso Sandbox real WhatsApp provider      ✅ CLOSED / PHYSICALLY VERIFIED
-C4P direct Meta Cloud API physical proof      ⚪ OPTIONAL ALTERNATE PROVIDER PATH
-Services S8                                   ← NEXT PENDING PLATFORM GATE
-Scheduler runtime                             ← later
-Agent / MCP                                   ← last
-```
-
-## Cleanup rule
-
-When a bounded gate closes:
-
-1. commit and index its evidence;
-2. keep terminal branches that represent meaningful architecture/version/surface milestones;
-3. verify ancestry, PR state and evidence before marking intermediates as deletion candidates;
-4. never delete branches automatically;
-5. tell the user exactly which refs may be removed before any deletion.
+1. `main` is stable repository truth.
+2. `developer` is the start point for new bounded work.
+3. No permanent business fork exists per provider.
+4. Closed/merged feature branches should be removed once evidence reachability is verified.
+5. CI green does not imply provider physical certification.
+6. Synthetic replay does not imply real provider delivery.
+7. Exact evidence remains attached to the executed SHA.
+8. `mk0/runtime` remains frozen.

@@ -1,0 +1,49 @@
+{
+  "version": "meta.facebook-comment.replay.v1",
+  "classification": "SANITIZED_SYNTHETIC_EDGE_REPLAY",
+  "targetCallbackPath": "/webhooks/meta/messenger",
+  "payload": {
+    "object": "page",
+    "entry": [
+      {
+        "id": "TEST_PAGE",
+        "time": 1790003000,
+        "changes": [
+          {
+            "field": "feed",
+            "value": {
+              "item": "comment",
+              "verb": "add",
+              "post_id": "TEST_PAGE_TEST_POST",
+              "comment_id": "TEST_COMMENT_001",
+              "sender_id": "TEST_USER",
+              "message": "CITA",
+              "published": 1,
+              "created_time": 1790003000
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "httpStatus": 200,
+    "body": "EVENT_RECEIVED",
+    "logs": [
+      "FACEBOOK_FEED_EVENT",
+      "FACEBOOK_COMMENT_EVENT",
+      "FACEBOOK_COMMENT_CTA"
+    ],
+    "cta": {
+      "type": "START_APPOINTMENT",
+      "source": "facebook_comment",
+      "publicTriggerOnly": true,
+      "privateContinuationRequired": true
+    }
+  },
+  "nonClaims": [
+    "not a provider-origin physical event",
+    "not a deployed HMAC enforcement proof",
+    "not a Temporal/persistence proof"
+  ]
+}
