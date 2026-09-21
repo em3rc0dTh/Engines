@@ -35,6 +35,12 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function requiredSenderPhone(event: VerifiedWhatsAppInbound): string {
+  const value = event.senderPhone?.trim();
+  if (!value) throw new Error('WHATSAPP_META_EVENT_INVALID:senderPhone');
+  return value;
+}
+
 function normalizedHeaders(headers: IncomingHttpHeaders): Readonly<Record<string, string | undefined>> {
   const output: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(headers)) {
@@ -106,7 +112,7 @@ async function main(): Promise<void> {
   });
 
   const sendCurrent = async (event: VerifiedWhatsAppInbound, live: LiveRegistration): Promise<void> => {
-    await transport.send(event.senderPhone, renderWhatsAppRegistration(live.renderIntent));
+    await transport.send(requiredSenderPhone(event), renderWhatsAppRegistration(live.renderIntent));
   };
 
   const getLiveForConversation = async (event: VerifiedWhatsAppInbound): Promise<LiveRegistration | undefined> => {
@@ -124,7 +130,7 @@ async function main(): Promise<void> {
 
     if (!live) {
       if (event.kind !== 'INTERACTIVE') {
-        await transport.send(event.senderPhone, renderWhatsAppRegistration('CONSENT'));
+        await transport.send(requiredSenderPhone(event), renderWhatsAppRegistration('CONSENT'));
         return;
       }
 
@@ -132,18 +138,18 @@ async function main(): Promise<void> {
       try {
         envelope = adapter.normalizeInbound(event, { businessSlug: BUSINESS_SLUG });
       } catch {
-        await transport.send(event.senderPhone, renderWhatsAppRegistration('CONSENT'));
+        await transport.send(requiredSenderPhone(event), renderWhatsAppRegistration('CONSENT'));
         return;
       }
 
       if (!envelope) {
-        await transport.send(event.senderPhone, { type: 'text', text: 'Entendido. No se inició ningún registro.' });
+        await transport.send(requiredSenderPhone(event), { type: 'text', text: 'Entendido. No se inició ningún registro.' });
         return;
       }
 
       const started = await core.execute(envelope);
       if (!started.ok || !started.workflowId) {
-        await transport.send(event.senderPhone, { type: 'text', text: 'No pudimos iniciar tu registro. Inténtalo nuevamente.' });
+        await transport.send(requiredSenderPhone(event), { type: 'text', text: 'No pudimos iniciar tu registro. Inténtalo nuevamente.' });
         return;
       }
 
@@ -164,7 +170,7 @@ async function main(): Promise<void> {
         registrationRenderIntent: live.renderIntent,
       });
     } catch {
-      await transport.send(event.senderPhone, { type: 'text', text: 'No pude interpretar esa respuesta. Usa la opción solicitada o escribe el dato nuevamente.' });
+      await transport.send(requiredSenderPhone(event), { type: 'text', text: 'No pude interpretar esa respuesta. Usa la opción solicitada o escribe el dato nuevamente.' });
       await sendCurrent(event, live);
       return;
     }
@@ -176,7 +182,7 @@ async function main(): Promise<void> {
 
     const applied = await core.execute(envelope);
     if (!applied.ok) {
-      await transport.send(event.senderPhone, { type: 'text', text: 'Ese dato no es válido. Inténtalo nuevamente.' });
+      await transport.send(requiredSenderPhone(event), { type: 'text', text: 'Ese dato no es válido. Inténtalo nuevamente.' });
       live = await getLiveForConversation(event) ?? live;
       await sendCurrent(event, live);
       return;
