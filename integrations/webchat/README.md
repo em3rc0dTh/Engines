@@ -14,7 +14,7 @@ Current status    ✅ C1A + C1B CERTIFIED / HUMAN VERIFIED
 
 Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
 
-## Architecture
+## Historical source lineage
 
 ```text
 build/mk1-c0-c1-webchat        C1A visible Workflow-driven WebChat
