@@ -10,11 +10,15 @@ Primary MK        MK1
 Status            ✅ KAPSO SANDBOX PHYSICALLY VERIFIED
 ```
 
-## Current source lineage
+## Canonical source after 2026-09-21
+
+Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
+
+## Historical source lineage
 
 ```text
 Historical provider branch      build/mk1-c4p-kapso-official
-Consolidated current anchor      build/mk1-customer-channels-integrated
+Consolidated current anchor      main
 Provider PR                      #22 merged 2026-09-07
 Merge commit into anchor         b4378d90216829549f739415ffff45aa41bef068
 ```
@@ -150,7 +154,7 @@ Provider-specific contracts cover HMAC verification, v2 parsing, scoping and out
 
 ```bash
 git fetch origin --prune
-git switch build/mk1-customer-channels-integrated
+git switch main
 cd mk1/runtime
 npm ci
 npm run check
