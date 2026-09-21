@@ -3,9 +3,11 @@ import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import {
   normalizeAppointmentDateInput,
   todayInTimeZone,
+  type CreateAppointmentManagedEntityInput,
   type FinalizeAppointmentInput,
   type ProvideAppointmentCustomerInput,
   type ResolveAppointmentCustomerInput,
+  type SelectAppointmentManagedEntityInput,
   type SelectAppointmentProductInput,
   type SelectAppointmentServiceInput,
   type SelectAppointmentSlotInput,
@@ -35,10 +37,12 @@ import {
   type FinalizeRegistrationInput,
 } from '../../orchestration/temporal/workflows/register-new-customer.workflow.js';
 import {
+  createAppointmentManagedEntityUpdate,
   finalizeAppointmentUpdate,
   getAppointmentStateQuery,
   provideAppointmentCustomerUpdate,
   resolveAppointmentCustomerUpdate,
+  selectAppointmentManagedEntityUpdate,
   selectAppointmentProductUpdate,
   selectAppointmentServiceUpdate,
   selectAppointmentSlotUpdate,
@@ -428,6 +432,53 @@ async function run(): Promise<void> {
           const handle = appointmentClient.workflow.getHandle(workflowId);
           const input: ResolveAppointmentCustomerInput = { inputId: id };
           const result = await handle.executeUpdate(resolveAppointmentCustomerUpdate, { args: [input] });
+          const description = await handle.describe();
+          sendJson(response, 200, { ok: true, workflowId, runId: description.runId, result });
+          return;
+        }
+      }
+
+      if (request.method === 'POST') {
+        const workflowId = pathAppointmentWorkflowId(url.pathname, '/managed-entity/select');
+        if (workflowId) {
+          const raw = record(await readJson(request)) ?? {};
+          const id = inputId(raw);
+          const managedEntityId = stringField(raw, 'managedEntityId');
+          if (!id || !managedEntityId) {
+            sendJson(response, 400, { ok: false, code: 'MANAGED_ENTITY_SELECTION_INVALID' });
+            return;
+          }
+          const handle = appointmentClient.workflow.getHandle(workflowId);
+          const input: SelectAppointmentManagedEntityInput = { inputId: id, managedEntityId };
+          const result = await handle.executeUpdate(selectAppointmentManagedEntityUpdate, { args: [input] });
+          const description = await handle.describe();
+          sendJson(response, 200, { ok: true, workflowId, runId: description.runId, result });
+          return;
+        }
+      }
+
+      if (request.method === 'POST') {
+        const workflowId = pathAppointmentWorkflowId(url.pathname, '/managed-entity/create');
+        if (workflowId) {
+          const raw = record(await readJson(request)) ?? {};
+          const id = inputId(raw);
+          const displayName = stringField(raw, 'displayName');
+          const externalRef = stringField(raw, 'externalRef');
+          const summary = stringField(raw, 'summary');
+          const data = record(raw.data);
+          if (!id || !displayName || !externalRef) {
+            sendJson(response, 400, { ok: false, code: 'MANAGED_ENTITY_CREATE_INVALID' });
+            return;
+          }
+          const handle = appointmentClient.workflow.getHandle(workflowId);
+          const input: CreateAppointmentManagedEntityInput = {
+            inputId: id,
+            displayName,
+            externalRef,
+            ...(summary ? { summary } : {}),
+            ...(data ? { data } : {}),
+          };
+          const result = await handle.executeUpdate(createAppointmentManagedEntityUpdate, { args: [input] });
           const description = await handle.describe();
           sendJson(response, 200, { ok: true, workflowId, runId: description.runId, result });
           return;

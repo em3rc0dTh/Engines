@@ -90,7 +90,6 @@ async function prepare(): Promise<void> {
   const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const conversationId = `m3-conversation-${token}`;
   const email = `m3-${token.replace(/[^a-zA-Z0-9]/g, '')}@example.test`;
-  const phone = `9${String(Date.now()).slice(-8)}`;
   const start = await postEvent(conversationId, `m3-start-${token}`, 'START_APPOINTMENT');
   assert(typeof start.workflowId === 'string', 'workflowId missing');
   const workflowId = String(start.workflowId);
@@ -98,12 +97,21 @@ async function prepare(): Promise<void> {
   await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_CUSTOMER', 'WAITING_FOR_CUSTOMER');
   await postEvent(conversationId, `m3-name-${token}`, 'PROVIDE_CUSTOMER', { customerPatch: { name: 'Platform M3 Customer' } });
   await postEvent(conversationId, `m3-email-${token}`, 'PROVIDE_CUSTOMER', { customerPatch: { contact: { email } } });
-  await postEvent(conversationId, `m3-phone-${token}`, 'PROVIDE_CUSTOMER', {
-    customerPatch: { contact: { phones: [{ number: `+51 ${phone}`, normalized: `51${phone}`, primary: true }] } },
-  });
-  await postEvent(conversationId, `m3-resolve-${token}`, 'RESOLVE_CUSTOMER');
 
-  let body = await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_SERVICE', 'WAITING_FOR_SERVICE');
+  let body = await waitFor(
+    conversationId,
+    (state) => state.phase === 'WAITING_FOR_MANAGED_ENTITY' || state.phase === 'WAITING_FOR_SERVICE',
+    'WAITING_FOR_MANAGED_ENTITY',
+  );
+  if (durable(body).phase === 'WAITING_FOR_MANAGED_ENTITY') {
+    await postEvent(conversationId, `m3-managed-entity-${token}`, 'CREATE_MANAGED_ENTITY', {
+      displayName: 'Platform M3 Vehicle',
+      externalRef: `M3-${token}`,
+      summary: 'Platform M3 Customer certification vehicle',
+    });
+  }
+
+  body = await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_SERVICE', 'WAITING_FOR_SERVICE');
   const services = list(durable(body).services);
   assert(typeof services[0]?.serviceId === 'string', 'services missing');
   const selectedService = String(services[0]!.name);

@@ -58,8 +58,9 @@ test('WEBCHAT-M3 reconstructs completed durable conversation steps after browser
         { id: 'WORKFLOW_START', status: 'COMPLETE', value: 'register-appointment:golden-business:m3' },
         { id: 'CUSTOMER_NAME', status: 'COMPLETE', value: 'Platform M3 Customer' },
         { id: 'CUSTOMER_EMAIL', status: 'COMPLETE', value: 'm3@example.test' },
-        { id: 'CUSTOMER_PHONE', status: 'COMPLETE', value: '+51 900 000 001' },
+        { id: 'CUSTOMER_PHONE', status: 'SKIPPED' },
         { id: 'CUSTOMER_RESOLUTION', status: 'COMPLETE', value: 'cus_m3' },
+        { id: 'MANAGED_ENTITY_RESOLUTION', status: 'COMPLETE', value: 'Platform M3 Vehicle' },
         { id: 'SERVICE_SELECTION', status: 'COMPLETE', value: 'Car Wash' },
         { id: 'OFFERING_SELECTION', status: 'COMPLETE', value: 'Executive Clean' },
         { id: 'DATE_SELECTION', status: 'COMPLETE', value: '2026-09-20' },
@@ -75,6 +76,7 @@ test('WEBCHAT-M3 reconstructs completed durable conversation steps after browser
   assert.match(rendered, /Recovered durable WebChat conversation/);
   assert.match(rendered, /Platform M3 Customer/);
   assert.match(rendered, /m3@example\.test/);
+  assert.match(rendered, /Platform M3 Vehicle/);
   assert.match(rendered, /Car Wash/);
   assert.match(rendered, /Executive Clean/);
   assert.match(rendered, /2026-09-20/);

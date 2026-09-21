@@ -114,8 +114,6 @@ async function main(): Promise<void> {
   const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const conversationId = `m2-conversation-${token}`;
   const email = `m2-${token.replace(/[^a-zA-Z0-9]/g, '')}@example.test`;
-  const localPhone = `9${String(Date.now()).slice(-8)}`;
-  const normalizedPhone = `51${localPhone}`;
   const pool = new Pool({ connectionString: postgresUrl, max: 2 });
 
   try {
@@ -153,10 +151,6 @@ async function main(): Promise<void> {
     assert(afterBadEmail.email === undefined, 'invalid email entered durable state');
     console.log('PLATFORM_M2_INVALID_EMAIL_REJECTION_PASS');
 
-    success(await postEvent(conversationId, `m2-valid-email-${token}`, 'PROVIDE_CUSTOMER', {
-      customerPatch: { contact: { email } },
-    }), 'valid email correction');
-
     const invalidPhoneId = `m2-invalid-phone-${token}`;
     const invalidPhonePayload = {
       customerPatch: {
@@ -177,18 +171,26 @@ async function main(): Promise<void> {
     assert(body.workflowId === workflowId, 'invalid phone changed workflowId');
     assert(durable(body).phase === 'WAITING_FOR_CUSTOMER', 'invalid phone advanced workflow phase');
     const afterBadPhone = record(customerDraft(durable(body)).contact) ?? {};
-    assert(afterBadPhone.email === email, 'valid email lost after invalid phone');
+    assert(afterBadPhone.email === undefined, 'invalid phone test must run before strong email identity is accepted');
     assert(!Array.isArray(afterBadPhone.phones) || (afterBadPhone.phones as unknown[]).length === 0, 'invalid phone entered durable state');
     console.log('PLATFORM_M2_INVALID_PHONE_REJECTION_PASS');
 
-    success(await postEvent(conversationId, `m2-valid-phone-${token}`, 'PROVIDE_CUSTOMER', {
-      customerPatch: {
-        contact: {
-          phones: [{ number: `+51 ${localPhone}`, normalized: normalizedPhone, primary: true }],
-        },
-      },
-    }), 'valid phone correction');
-    success(await postEvent(conversationId, `m2-resolve-${token}`, 'RESOLVE_CUSTOMER'), 'resolve customer');
+    success(await postEvent(conversationId, `m2-valid-email-${token}`, 'PROVIDE_CUSTOMER', {
+      customerPatch: { contact: { email } },
+    }), 'valid email correction');
+
+    body = await waitFor(
+      conversationId,
+      (state) => state.phase === 'WAITING_FOR_MANAGED_ENTITY' || state.phase === 'WAITING_FOR_SERVICE',
+      'WAITING_FOR_MANAGED_ENTITY',
+    );
+    if (durable(body).phase === 'WAITING_FOR_MANAGED_ENTITY') {
+      success(await postEvent(conversationId, `m2-managed-entity-${token}`, 'CREATE_MANAGED_ENTITY', {
+        displayName: 'Platform M2 Vehicle',
+        externalRef: `M2-${token}`,
+        summary: 'M2 invalid-input recovery certification vehicle',
+      }), 'create managed entity');
+    }
 
     body = await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_SERVICE', 'WAITING_FOR_SERVICE');
     assert(body.workflowId === workflowId, 'corrected customer flow changed workflowId');

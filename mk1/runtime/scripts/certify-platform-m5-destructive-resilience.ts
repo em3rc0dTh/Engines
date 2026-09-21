@@ -97,7 +97,6 @@ async function prepare(): Promise<void> {
   const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const conversationId = `m5-conversation-${token}`;
   const email = `m5-${token.replace(/[^a-zA-Z0-9]/g, '')}@example.test`;
-  const phone = `9${String(Date.now()).slice(-8)}`;
   const start = await postEvent(conversationId, `m5-start-${token}`, 'START_APPOINTMENT');
   assert(typeof start.workflowId === 'string', 'workflowId missing');
   const workflowId = String(start.workflowId);
@@ -105,12 +104,21 @@ async function prepare(): Promise<void> {
   await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_CUSTOMER', 'WAITING_FOR_CUSTOMER');
   await postEvent(conversationId, `m5-name-${token}`, 'PROVIDE_CUSTOMER', { customerPatch: { name: 'Platform M5 Customer' } });
   await postEvent(conversationId, `m5-email-${token}`, 'PROVIDE_CUSTOMER', { customerPatch: { contact: { email } } });
-  await postEvent(conversationId, `m5-phone-${token}`, 'PROVIDE_CUSTOMER', {
-    customerPatch: { contact: { phones: [{ number: `+51 ${phone}`, normalized: `51${phone}`, primary: true }] } },
-  });
-  await postEvent(conversationId, `m5-resolve-${token}`, 'RESOLVE_CUSTOMER');
 
-  let body = await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_SERVICE', 'WAITING_FOR_SERVICE');
+  let body = await waitFor(
+    conversationId,
+    (state) => state.phase === 'WAITING_FOR_MANAGED_ENTITY' || state.phase === 'WAITING_FOR_SERVICE',
+    'WAITING_FOR_MANAGED_ENTITY',
+  );
+  if (durable(body).phase === 'WAITING_FOR_MANAGED_ENTITY') {
+    await postEvent(conversationId, `m5-managed-entity-${token}`, 'CREATE_MANAGED_ENTITY', {
+      displayName: 'Platform M5 Vehicle',
+      externalRef: `M5-${token}`,
+      summary: 'Platform M5 Customer certification vehicle',
+    });
+  }
+
+  body = await waitFor(conversationId, (state) => state.phase === 'WAITING_FOR_SERVICE', 'WAITING_FOR_SERVICE');
   const services = list(durable(body).services);
   assert(typeof services[0]?.serviceId === 'string', 'services missing');
   await postEvent(conversationId, `m5-service-${token}`, 'SELECT_SERVICE', { serviceId: services[0]!.serviceId });

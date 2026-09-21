@@ -34,21 +34,21 @@ export function projectRecoveredTranscript(snapshot) {
   addValue('CUSTOMER_PHONE', 'Step 04 — Enter the customer phone number.');
 
   if (completedStep(steps, 'CUSTOMER_RESOLUTION')) {
-    messages.push({ kind: 'system', text: 'Step 05 — Customer data is captured. Resolve the customer through Temporal.' });
-    messages.push({ kind: 'user', text: 'Resolve Customer' });
+    messages.push({ kind: 'system', text: 'Step 05 — Customer identity resolved through Temporal.' });
   }
 
-  addValue('SERVICE_SELECTION', 'Step 06 — Select a Service loaded by the Workflow.');
-  addValue('OFFERING_SELECTION', 'Step 07 — Select an Offering / Product for the selected Service.');
-  addValue('DATE_SELECTION', 'Step 08 — Enter the appointment date.');
+  addValue('MANAGED_ENTITY_RESOLUTION', 'Step 06 — Resolve the managed operational subject.');
+  addValue('SERVICE_SELECTION', 'Step 07 — Select a Service loaded by the Workflow.');
+  addValue('OFFERING_SELECTION', 'Step 08 — Select an Offering / Product for the selected Service.');
+  addValue('DATE_SELECTION', 'Step 09 — Enter the appointment date.');
 
   const slots = completedStep(steps, 'SLOTS_LOADING');
-  if (slots?.value) messages.push({ kind: 'meta', text: `Step 09 — Available slots loaded: ${slots.value}` });
+  if (slots?.value) messages.push({ kind: 'meta', text: `Step 10 — Available slots loaded: ${slots.value}` });
 
-  addValue('SLOT_SELECTION', 'Step 10 — Available slots are loaded. Select one.');
+  addValue('SLOT_SELECTION', 'Step 11 — Available slots are loaded. Select one.');
 
   if (completedStep(steps, 'FINALIZE_APPOINTMENT')) {
-    messages.push({ kind: 'system', text: 'Step 11 — Persist the Appointment explicitly.' });
+    messages.push({ kind: 'system', text: 'Step 12 — Persist the Appointment explicitly.' });
     messages.push({ kind: 'user', text: 'Finalize Appointment' });
   }
 

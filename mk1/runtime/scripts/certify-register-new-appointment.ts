@@ -99,6 +99,61 @@ async function resolveCustomer(workflowId: string, inputId: string): Promise<Jso
   return post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/resolve-customer`, { inputId });
 }
 
+async function selectManagedEntity(workflowId: string, inputId: string, managedEntityId: string): Promise<JsonRecord> {
+  return post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/managed-entity/select`, {
+    inputId,
+    managedEntityId,
+  });
+}
+
+async function createManagedEntity(
+  workflowId: string,
+  inputId: string,
+  displayName: string,
+  externalRef: string,
+): Promise<JsonRecord> {
+  return post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/managed-entity/create`, {
+    inputId,
+    displayName,
+    externalRef,
+    summary: 'Appointment certification vehicle',
+  });
+}
+
+async function crossManagedEntityGate(workflowId: string, token: string, suffix: string): Promise<JsonRecord> {
+  let current = await waitFor(
+    workflowId,
+    (value) => value.phase === 'WAITING_FOR_MANAGED_ENTITY' || value.phase === 'WAITING_FOR_SERVICE',
+    `${suffix} managed entity wait`,
+    30_000,
+  );
+  if (current.phase === 'WAITING_FOR_SERVICE') return current;
+
+  const managed = record(current.managedEntity) ?? {};
+  const candidates = list(managed.candidates);
+  const selectable = candidates.find((candidate) => typeof candidate.managedEntityId === 'string');
+
+  if (managed.status === 'NEEDS_SELECTION' && selectable) {
+    const selected = await selectManagedEntity(
+      workflowId,
+      id(token, `${suffix}-managed-entity-select`),
+      String(selectable.managedEntityId),
+    );
+    assert(result(selected).ok === true, `${suffix} ManagedEntity selection rejected`);
+  } else {
+    const created = await createManagedEntity(
+      workflowId,
+      id(token, `${suffix}-managed-entity-create`),
+      `Appointment Vehicle ${suffix} ${token}`,
+      `APPT-${suffix}-${token}`,
+    );
+    assert(result(created).ok === true, `${suffix} ManagedEntity creation rejected`);
+  }
+
+  current = await waitFor(workflowId, (value) => value.phase === 'WAITING_FOR_SERVICE', `${suffix} service wait`, 30_000);
+  return current;
+}
+
 async function selectService(workflowId: string, inputId: string, serviceId: string): Promise<JsonRecord> {
   return post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/service`, { inputId, serviceId });
 }
@@ -132,7 +187,7 @@ async function bringExistingCustomerAppointmentToSlots(
   const customerResolution = await resolveCustomer(execution.workflowId, id(token, `${suffix}-resolve`));
   assert(result(customerResolution).ok === true, `${suffix} resolve Update rejected`);
 
-  let current = await waitFor(execution.workflowId, (value) => value.phase === 'WAITING_FOR_SERVICE', `${suffix} service wait`);
+  let current = await crossManagedEntityGate(execution.workflowId, token, suffix);
   assert(customer(current).status === 'EXISTING', `${suffix} must resolve existing Customer`);
   assert(customer(current).customerId === customerId, `${suffix} resolved wrong Customer`);
 
@@ -171,7 +226,7 @@ async function certifyHappyPath(token: string): Promise<Readonly<{ customerId: s
   response = await resolveCustomer(execution.workflowId, id(token, 'happy-resolve'));
   assert(result(response).ok === true, 'resolve customer Update rejected');
 
-  current = await waitFor(execution.workflowId, (value) => value.phase === 'WAITING_FOR_SERVICE', 'happy service wait', 30_000);
+  current = await crossManagedEntityGate(execution.workflowId, token, 'happy');
   assert(customer(current).status === 'CREATED', `new Customer must be created through child Workflow: ${JSON.stringify(customer(current))}`);
   const customerId = String(customer(current).customerId ?? '');
   assert(customerId.startsWith('cus_'), 'child RegisterNewCustomer did not return Customer ID');
