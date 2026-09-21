@@ -58,7 +58,40 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
   await event(conversationId, `${token}:name`, 'PROVIDE_CUSTOMER', { customerPatch: { name: `CTA ${token}` } });
   await event(conversationId, `${token}:email`, 'PROVIDE_CUSTOMER', { customerPatch: { contact: { email: `${token}@example.test` } } });
   await event(conversationId, `${token}:resolve`, 'RESOLVE_CUSTOMER');
-  let current = await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_SERVICE', 'service');
+
+  let current = await waitFor(
+    conversationId,
+    (v) => v.phase === 'WAITING_FOR_MANAGED_ENTITY' || v.phase === 'WAITING_FOR_SERVICE',
+    'managed-entity',
+  );
+
+  if (current.phase === 'WAITING_FOR_MANAGED_ENTITY') {
+    const managedEntity = record(current.managedEntity);
+    const candidates = list(managedEntity.candidates);
+    const selectable = candidates.find((candidate) => typeof candidate.managedEntityId === 'string');
+
+    if (managedEntity.status === 'NEEDS_SELECTION' && selectable) {
+      await event(
+        conversationId,
+        `${token}:managed-entity:select`,
+        'SELECT_MANAGED_ENTITY',
+        { managedEntityId: selectable.managedEntityId },
+      );
+    } else {
+      await event(
+        conversationId,
+        `${token}:managed-entity:create`,
+        'CREATE_MANAGED_ENTITY',
+        {
+          displayName: `CTA Vehicle ${token}`,
+          externalRef: `CTA-${token}`,
+          summary: 'Deterministic CTA orchestration certification vehicle',
+        },
+      );
+    }
+  }
+
+  current = await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_SERVICE', 'service');
   assert(list(current.services).some((v) => v.serviceId === 'svc_car_wash'), 'service fixture missing');
   await event(conversationId, `${token}:offering`, 'SELECT_OFFERING', { catalogOfferingId: 'prd_car_wash_basic' });
   await waitFor(conversationId, (v) => v.phase === 'WAITING_FOR_DATE', 'date');
