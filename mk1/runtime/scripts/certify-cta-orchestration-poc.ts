@@ -119,9 +119,22 @@ async function drive(conversationId: string, token: string, failBeforeFinalize =
     try {
       const managedEntityId = `men_fixture_${randomUUID()}`;
       await pool.query(
-        `INSERT INTO managed_entities(managed_entity_id,business_slug,customer_id,entity_type,external_ref)
-         VALUES($1,$2,$3,'COMPENSATION_FIXTURE',$4)`,
-        [managedEntityId,businessSlug,customerId,token],
+        `INSERT INTO managed_entities(
+           managed_entity_id,
+           business_slug,
+           customer_id,
+           entity_type,
+           external_ref,
+           display_name
+         )
+         VALUES($1,$2,$3,'COMPENSATION_FIXTURE',$4,$5)`,
+        [
+          managedEntityId,
+          businessSlug,
+          customerId,
+          token,
+          `CTA Compensation Fixture ${token}`,
+        ],
       );
       await pool.query(
         `INSERT INTO operational_cases(case_id,business_slug,customer_id,managed_entity_id,workflow_id,status)
