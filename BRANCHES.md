@@ -168,3 +168,31 @@ When a bounded gate closes:
 3. verify ancestry, PR state and evidence before marking intermediates as deletion candidates;
 4. never delete branches automatically;
 5. tell the user exactly which refs may be removed before any deletion.
+
+
+## CTA branch consolidation policy
+
+CTA provider lanes converge into the canonical Register Appointment feature line and then into the integration/stable lines. Provider branches are not alternate business architectures.
+
+~~~text
+feature/cta-orchestration-register-appointment-poc
+  <- stage-20260918                         (Messenger M1, merged)
+  <- feature/cta-meta-facebook-comments-poc (Facebook Comments lane)
+        |
+        v
+developer
+        |
+        v
+main
+~~~
+
+Recognition rules:
+
+- `main` is the stable integrated recognition point.
+- `developer` is integration/staging, not a permanent CTA fork.
+- `feature/cta-orchestration-register-appointment-poc` is the canonical bounded CTA feature line until consolidation is complete.
+- `stage-20260918` is historical after its PR merge; do not add new work there.
+- `feature/cta-meta-facebook-comments-poc` exists only for the Facebook Comments provider gate and must merge back after CI/evidence.
+- old channel milestone branches remain evidence references only when their PRs are already merged.
+
+A channel branch is solid only when code, deterministic tests, reproducible setup instructions, sanitized evidence and explicit non-claims are present.
