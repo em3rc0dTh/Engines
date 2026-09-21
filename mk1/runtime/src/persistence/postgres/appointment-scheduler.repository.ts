@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { type Pool, type PoolClient } from 'pg';
 import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
@@ -45,6 +45,7 @@ export type SchedulerBackedBookAppointmentInput = Readonly<{
   workflowId: string;
   businessSlug: string;
   customerId: string;
+  managedEntityId: string;
   serviceId: string;
   productId: string;
   appointmentDate: string;
@@ -488,24 +489,28 @@ async function persistAppointmentFromSchedulerReservation(
       throw new Error('APPOINTMENT_SCHEDULER_SELECTED_SLOT_MISMATCH');
     }
 
-    const managedEntityCandidate = `men_${randomUUID()}`;
-    const managedEntity = await client.query<{ managed_entity_id: string }>(
-      `INSERT INTO managed_entities
-        (managed_entity_id,business_slug,customer_id,entity_type,external_ref)
-       VALUES ($1,$2,$3,'CUSTOMER_SUBJECT','default')
-       ON CONFLICT (business_slug,customer_id,entity_type,external_ref)
-       DO UPDATE SET status='ACTIVE'
-       RETURNING managed_entity_id`,
-      [managedEntityCandidate, input.businessSlug, input.customerId],
+    // ME1 owns operational-subject resolution before scheduling. Scheduler
+    // must preserve that selected subject; it must never synthesize a generic
+    // CUSTOMER_SUBJECT placeholder while committing capacity.
+    const managedEntity = await client.query(
+      `SELECT 1
+         FROM managed_entities
+        WHERE business_slug = $1
+          AND customer_id = $2
+          AND managed_entity_id = $3
+          AND status = 'ACTIVE'`,
+      [input.businessSlug, input.customerId, input.managedEntityId],
     );
-    const managedEntityId = managedEntity.rows[0]!.managed_entity_id;
+    if ((managedEntity.rowCount ?? 0) !== 1) {
+      throw new Error('MANAGED_ENTITY_NOT_FOUND');
+    }
 
     const caseId = `case_${sha256(`${input.businessSlug}:${input.workflowId}`).slice(0, 32)}`;
     await client.query(
       `INSERT INTO operational_cases
         (case_id,business_slug,customer_id,managed_entity_id,workflow_id)
        VALUES ($1,$2,$3,$4,$5)`,
-      [caseId, input.businessSlug, input.customerId, managedEntityId, input.workflowId],
+      [caseId, input.businessSlug, input.customerId, input.managedEntityId, input.workflowId],
     );
 
     const appointmentId = `apt_${sha256(`${input.businessSlug}:${input.workflowId}`).slice(0, 32)}`;
@@ -528,7 +533,7 @@ async function persistAppointmentFromSchedulerReservation(
         localEnd.time,
         reservation.timeZone,
         resourceId,
-        managedEntityId,
+        input.managedEntityId,
         caseId,
         reservation.reservationId,
       ],
@@ -548,7 +553,7 @@ async function persistAppointmentFromSchedulerReservation(
         input.workflowId,
         JSON.stringify({
           customerId: input.customerId,
-          managedEntityId,
+          managedEntityId: input.managedEntityId,
           catalogOfferingId: input.productId,
           schedulerReservationId: reservation.reservationId,
           schedulerDemandId: reservation.demandId,
