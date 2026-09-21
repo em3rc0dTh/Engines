@@ -23,7 +23,7 @@ Channels may own transport parsing, authentication, provider identity and render
 | CLI | executable canonical CTA reference | certified foundation |
 | WebChat | visible Workflow flow + durable restart/correlation proof | certified within PoC boundary |
 | Telegram | official Bot API physical transport + canonical channel path | physically verified |
-| WhatsApp / Kapso | official provider path + real sandbox journey | physically verified |
+| WhatsApp / Kapso | official provider path + real sandbox journey | physically verified |\n| WhatsApp / Meta Cloud API | official direct Meta transport, HMAC contract, deterministic runner | deterministic certified; real provider physical proof open |
 | Messenger | real inbound + real outbound Page transport; deterministic CTA adapter | transport physically verified; full real CTA -> Temporal -> persistence still open |
 | Facebook Comments | Page `feed` panel transport verified; synthetic `comment/add/CITA` replay classified into `START_APPOINTMENT` | edge/router verified; real provider comment and full CTA path still open |
 | TikTok | deterministic adapter contract only | provider physical proof open |
@@ -64,12 +64,12 @@ npm run check
 npm run test:cta:poc
 npm run test:channel:c1b
 npm run test:telegram:bot-api
-npm run test:whatsapp:kapso
+npm run test:whatsapp:kapso\nnpm run test:whatsapp:cloud-api
 ~~~
 
 ## Runbooks and evidence
 
-- Messenger: `mk1/Test/meta-channel-m1-setup-2026-09-18.md`
+- Direct Meta WhatsApp: `mk1/Test/c4p-meta-whatsapp-cloud-api-physical-runbook-2026-09-04.md`\n- Direct Meta WhatsApp contract: `mk1/Design/13-c4p-meta-whatsapp-cloud-api-physical-contract.md`\n- Messenger: `mk1/Test/meta-channel-m1-setup-2026-09-18.md`
 - Facebook Comments: `mk1/Test/meta-facebook-comments-setup-2026-09-21.md`
 - Facebook Comments evidence: `mk1/Build/evidence/meta-facebook-comments-feed-evidence-2026-09-21.md`
 - Meta Page contract: `mk1/Design/16-meta-page-shared-webhook-contract.md`
@@ -86,7 +86,7 @@ META_WEBHOOK_VERIFY_TOKEN
 META_PAGE_ACCESS_TOKEN
 META_APP_SECRET
 TELEGRAM_BOT_TOKEN
-KAPSO_API_KEY / provider-specific secret references
+KAPSO_API_KEY / provider-specific secret references\nWHATSAPP_APP_SECRET\nWHATSAPP_ACCESS_TOKEN\nWHATSAPP_PHONE_NUMBER_ID\nWHATSAPP_WEBHOOK_VERIFY_TOKEN\nWHATSAPP_GRAPH_API_VERSION
 ~~~
 
 Use the deployment platform secret store.
