@@ -2,43 +2,85 @@
 
 Snapshot: 2026-09-21
 
-The branch model is intentionally simple: stable recognition lives on `main`, active integration starts from `developer`, and provider-specific CTA branches are temporary evidence-producing lanes.
+Repository housekeeping keeps one stable line, one integration line, and only bounded active feature/certification branches.
 
 ## Canonical topology
 
 ```text
 main
 └── developer
-    └── new bounded feature/provider branches
-
-historical CTA evidence refs
-├── feature/cta-orchestration-register-appointment-poc
-├── stage-20260918
-├── feature/cta-meta-facebook-comments-poc
-└── feature/cta-whatsapp-meta-cloud-api
+    ├── feature/managed-entity-resolution-policy
+    └── cert/platform-solidity-pre-agent
 ```
 
-Historical refs are not development bases. Their commits, PR discussions, CI runs and evidence remain inspectable.
+`main` and `developer` are kept synchronized at housekeeping boundaries. New bounded work starts from `developer`.
+
+## Active pull requests
+
+| PR | Head | Base | Role | State |
+|---|---|---|---|---|
+| #26 | `feature/managed-entity-resolution-policy` | `developer` | ManagedEntity ME1 | ACTIVE / draft |
+| #34 | `cert/platform-solidity-pre-agent` | `main` | pre-Agent platform roll-up | ACTIVE / draft; reconciliation with newer main required |
+
+PR #34 is the single roll-up for the historical Layer 6 → pre-Scheduler → Scheduler G2 → Integration G3 → platform-solidity lineage.
+
+The former stacked PRs #27, #28 and #33 were closed during housekeeping after ancestry was verified. Their commits, CI runs, artifacts and evidence remain reachable through PR #34 and exact SHAs.
 
 ## CTA integration receipts
 
 | PR | Lane | State |
 |---|---|---|
-| #24 | canonical Register Appointment CTA | MERGED into developer |
-| #35 | Meta Messenger M1 transport | MERGED into canonical CTA line |
-| #36 | Facebook Comments Page.feed | MERGED into canonical CTA line |
-| #37 | direct Meta WhatsApp Cloud API | MERGED into developer |
+| #24 | canonical Register Appointment CTA | MERGED |
+| #35 | Meta Messenger M1 transport | MERGED |
+| #36 | Facebook Comments Page.feed | MERGED |
+| #37 | direct Meta WhatsApp Cloud API | MERGED |
+| #38 | CTA repository consolidation | MERGED |
+| #39 | integrated CTA baseline promotion to main | MERGED |
 
-All four lanes are part of the integrated CTA baseline promoted to `main`. Provider physical truth boundaries remain unchanged by merge.
+## Historical refs safe to remove after evidence review
 
-## Branch policy
+These refs are no longer valid development bases. Their PRs/history or descendant branches preserve the work.
 
-| Branch/ref | Role | Policy |
-|---|---|---|
-| `main` | stable repository truth and canonical CTA recognition | KEEP |
-| `developer` | active integration line / start point for new CTA work | KEEP |
-| canonical CTA historical feature refs | exact evidence lineage | NO NEW WORK |
-| provider-specific future feature branches | one bounded transport/security/certification scope | MERGE BACK then historical |
+```text
+chore/cta-repository-consolidation-20260921
+feature/cta-whatsapp-meta-cloud-api
+feature/cta-orchestration-register-appointment-poc
+feature/cta-meta-facebook-comments-poc
+stage-20260918
+test-branch-20260918
+build/mk1-c4p-whatsapp-cloud-api-official
+
+build/g2-s0-scheduler-contract-persistence
+build/g2-s1-scheduler-management
+build/g2-s2-deterministic-availability
+build/g2-scheduler
+
+feature/layer6-v4-persistence-complete
+feature/pre-scheduler-node-edge-certification
+build/g3-integration
+```
+
+Why these are removable:
+
+- CTA refs were merged or explicitly superseded by the integrated `main` lineage.
+- `test-branch-20260918` has no unique work and was an accidental setup branch.
+- the legacy direct-Meta WhatsApp ref was superseded by PR #37.
+- Scheduler S0/S1/S2 are ancestors of the terminal G2 branch.
+- terminal G2 is already contained in the pre-Scheduler lineage.
+- Layer 6, pre-Scheduler and G3 are all ancestors of the active PR #34 branch.
+
+Deleting a branch ref does not delete commits, merged/closed PR discussions, CI runs, artifacts or source-bound evidence SHAs.
+
+## Branches that must remain
+
+```text
+main
+developer
+feature/managed-entity-resolution-policy
+cert/platform-solidity-pre-agent
+```
+
+Do not delete either active feature/certification branch while PR #26 or PR #34 remains open.
 
 ## Integrated capability truth
 
@@ -56,26 +98,26 @@ TikTok                                     deterministic only
 
 ## Branch solidity rule
 
-A CTA/provider branch is considered solid only when it contains or references:
+A branch is considered solid only when it carries or references:
 
 1. executable implementation;
 2. deterministic regression coverage;
 3. simple clean-clone reproduction instructions;
-4. secret-name contract with no secret values committed;
+4. secret-name contract without committed secret values;
 5. sanitized fixtures/evidence;
-6. explicit evidence class (deterministic, synthetic, dashboard, real provider, full E2E);
+6. explicit evidence class;
 7. explicit non-claims;
-8. a merge path back to `developer` and then `main`.
+8. a merge path back to `developer` / `main`.
 
-The canonical cross-channel checklist is `mk1/CTA/REPRODUCE.md`.
+The canonical CTA reproduction index is `mk1/CTA/REPRODUCE.md`.
 
 ## Hygiene rules
 
-1. Do not create permanent business forks per provider.
-2. Provider adapters may own transport concerns, never domain policy.
-3. Exact runtime claims stay attached to the executed SHA/receipt.
-4. CI green does not imply provider physical certification.
-5. Synthetic replay does not imply real provider delivery.
-6. Preserve evidence before deleting historical refs.
-7. `mk0/runtime` remains frozen.
-8. New CTA work starts from `developer`, not from merged historical branches.
+1. `main` is stable repository truth.
+2. `developer` is the start point for new bounded work.
+3. No permanent business fork exists per provider.
+4. Closed/merged feature branches should be removed once evidence reachability is verified.
+5. CI green does not imply provider physical certification.
+6. Synthetic replay does not imply real provider delivery.
+7. Exact evidence remains attached to the executed SHA.
+8. `mk0/runtime` remains frozen.
