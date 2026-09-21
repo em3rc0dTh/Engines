@@ -1,5 +1,10 @@
 import { Context } from '@temporalio/activity';
 import { todayInTimeZone } from '../../../contracts/register-new-appointment/index.js';
+import type { CustomerDraft } from '../../../contracts/register-new-customer/index.js';
+import {
+  closeAppointmentCustomerNameRepository,
+  resolveAppointmentCustomerByName,
+} from '../../../persistence/postgres/appointment-customer-name.repository.js';
 import {
   closeAppointmentRepository,
   reserveAppointmentCommand,
@@ -17,6 +22,12 @@ import {
   listAppointmentSlotsViaScheduler,
 } from '../../../persistence/postgres/appointment-scheduler.repository.js';
 import {
+  closeManagedEntityRepository,
+  createManagedEntityForCustomer,
+  getManagedEntityForCustomer,
+  listManagedEntitiesForCustomer,
+} from '../../../persistence/postgres/managed-entity.repository.js';
+import {
   toAppointmentProduct,
   toAppointmentService,
 } from '../../../services/appointment-catalog.compat.js';
@@ -31,13 +42,45 @@ function currentWorkflowId(): string {
   return workflowExecution.workflowId;
 }
 
+function hasStrongCustomerIdentity(customer: CustomerDraft | undefined): boolean {
+  if (!customer) return false;
+  if (customer.contact?.email?.trim()) return true;
+  if ((customer.contact?.phones ?? []).some((phone) => Boolean(phone.normalized?.trim() || phone.number?.trim()))) {
+    return true;
+  }
+  const document = customer.document;
+  return Boolean(document?.type?.trim() && document.country?.trim() && document.value?.trim());
+}
+
 export const appointmentActivities: AppointmentActivities = {
   reserveAppointmentCommand: (input) => reserveAppointmentCommand(input.start, input.workflowId),
   getBusinessToday: (input) => Promise.resolve(todayInTimeZone(input.timeZone)),
-  resolveAppointmentCustomer: (input) =>
-    resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer),
 
-  // Canonical Services authority remains unchanged by G2-S7.
+  // ME1 customer-resolution rule:
+  // - an explicit/trusted Customer id or strong identity (email/phone/document)
+  //   goes directly through the canonical strong-identity resolver;
+  // - otherwise a supplied name performs deterministic discovery first.
+  // Name is not treated as globally unique: zero/multiple name matches return
+  // control to Temporal so the CTA can request stronger identifying material.
+  resolveAppointmentCustomer: (input) => {
+    if (input.customerId || hasStrongCustomerIdentity(input.customer)) {
+      return resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer);
+    }
+    if (input.customer?.name?.trim()) {
+      return resolveAppointmentCustomerByName(input.businessSlug, input.customer.name);
+    }
+    return resolveAppointmentCustomer(input.businessSlug, input.customerId, input.customer);
+  },
+
+  listAppointmentManagedEntities: (input) =>
+    listManagedEntitiesForCustomer(input.businessSlug, input.customerId, input.type),
+  getAppointmentManagedEntity: (input) =>
+    getManagedEntityForCustomer(input.businessSlug, input.customerId, input.managedEntityId),
+  createAppointmentManagedEntity: (input) => createManagedEntityForCustomer(input),
+
+  // S7 authority boundary: Appointment no longer performs its own Service/Product
+  // catalog queries. The same canonical Services read activities used by the
+  // standalone Services Engine supply the renderer-compatible projections.
   async listAppointmentServices(input) {
     const services = await servicesReadActivities.listServices({
       businessSlug: input.businessSlug,
@@ -58,9 +101,6 @@ export const appointmentActivities: AppointmentActivities = {
     ]);
     if (!service || service.status !== 'ACTIVE') return [];
 
-    // G2-S7 freezes the exact schedulable Services projections shown to this
-    // durable Appointment workflow before a user can select one. The resulting
-    // SchedulingDemand is immutable and survives catalog revision advances.
     const schedulable = await freezeAppointmentSchedulingDemands({
       businessSlug: input.businessSlug,
       workflowId: currentWorkflowId(),
@@ -70,9 +110,6 @@ export const appointmentActivities: AppointmentActivities = {
     return schedulable.map(toAppointmentProduct);
   },
 
-  // Stable Appointment activity names are intentionally preserved for channel
-  // compatibility. Their authority is now canonical G2 Scheduler: availability
-  // is advisory and explicit Finalize commits through ConfirmReservation.
   listAppointmentSlots: (input) =>
     listAppointmentSlotsViaScheduler({
       businessSlug: input.businessSlug,
@@ -84,9 +121,6 @@ export const appointmentActivities: AppointmentActivities = {
     try {
       return await bookAppointmentViaScheduler(input);
     } catch (error) {
-      // Keep the durable Scheduler confirmation available for ordinary Temporal
-      // Activity retries. Only when the configured retry budget is exhausted do
-      // we compensate a reservation that never acquired an Appointment record.
       if (Context.current().info.attempt >= APPOINTMENT_ACTIVITY_MAX_ATTEMPTS) {
         try {
           await compensateFailedAppointmentSchedulerReservation({
@@ -94,9 +128,7 @@ export const appointmentActivities: AppointmentActivities = {
             workflowId: input.workflowId,
           });
         } catch (compensationError) {
-          const detail = compensationError instanceof Error
-            ? compensationError.message
-            : String(compensationError);
+          const detail = compensationError instanceof Error ? compensationError.message : String(compensationError);
           throw new Error(`APPOINTMENT_SCHEDULER_COMPENSATION_FAILED:${detail}`);
         }
       }
@@ -109,6 +141,8 @@ export const appointmentActivities: AppointmentActivities = {
 export async function closeAppointmentActivities(): Promise<void> {
   await Promise.all([
     closeAppointmentRepository(),
+    closeAppointmentCustomerNameRepository(),
+    closeManagedEntityRepository(),
     closeAppointmentSchedulerRepository(),
     closeAppointmentSchedulerCompensation(),
   ]);
