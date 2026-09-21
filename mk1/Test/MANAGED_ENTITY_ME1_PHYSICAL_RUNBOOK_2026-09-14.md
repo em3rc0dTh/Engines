@@ -31,6 +31,50 @@ git rev-parse HEAD
 
 Use a disposable local test database. Case B deliberately requires that its synthetic unknown Customer does not already exist. The fixture command fails closed when that condition is not true.
 
+## 0. Local workspace hygiene before the physical gate
+
+The physical gate must run from the intended ME1 branch, not from a stale local branch.
+
+If `git switch feature/managed-entity-resolution-policy` is blocked by local edits, **preserve them first** instead of forcing checkout:
+
+~~~bash
+cd "$(git rev-parse --show-toplevel)"
+git status --short
+git stash push -u -m "pre-me1-physical-local-preservation-2026-09-21"
+git fetch origin --prune
+git switch -C feature/managed-entity-resolution-policy origin/feature/managed-entity-resolution-policy
+git status --short
+git rev-parse HEAD
+~~~
+
+Do not run `git pull` on a stale local branch whose upstream was deleted during repository housekeeping. `git fetch --prune` plus an explicit switch to the surviving remote branch is the reproducible recovery path.
+
+If the stash contains real work, keep it preserved until after the physical certification. Do **not** pop it into the ME1 branch before the gate.
+
+### Port collision check
+
+Before starting the ME1 stack, remove the current compose project and inspect the fixed local ports:
+
+~~~bash
+cd mk1/runtime
+docker compose --profile webchat down -v --remove-orphans || true
+
+docker ps --filter publish=8787 --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}'
+docker ps --filter publish=8788 --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}'
+docker ps --filter publish=8790 --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}'
+docker ps --filter publish=8233 --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}'
+~~~
+
+If one of those commands shows an unrelated/stale container, stop only that identified container before continuing:
+
+~~~bash
+docker stop <container-name>
+~~~
+
+Do not use a broad `docker rm -f $(docker ps ...)` cleanup because it can destroy unrelated local projects.
+
+Only proceed when the ME1 ports are free and the current branch is `feature/managed-entity-resolution-policy`.
+
 ## 1. Start the physical WebChat stack
 
 From `mk1/runtime`:
