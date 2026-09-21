@@ -10,7 +10,7 @@ Page.feed valid HMAC                         PASS
 missing signature rejection                  PASS
 invalid signature rejection                  PASS
 deployed X-Hub-Signature-256 enforcement     SEALED
-repository signed canonical bridge           IMPLEMENTED
+repository signed canonical bridge           CERTIFIED
 real provider comment delivery               OPEN
 hosted Worker -> Engines bridge              OPEN
 private continuation                         OPEN
