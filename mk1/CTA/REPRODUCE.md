@@ -63,6 +63,16 @@ Messenger real signed transport                PASS
 Facebook Page.feed signed dashboard transport  PASS
 deployed missing/invalid signature rejection   PASS / SEALED
 Facebook signed canonical bridge               deterministic runtime certified
-Facebook real provider comment                 OPEN
+Facebook real provider comment                 DEFERRED_META_COMPLIANCE
 production readiness                           not claimed
 ~~~
+
+## Facebook Page provider-real prerequisite
+
+Before expecting real comments, verify the Page installation separately from the app webhook configuration:
+
+~~~text
+GET /<page-id>/subscribed_apps
+~~~
+
+using a Page Access Token. Require `feed`, `messages`, and `messaging_postbacks`. If `feed` is absent, add it with the Page `subscribed_apps` POST and verify again. A dashboard `feed` test does not prove this Page-level installation. The current provider-real gate is intentionally deferred until Meta Business Verification / Access Verification / Live publication is completed.
