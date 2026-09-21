@@ -1,10 +1,43 @@
 const MESSENGER_PATH = "/webhooks/meta/messenger";
 const COMMENTS_PATH = "/webhooks/meta/facebook-comments";
+const PRIVACY_PATH = "/privacy";
+const TERMS_PATH = "/terms";
+const DATA_DELETION_PATH = "/data-deletion";
 const GRAPH_API_VERSION = "v26.0";
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === PRIVACY_PATH) {
+      return legalPage(
+        env,
+        "Privacy Policy",
+        `<p>This proof-of-concept may process Page identifiers, post/comment identifiers, sender identifiers, messages, comments, and webhook metadata for integration testing, appointment workflow routing, troubleshooting, and validation.</p>
+         <p>Personal data is not sold. Public comments are treated only as workflow triggers; sensitive appointment information should not be requested in public comments.</p>
+         <p>For deletion instructions see <a href="${DATA_DELETION_PATH}">User Data Deletion</a>.</p>`
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === TERMS_PATH) {
+      return legalPage(
+        env,
+        "Terms of Service",
+        `<p>This service is experimental software intended for development, integration testing, and proof-of-concept validation.</p>
+         <p>It may change, be interrupted, or be discontinued while development is in progress.</p>
+         <p>Users must not submit information they are not authorized to provide or use the service unlawfully.</p>`
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === DATA_DELETION_PATH) {
+      return legalPage(
+        env,
+        "User Data Deletion",
+        `<p>To request deletion of data associated with this proof-of-concept, contact the address below with the subject <strong>Engines Channels PoC — Data Deletion Request</strong>.</p>
+         <p>Include enough information to identify the interaction. Do not send passwords, access tokens, or application secrets.</p>`
+      );
+    }
+
     if (url.pathname !== MESSENGER_PATH && url.pathname !== COMMENTS_PATH) {
       return new Response("Not Found", { status: 404 });
     }
@@ -186,3 +219,50 @@ async function verifyMetaSignature(rawBody, providedSignature, appSecret) {
 // - optionally forward the exact signed raw body to Engines;
 // - DO NOT classify "CITA" or any other public text into business actions here.
 // Engines FacebookCommentAdapter owns trigger semantics and the canonical CTA mapping.
+
+
+function legalPage(env, heading, body) {
+  const appName = env.ENGINES_APP_DISPLAY_NAME || "Engines Channels PoC";
+  const contact = env.ENGINES_LEGAL_CONTACT_EMAIL || "privacy@example.invalid";
+  const escapedHeading = escapeHtml(heading);
+  const escapedAppName = escapeHtml(appName);
+  const escapedContact = escapeHtml(contact);
+
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escapedAppName} — ${escapedHeading}</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:760px;margin:64px auto;padding:0 24px;line-height:1.6;color:#111827}
+    h1{line-height:1.2} a{color:#1741ff}
+  </style>
+</head>
+<body>
+  <h1>${escapedHeading}</h1>
+  <p><strong>${escapedAppName}</strong></p>
+  ${body}
+  <p>Contact: <a href="mailto:${escapedContact}">${escapedContact}</a></p>
+  <p>Last updated: September 21, 2026</p>
+</body>
+</html>`,
+    {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=UTF-8",
+        "x-content-type-options": "nosniff"
+      }
+    }
+  );
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
