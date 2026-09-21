@@ -23,7 +23,7 @@ Agent / MCP intentionally absent
 
 MK0 remains the frozen evidence base. MK1 evolves from that foundation without rewriting `mk0/runtime`.
 
-## Branch narrative
+## CTA quick index\n\nThe canonical, reproducible CTA/channel entry point is [`mk1/CTA/README.md`](mk1/CTA/README.md). It separates deterministic, synthetic, dashboard and real-provider evidence so channel claims remain auditable.\n\n## Branch narrative
 
 Repository branch policy is documented in [`BRANCHES.md`](BRANCHES.md).
 

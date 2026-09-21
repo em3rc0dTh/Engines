@@ -10,7 +10,7 @@ export type VerifiedFacebookCommentInbound = Readonly<{
   text: string;
 }>;
 
-const TRIGGERS = new Set(['cita', 'appointment', 'agendar']);
+const TRIGGERS = new Set(['cita', 'appointment', 'agendar', 'agendar cita']);
 
 export class FacebookCommentAdapter implements ChannelAdapter<VerifiedFacebookCommentInbound> {
   readonly channel = 'FACEBOOK_COMMENT' as const;
