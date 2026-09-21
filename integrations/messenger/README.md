@@ -2,66 +2,31 @@
 
 ## Status
 
-```text
+~~~text
 real inbound Page message        PASS
 real outbound Page reply         PASS
 permanent HTTPS callback         PASS
 messages subscription            PASS
 messaging_postbacks subscription PASS
+valid deployed HMAC              PASS
+missing signature rejection      PASS
+invalid signature rejection      PASS
 real CTA -> Temporal             OPEN
-deployed invalid-HMAC rejection  OPEN
 public production access         OPEN
-```
+~~~
 
-## Meta setup
+The HMAC seal is shared with Page.feed because both use the same Meta Page callback.
 
-Use the Meta app's Graph API `Page` object. The verified callback is:
+Required secret names:
 
-```text
-https://<worker>.<workers-subdomain>.workers.dev/webhooks/meta/messenger
-```
-
-Required runtime secret names:
-
-```text
+~~~text
 META_WEBHOOK_VERIFY_TOKEN
 META_PAGE_ACCESS_TOKEN
 META_APP_SECRET
-```
+~~~
 
 Never commit values.
 
-## Page subscriptions
+Evidence: mk1/Build/evidence/meta-page-hmac-security-seal-2026-09-21.md.
 
-```text
-messages
-messaging_postbacks
-feed
-```
-
-The `feed` subscription is shared with Facebook Comments.
-
-## Reproduce
-
-Follow:
-
-```text
-mk1/Test/meta-channel-m1-setup-2026-09-18.md
-```
-
-Regression expectation after any Meta router change:
-
-1. open Worker real-time logs;
-2. send a role-bound Messenger test message to the connected Page;
-3. observe `MESSENGER_EVENT` and `MESSENGER_MESSAGE`;
-4. observe `META_SEND_RESULT` with HTTP 200;
-5. confirm the Page reply is visible in Messenger.
-
-## Historical source
-
-```text
-stage-20260918
-PR #35
-```
-
-New work starts from `developer`.
+Messenger regression must show META_HMAC_VALID, MESSENGER_EVENT, MESSENGER_MESSAGE and META_SEND_RESULT status=200.

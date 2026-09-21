@@ -4,234 +4,106 @@ Date: 2026-09-21
 
 ## Goal
 
-Prove the provider boundary for a public Facebook Page comment without creating a second business workflow.
-
 ~~~text
-Facebook Page post
-  -> comment "CITA"
-  -> Page webhook field feed
+Facebook Page comment
+  -> Meta Page webhook
+  -> Cloudflare raw-body HMAC verification
+  -> exact signed raw-body forward
+  -> Engines HMAC re-verification
   -> FacebookCommentAdapter
   -> canonical register_appointment CTA
+  -> CTA dispatcher
+  -> Temporal RegisterNewAppointment
+  -> CTA/channel persistence
   -> private continuation required
 ~~~
 
-## Prerequisites
+The public comment is a trigger only. Do not request personal appointment data in the public thread.
 
-- one Meta developer app;
-- one Facebook Page connected to that app;
-- the Messenger Page webhook already verified, or another permanent HTTPS callback;
-- Cloudflare Worker or equivalent always-on HTTPS endpoint;
-- `META_WEBHOOK_VERIFY_TOKEN` stored as a secret;
-- `META_PAGE_ACCESS_TOKEN` stored as a secret if outbound Page/Messenger operations are tested;
-- `META_APP_SECRET` reserved for raw-body HMAC enforcement.
+## Meta setup
 
-Never commit secret values.
-
-## 1. Add the Pages use case
-
-In Meta for Developers:
-
-~~~text
-App
-  -> Use cases
-  -> Manage Pages / Administrar páginas
-~~~
-
-For this PoC, the relevant permissions exposed by Meta include:
-
-~~~text
-pages_read_user_content
-pages_manage_engagement
-pages_manage_metadata
-pages_read_engagement
-pages_show_list
-~~~
-
-Only request permissions actually needed by the final product.
-
-## 2. Configure the correct webhook object
-
-Open:
-
-~~~text
-Manage Pages
-  -> Webhooks
-  -> Product/Object: Page
-~~~
-
-Do **not** configure this lane under `User`.
-
-The existing Messenger callback remains the Page callback:
+Use Graph API object Page, not User. Keep the proven callback:
 
 ~~~text
 https://<worker>.<workers-subdomain>.workers.dev/webhooks/meta/messenger
 ~~~
 
-The path name is legacy. Payload shape decides the internal route.
+Subscribe: messages, messaging_postbacks, feed.
 
-## 3. Subscribe Page.feed
-
-Under `Page`:
+## Deployed HMAC contract
 
 ~~~text
-feed -> Subscribe
+read exact raw body
+  -> require X-Hub-Signature-256
+  -> HMAC-SHA256(raw body, META_APP_SECRET)
+  -> reject missing/invalid signatures
+  -> JSON.parse only after successful verification
 ~~~
 
-Messenger subscriptions remain:
+Expected deployed markers:
 
 ~~~text
-messages
-messaging_postbacks
+valid Meta request -> META_HMAC_VALID
+missing signature  -> META_HMAC_MISSING + HTTP 401
+invalid signature  -> META_HMAC_INVALID + HTTP 403
 ~~~
 
-Final Page fields for this CTA proof:
+Physical evidence: mk1/Build/evidence/meta-page-hmac-security-seal-2026-09-21.md
+
+## Edge authority boundary
+
+The Worker owns authentication, transport observability and optional exact-body forwarding. It must not own the appointment keyword list or convert CITA into START_APPOINTMENT.
+
+Business trigger authority remains in FacebookCommentAdapter.
+
+When Engines is hosted, configure:
 
 ~~~text
-messages
-messaging_postbacks
-feed
+ENGINES_META_PAGE_INGRESS_URL=https://<engines-host>/meta/page/events
 ~~~
 
-## 4. Dashboard transport test
+## Trusted Page routing
 
-Open the `feed` row and choose **Test / Probar -> Send to my server**.
-
-Expected callback:
-
-~~~text
-POST /webhooks/meta/messenger
-HTTP 200
-~~~
-
-Expected payload family:
+Engines requires ENGINES_META_PAGE_ROUTES_JSON. Deterministic example:
 
 ~~~json
-{
-  "entry": [{
-    "changes": [{
-      "field": "feed",
-      "value": {
-        "item": "status",
-        "verb": "add"
-      }
-    }]
-  }]
-}
+{"TEST_PAGE":"golden-business"}
 ~~~
 
-The dashboard sample is a `status` event. It proves `feed` transport, not a real comment.
+An unmapped Page is rejected with META_PAGE_ROUTE_NOT_CONFIGURED.
 
-Expected logs:
+## Local canonical bridge reproduction
+
+From mk1/runtime:
+
+~~~bash
+docker compose down -v --remove-orphans || true
+
+META_APP_SECRET=meta-local-test-secret \
+ENGINES_META_PAGE_ROUTES_JSON='{"TEST_PAGE":"golden-business"}' \
+docker compose up --build -d postgres mongo temporal migrate worker cta channel-core
+
+docker compose run --rm --no-deps -T \
+  -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+  -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+  -e META_APP_SECRET=meta-local-test-secret \
+  cta npm run probe:meta:facebook-comment
+~~~
+
+Expected marker:
 
 ~~~text
-META_PAYLOAD
-FACEBOOK_FEED_EVENT
-FACEBOOK_FEED_NON_COMMENT
+META_FACEBOOK_COMMENT_CANONICAL_BRIDGE_PASS
 ~~~
 
-## 5. Messenger regression
+This proves signed synthetic comment -> HMAC -> adapter -> canonical CTA -> real Temporal start -> CTA/channel persistence -> exact replay dedupe.
 
-After modifying the Worker, send a normal Messenger message from an allowed test account.
+It does not prove real provider comment delivery or a completed Appointment. Private continuation is still required.
 
-Expected:
+## Current truth boundary
 
-~~~text
-MESSENGER_EVENT
-MESSENGER_MESSAGE
-META_SEND_RESULT status=200
-~~~
+Closed: Page.feed subscription, Messenger signed delivery, Page.feed signed dashboard delivery, missing-signature rejection, invalid-signature rejection, deployed X-Hub-Signature-256 enforcement.
 
-A Page reply should still be visible.
+Repository gate certified on exact source SHA 4da5e6e379f2d4b9022f1abaebfc40575caefe23: signed canonical bridge + real Temporal start + persistence + exact replay dedupe PASS.
 
-## 6. Synthetic comment replay (development proof only)
-
-Before deployed HMAC enforcement is enabled, a sanitized replay can verify the edge classification path.
-
-~~~powershell
-$body = @{
-  object = "page"
-  entry = @(
-    @{
-      id = "TEST_PAGE"
-      time = 1790003000
-      changes = @(
-        @{
-          field = "feed"
-          value = @{
-            item = "comment"
-            verb = "add"
-            post_id = "TEST_PAGE_TEST_POST"
-            comment_id = "TEST_COMMENT_001"
-            sender_id = "TEST_USER"
-            message = "CITA"
-            published = 1
-            created_time = 1790003000
-          }
-        }
-      )
-    }
-  )
-} | ConvertTo-Json -Depth 10
-
-Invoke-WebRequest `
-  -Uri "https://<worker>.<workers-subdomain>.workers.dev/webhooks/meta/messenger" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body $body
-~~~
-
-Expected:
-
-~~~text
-HTTP 200
-EVENT_RECEIVED
-FACEBOOK_FEED_EVENT
-FACEBOOK_COMMENT_EVENT
-FACEBOOK_COMMENT_CTA
-type=START_APPOINTMENT
-publicTriggerOnly=true
-privateContinuationRequired=true
-~~~
-
-This is synthetic edge proof, not provider-origin physical proof.
-
-Once HMAC enforcement is deployed, unsigned arbitrary internet replays must fail closed.
-
-## 7. Real provider comment gate
-
-A real provider event must satisfy:
-
-~~~text
-field=feed
-item=comment
-verb=add
-message=CITA
-post_id present
-comment_id present
-sender/from id present
-~~~
-
-While the Meta app is unpublished, the dashboard can limit delivery to test webhooks. Record that limitation rather than claiming a failed real comment is a Worker defect.
-
-## Truth boundary
-
-Closed on 2026-09-21:
-
-~~~text
-Page.feed subscribed                         PASS
-dashboard feed test -> Worker               PASS
-Messenger regression after router change    PASS
-synthetic comment/add/CITA replay            PASS
-edge START_APPOINTMENT classification        PASS
-~~~
-
-Open:
-
-~~~text
-deployed X-Hub-Signature-256 enforcement
-invalid signature rejection at deployed edge
-real Facebook comment provider delivery
-real comment -> canonical adapter -> Temporal
-persistence + exact replay/idempotency
-public production access / applicable review
-~~~
+Provider-open: real Facebook comment delivery, hosted Worker -> Engines bridge, private continuation, applicable public production access/review.

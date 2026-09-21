@@ -81,7 +81,8 @@
     "cta:http:postman": "tsx src/cta/http/postman-proof-server.ts",
     "probe:stores": "tsx src/runtime/probe-stores.ts",
     "test:whatsapp:cloud-api": "tsx --test src/cta/whatsapp/whatsapp.cloud-api.test.ts",
-    "whatsapp:cloud-api": "tsx src/cta/whatsapp/whatsapp.cloud-api-runner.ts"
+    "whatsapp:cloud-api": "tsx src/cta/whatsapp/whatsapp.cloud-api-runner.ts",
+    "probe:meta:facebook-comment": "tsx scripts/certify-meta-facebook-comment-cta.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
