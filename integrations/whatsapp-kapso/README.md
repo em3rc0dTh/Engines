@@ -14,7 +14,7 @@ Status            ✅ KAPSO SANDBOX PHYSICALLY VERIFIED
 
 Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
 
-## Architecture
+## Historical source lineage
 
 ```text
 Historical provider branch      build/mk1-c4p-kapso-official
