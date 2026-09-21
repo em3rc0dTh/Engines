@@ -83,3 +83,40 @@ CTA_ORCHESTRATION_POC_PASS
 ## Truth boundary
 
 This repair proves compatibility between the shared CTA certification driver and the ME1 ManagedEntity lifecycle. It does not replace the separate human WebChat ME1 physical gate.
+
+
+## Second reconciliation regression — compensation fixture schema drift
+
+After the lifecycle repair above, the exact-head CTA workflow advanced further and exposed a second stale assumption in the certification-only compensation fixture.
+
+Observed failure:
+
+~~~text
+null value in column "display_name" of relation "managed_entities" violates not-null constraint
+~~~
+
+The ME1 migration intentionally upgrades `managed_entities.display_name` to `NOT NULL`. The production ManagedEntity repository already satisfies that contract, but the historical failure/compensation probe inserted a fixture row directly with the pre-ME1 column set:
+
+~~~text
+managed_entity_id
+business_slug
+customer_id
+entity_type
+external_ref
+~~~
+
+The fixture was therefore invalid against the reconciled schema.
+
+### Repair
+
+The CTA compensation probe now writes an explicit deterministic `display_name` for its synthetic `COMPENSATION_FIXTURE` row.
+
+This is a certification-driver repair only. No production ManagedEntity invariant was relaxed and no migration was weakened.
+
+Repair commit:
+
+~~~text
+27ebf8ec4c568c40fdb28bbf5a58936dcf17ec2d
+~~~
+
+The exact-head workflows were automatically re-triggered from that commit. Final acceptance still requires the CTA orchestration workflow and ME1 workflow to both return green on the same branch head.
