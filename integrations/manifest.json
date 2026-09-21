@@ -4,17 +4,80 @@
   "coreRepository": "em3rc0dTh/Engines",
   "stableRef": "main",
   "developmentRef": "developer",
-  "policy": "provider-lanes-merge-back-into-canonical-engine",
+  "policy": "one-repository-per-external-integration",
   "reproductionIndex": "mk1/CTA/REPRODUCE.md",
   "integrations": [
-    {"id":"cli","kind":"native-lab-surface","mk":"mk0/mk1","sourceRef":"main","status":"certified-laboratory"},
-    {"id":"http-api","kind":"native-api-surface","mk":"mk0/mk1","sourceRef":"main","status":"certified-laboratory"},
-    {"id":"webchat","kind":"channel","mk":"mk1","sourceRef":"main","status":"physically-verified-poc"},
-    {"id":"telegram","kind":"external-provider","provider":"Telegram Bot API","mk":"mk1","sourceRef":"main","status":"physically-verified"},
-    {"id":"whatsapp-kapso","kind":"external-provider","provider":"Kapso","mk":"mk1","sourceRef":"main","status":"physically-verified"},
-    {"id":"whatsapp-meta-cloud-api","kind":"external-provider","provider":"Meta Cloud API","mk":"mk1","sourceRef":"main","historicalProviderRef":"feature/cta-whatsapp-meta-cloud-api","status":"deterministic-certified-physical-open"},
-    {"id":"messenger","kind":"external-provider","provider":"Meta Messenger","mk":"mk1","sourceRef":"main","historicalProviderRef":"stage-20260918","status":"real-transport-verified-full-cta-open"},
-    {"id":"facebook-comments","kind":"external-provider","provider":"Meta Page feed","mk":"mk1","sourceRef":"main","historicalProviderRef":"feature/cta-meta-facebook-comments-poc","status":"dashboard-and-synthetic-edge-verified-real-provider-open"},
-    {"id":"tiktok","kind":"external-provider","provider":"TikTok","mk":"mk1","sourceRef":"main","status":"deterministic-only"}
+    {
+      "id": "cli",
+      "kind": "native-lab-surface",
+      "mk": "mk0/mk1",
+      "sourceRef": "main",
+      "status": "certified-laboratory"
+    },
+    {
+      "id": "http-api",
+      "kind": "native-api-surface",
+      "mk": "mk0/mk1",
+      "sourceRef": "main",
+      "status": "certified-laboratory"
+    },
+    {
+      "id": "webchat",
+      "kind": "channel",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "status": "physically-verified-poc"
+    },
+    {
+      "id": "telegram",
+      "kind": "external-provider",
+      "provider": "Telegram Bot API",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "status": "physically-verified"
+    },
+    {
+      "id": "whatsapp-kapso",
+      "kind": "external-provider",
+      "provider": "Kapso",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "status": "physically-verified"
+    },
+    {
+      "id": "whatsapp-meta-cloud-api",
+      "kind": "external-provider",
+      "provider": "Meta Cloud API",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "historicalProviderRef": "feature/cta-whatsapp-meta-cloud-api",
+      "status": "deterministic-certified-physical-open"
+    },
+    {
+      "id": "messenger",
+      "kind": "external-provider",
+      "provider": "Meta Messenger",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "historicalProviderRef": "stage-20260918",
+      "status": "real-transport-verified-full-cta-open"
+    },
+    {
+      "id": "facebook-comments",
+      "kind": "external-provider",
+      "provider": "Meta Page feed",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "historicalProviderRef": "feature/cta-meta-facebook-comments-poc",
+      "status": "dashboard-and-synthetic-edge-verified-real-provider-open"
+    },
+    {
+      "id": "tiktok",
+      "kind": "external-provider",
+      "provider": "TikTok",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "status": "deterministic-only"
+    }
   ]
 }
