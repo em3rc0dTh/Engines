@@ -40,7 +40,45 @@ test('C0 view exposes customer capture checkpoints without inventing Temporal ph
   assert.equal(step(view, 'CUSTOMER_EMAIL').status, 'PENDING');
 });
 
-test('C0 view advances deterministic customer data checkpoints from durable draft state', () => {
+test('C0 view keeps strong identity pending while name-only resolution is still in flight', () => {
+  const view = projectAppointmentWorkflow(baseState({
+    customer: {
+      status: 'DRAFT',
+      customer: {
+        name: 'Eduardo',
+      },
+    },
+    nextAction: 'RESOLVE_CUSTOMER',
+    issues: [],
+  }));
+  assert.equal(step(view, 'CUSTOMER_NAME').status, 'COMPLETE');
+  assert.equal(step(view, 'CUSTOMER_EMAIL').status, 'PENDING');
+  assert.equal(step(view, 'CUSTOMER_PHONE').status, 'PENDING');
+  assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'ACTIVE');
+});
+
+test('C0 view activates email only after durable resolution requires stronger identity', () => {
+  const view = projectAppointmentWorkflow(baseState({
+    customer: {
+      status: 'DRAFT',
+      customer: {
+        name: 'Eduardo',
+      },
+    },
+    nextAction: 'RESOLVE_CUSTOMER',
+    issues: [{
+      code: 'CUSTOMER_INCOMPLETE',
+      path: 'customer',
+      message: 'new customer is missing: customer.contact.phoneOrEmail',
+    }],
+  }));
+  assert.equal(step(view, 'CUSTOMER_NAME').status, 'COMPLETE');
+  assert.equal(step(view, 'CUSTOMER_EMAIL').status, 'ACTIVE');
+  assert.equal(step(view, 'CUSTOMER_PHONE').status, 'PENDING');
+  assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'PENDING');
+});
+
+test('C0 view marks provided email complete without prematurely activating phone', () => {
   const view = projectAppointmentWorkflow(baseState({
     customer: {
       status: 'DRAFT',
@@ -50,11 +88,12 @@ test('C0 view advances deterministic customer data checkpoints from durable draf
       },
     },
     nextAction: 'RESOLVE_CUSTOMER',
+    issues: [],
   }));
   assert.equal(step(view, 'CUSTOMER_NAME').status, 'COMPLETE');
   assert.equal(step(view, 'CUSTOMER_EMAIL').status, 'COMPLETE');
-  assert.equal(step(view, 'CUSTOMER_PHONE').status, 'ACTIVE');
-  assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'PENDING');
+  assert.equal(step(view, 'CUSTOMER_PHONE').status, 'PENDING');
+  assert.equal(step(view, 'CUSTOMER_RESOLUTION').status, 'ACTIVE');
 });
 
 test('ME1 view stops at ManagedEntity before service selection', () => {
