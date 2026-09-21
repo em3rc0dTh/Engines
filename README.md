@@ -106,6 +106,36 @@ Runtime                                          ⚪ NOT CERTIFIED
 AGENT / MCP / LLM ROUTING                        ❌ INTENTIONALLY LAST
 ```
 
+## CTA / Provider recognition index
+
+Canonical CTA/channel documentation and reproducible setup now starts at [`mk1/CTA/README.md`](mk1/CTA/README.md).
+
+```text
+Register Appointment canonical CTA              ✅ CERTIFIED POC
+WebChat browser path                            ✅ PHYSICALLY VERIFIED
+Telegram official Bot API                       ✅ PHYSICALLY VERIFIED
+WhatsApp / Kapso                                ✅ PHYSICALLY VERIFIED
+Messenger Page transport                        ✅ REAL INBOUND + OUTBOUND
+Messenger real CTA -> Temporal -> persistence    ⚪ OPEN
+Facebook Page.feed dashboard transport           ✅ VERIFIED
+Facebook comment synthetic edge replay           ✅ VERIFIED
+Facebook real provider comment delivery          ⚪ OPEN
+TikTok provider transport                        ⚪ DETERMINISTIC ONLY
+```
+
+Evidence classes remain separate: deterministic tests, sanitized synthetic replay, provider-dashboard transport and real external-provider delivery are never treated as equivalent.
+
+The Meta Page callback topology is:
+
+```text
+Page callback
+  /webhooks/meta/messenger
+        ├── entry[].messaging[]            -> Messenger
+        └── entry[].changes[field=feed]    -> Facebook Comments
+```
+
+The Graph API `User` object is not part of the Messenger/Facebook Comments CTA path.
+
 The physically verified Kapso slice is merged into the consolidated customer-channel integration anchor. The direct Meta Cloud API implementation remains a separate bounded provider branch because its physical delivery gate has not been closed.
 
 ## Repository map

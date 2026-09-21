@@ -1,28 +1,33 @@
 # Engines — Branch / Integration Ledger
 
-Snapshot: 2026-09-09
+Snapshot: 2026-09-21
 
 This document records the current branch topology and the evidence/lineage rules after repository housekeeping. Deleting a branch ref does not delete commits, merged PRs, CI runs, artifacts, or evidence receipts.
 
-## Current remote topology
+## CTA-relevant remote topology
 
 ```text
 main
 └── developer
-    ├── feature/cta-orchestration-register-appointment-poc   # PR #24
-    │   └── feature/managed-entity-resolution-policy         # PR #26
-    └── build/mk1-c4p-whatsapp-cloud-api-official            # PR #21
+    ├── feature/managed-entity-resolution-policy
+    └── build/mk1-c4p-whatsapp-cloud-api-official
+
+historical CTA evidence refs
+├── feature/cta-orchestration-register-appointment-poc
+├── stage-20260918
+└── feature/cta-meta-facebook-comments-poc
 ```
 
-Exactly five remote branches are intentionally retained:
+The Register Appointment CTA line, Messenger M1 lane and Facebook Comments Page.feed lane are integrated into `developer`. Their source refs may remain temporarily for evidence/inspection, but new CTA work must start from the integrated line rather than extending those historical refs.
 
-| Branch | Role | Current policy |
+| Branch | CTA-related role | Current policy |
 |---|---|---|
 | `main` | stable repository truth / canonical docs | KEEP |
-| `developer` | integration and staging line | KEEP; never use as scratch branch |
-| `feature/cta-orchestration-register-appointment-poc` | certified Register Appointment PoC | KEEP until PR #24 integration decision |
-| `feature/managed-entity-resolution-policy` | active ManagedEntity policy/resolution slice | KEEP; stacked on PR #24 |
-| `build/mk1-c4p-whatsapp-cloud-api-official` | direct Meta Cloud API alternate provider path | KEEP while physical provider gate remains open |
+| `developer` | integration and staging line; integrated CTA authority | KEEP |
+| `feature/cta-orchestration-register-appointment-poc` | historical canonical CTA source line | NO NEW WORK; cleanup candidate after main promotion |
+| `stage-20260918` | historical Messenger M1 source | NO NEW WORK; cleanup candidate |
+| `feature/cta-meta-facebook-comments-poc` | historical Facebook Comments source | NO NEW WORK; cleanup candidate |
+| `build/mk1-c4p-whatsapp-cloud-api-official` | direct Meta WhatsApp alternate provider | MODERNIZE/INTEGRATE; physical gate remains open |
 
 ## Developer synchronization
 
@@ -34,25 +39,25 @@ Exactly five remote branches are intentionally retained:
 
 After that merge, `developer` contains all current `main` history and remains ahead with the accumulated MK1 runtime/integration history. This synchronization does not merge PR #21, #24, or #26.
 
-## Current open PR topology
+## CTA integration state
 
 ```text
-PR #24  feature/cta-orchestration-register-appointment-poc
-        → developer
-        Register Appointment PoC
-        physically/deterministically certified candidate
-        merge requires explicit authorization
+PR #24  Register Appointment CTA
+        source line integrated into developer on 2026-09-21
 
-PR #26  feature/managed-entity-resolution-policy
-        → feature/cta-orchestration-register-appointment-poc
-        ManagedEntity resolution policy
-        active Draft / stacked work
+PR #35  Messenger M1 physical transport baseline
+        MERGED into canonical CTA line
 
-PR #21  build/mk1-c4p-whatsapp-cloud-api-official
-        → developer
-        direct Meta WhatsApp Cloud API transport
-        deterministic pass; physical route not sealed
+PR #36  Facebook Comments Page.feed reproducible lane
+        MERGED into canonical CTA line
+
+PR #21  direct Meta WhatsApp Cloud API transport
+        legacy provider branch; deterministic pass
+        physical route not sealed
+        requires modernization onto current integrated line
 ```
+
+PR #26 is ManagedEntity work rather than a CTA provider lane; after parent CTA integration its base must follow the current integration topology rather than a historical CTA ref.
 
 ## Integration capability truth
 
@@ -91,7 +96,7 @@ Branch deletion therefore means "no longer an active ref", not "evidence deleted
 
 ```text
 Repository housekeeping / developer-main synchronization       ✅ CLOSED
-Register Appointment PoC / PR #24                               ✅ CERTIFIED / REVIEW
+Register Appointment CTA / PR #24 lineage                       ✅ CERTIFIED / INTEGRATED INTO DEVELOPER
 ManagedEntity resolution / PR #26                               🔧 ACTIVE
 Direct Meta Cloud API physical path / PR #21                    ⚪ OPTIONAL / OPEN
 Data Model v3 scheduling/capacity                               ⏭ after ManagedEntity seam
@@ -109,5 +114,47 @@ Agent / MCP / LLM routing                                       ⏭ later
 6. CI green is not equivalent to external-provider physical certification.
 7. Before deleting a branch, verify PR state, ancestry and evidence reachability.
 8. `mk0/runtime` remains frozen.
-9. PR #24 must not be merged without explicit user authorization.
-10. Stacked PRs must preserve their base lineage until the parent PR is integrated or deliberately retargeted.
+9. CTA provider branches must converge back into `developer`; do not create permanent provider-specific business forks.
+10. When a stacked parent is integrated, retarget remaining child PRs to the current integration line before further work.
+
+
+## CTA consolidation receipt — 2026-09-21
+
+The CTA provider lanes are organized as one business architecture with replaceable channel boundaries:
+
+```text
+WebChat
+Telegram
+WhatsApp / Kapso
+Messenger
+Facebook Comments
+TikTok
+API
+   │
+   ▼
+provider adapter
+   │
+   ▼
+canonical CTA
+   │
+   ▼
+Temporal
+   │
+   ▼
+domain + persistence
+```
+
+Merged provider-lane receipts:
+
+```text
+PR #35 Messenger M1                    MERGED
+PR #36 Facebook Comments Page.feed     MERGED
+```
+
+Canonical reproduction index:
+
+```text
+mk1/CTA/README.md
+```
+
+A CTA branch is considered solid only when it carries executable code, deterministic regression coverage, simple reproduction instructions, sanitized evidence and explicit non-claims.

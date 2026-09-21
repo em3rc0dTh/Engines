@@ -3,6 +3,7 @@ import type { CanonicalChannelEnvelope, ChannelKind } from './types.js';
 export type TrustedChannelRoute = Readonly<{
   businessSlug: string;
   registrationRenderIntent?: import('./types.js').CustomerRegistrationRenderIntent;
+  appointmentRenderIntent?: import('./types.js').AppointmentRenderIntent;
 }>;
 
 export interface ChannelAdapter<RawInbound = unknown> {

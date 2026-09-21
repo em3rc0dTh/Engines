@@ -8,6 +8,9 @@ on:
     paths:
       - 'mk1/runtime/src/cta/telegram/**'
       - 'mk1/runtime/src/cta/channel-core/**'
+      - 'mk1/runtime/src/persistence/postgres/channel.repository.ts'
+      - 'mk1/runtime/src/persistence/postgres/cta-ingress.repository.ts'
+      - 'mk1/runtime/scripts/certify-cta-orchestration-poc.ts'
       - 'mk1/runtime/package.json'
       - 'mk1/runtime/docker-compose.yml'
       - '.github/workflows/mk1-c2-telegram-bot-api-official.yml'
@@ -36,9 +39,9 @@ jobs:
         working-directory: mk1/runtime
         run: npm run test:telegram:bot-api | tee /tmp/c2p-bot-api-tests.log
 
-      - name: Telegram adapter regression
+      - name: Telegram adapter and lifecycle regression
         working-directory: mk1/runtime
-        run: npx tsx --test src/cta/telegram/telegram.adapter.test.ts | tee /tmp/c2p-adapter-tests.log
+        run: npx tsx --test src/cta/telegram/telegram.adapter.test.ts src/cta/telegram/telegram.lifecycle.test.ts | tee /tmp/c2p-adapter-tests.log
 
       - name: Start clean Engines infrastructure
         working-directory: mk1/runtime

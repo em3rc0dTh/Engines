@@ -189,7 +189,13 @@ export class PostgresChannelRepository {
       `INSERT INTO channel_conversation_bindings
         (business_slug, channel, external_conversation_id, workflow_id, operation, binding_status)
        VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
-       ON CONFLICT (business_slug, channel, external_conversation_id) DO NOTHING
+       ON CONFLICT (business_slug, channel, external_conversation_id) DO UPDATE
+       SET workflow_id = EXCLUDED.workflow_id,
+           operation = EXCLUDED.operation,
+           binding_status = 'ACTIVE',
+           created_at = NOW(),
+           updated_at = NOW()
+       WHERE channel_conversation_bindings.binding_status IN ('COMPLETED', 'FAILED')
        RETURNING ${BINDING_COLUMNS}`,
       [input.businessSlug, input.channel, input.externalConversationId, input.workflowId, input.operation],
     );
@@ -209,13 +215,15 @@ export class PostgresChannelRepository {
     channel: ChannelKind;
     externalConversationId: string;
     status: ChannelBindingStatus;
+    workflowId?: string;
   }>): Promise<ChannelConversationBinding | undefined> {
     const result = await this.pool.query<BindingRow>(
       `UPDATE channel_conversation_bindings
        SET binding_status = $4, updated_at = NOW()
        WHERE business_slug = $1 AND channel = $2 AND external_conversation_id = $3
+         AND ($5::text IS NULL OR workflow_id = $5)
        RETURNING ${BINDING_COLUMNS}`,
-      [input.businessSlug, input.channel, input.externalConversationId, input.status],
+      [input.businessSlug, input.channel, input.externalConversationId, input.status, input.workflowId ?? null],
     );
     const row = result.rows[0];
     return row ? bindingFromRow(row) : undefined;

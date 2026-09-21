@@ -1,4 +1,15 @@
-import type { CustomerRegistrationRenderIntent } from '../channel-core/types.js';
+import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import type { AppointmentRenderIntent, CustomerRegistrationRenderIntent } from '../channel-core/types.js';
+
+function interactiveRows(
+  body: string,
+  items: readonly Readonly<{ id: string; title: string }>[],
+): Readonly<Record<string, unknown>> {
+  if (items.length < 1 || items.length > 3) {
+    throw new Error(`WHATSAPP_RENDER_BUTTON_LIMIT:${items.length}`);
+  }
+  return { type: 'interactive', body, buttons: items };
+}
 
 export function renderWhatsAppRegistration(intent: 'CONSENT' | CustomerRegistrationRenderIntent): Readonly<Record<string, unknown>> {
   if (intent === 'CONSENT') return {
@@ -26,4 +37,103 @@ export function renderWhatsAppRegistration(intent: 'CONSENT' | CustomerRegistrat
     WAIT: 'Un momento, estamos procesando tu registro.',
   };
   return { type: 'text', text: text[intent] };
+}
+
+export function whatsappAppointmentRenderIntent(state: AppointmentStateProjection): AppointmentRenderIntent {
+  if (state.workflowStatus === 'FAILED' || state.phase === 'FAILED') return 'APPOINTMENT_FAILED';
+  if (state.workflowStatus === 'COMPLETED' && state.phase === 'CREATED') return 'APPOINTMENT_COMPLETE';
+
+  switch (state.phase) {
+    case 'WAITING_FOR_CUSTOMER': {
+      const customer = state.customer.customer;
+      if (!customer?.name?.trim()) return 'ASK_CUSTOMER_NAME';
+      if (!customer.contact?.email?.trim()) return 'ASK_CUSTOMER_EMAIL';
+      if (!customer.contact?.phones?.[0]?.number?.trim()) return 'ASK_CUSTOMER_PHONE';
+      return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
+    }
+    case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
+    case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
+    case 'WAITING_FOR_DATE': return 'ASK_DATE';
+    case 'WAITING_FOR_SLOT': return 'SELECT_SLOT';
+    case 'READY_TO_FINALIZE': return 'FINALIZE_APPOINTMENT';
+    // The workflow persists the Appointment and audits it before flipping the
+    // durable workflowStatus to COMPLETED. Do not surface a terminal success
+    // message during that short CREATED/RUNNING window, otherwise provider
+    // runners can return before reconciling CTA ingress and channel binding.
+    case 'CREATED': return 'WAIT';
+    case 'STARTED':
+    case 'RESOLVING_CUSTOMER':
+    case 'CUSTOMER_READY':
+    case 'LOADING_SERVICES':
+    case 'LOADING_PRODUCTS':
+    case 'LOADING_SLOTS':
+    case 'RESERVING_APPOINTMENT':
+      return 'WAIT';
+  }
+}
+
+export function renderWhatsAppAppointment(
+  state: AppointmentStateProjection,
+  intent: AppointmentRenderIntent = whatsappAppointmentRenderIntent(state),
+): Readonly<Record<string, unknown>> {
+  switch (intent) {
+    case 'ASK_CUSTOMER_NAME':
+      return { type: 'text', text: 'Vamos a registrar tu cita. ¿Cuál es tu nombre?' };
+    case 'ASK_CUSTOMER_EMAIL':
+      return { type: 'text', text: '¿Cuál es tu correo?' };
+    case 'ASK_CUSTOMER_PHONE':
+      return { type: 'text', text: '¿Cuál es tu teléfono?' };
+    case 'RESOLVE_CUSTOMER': {
+      const candidates = state.customer.status === 'AMBIGUOUS'
+        ? state.customer.candidateCustomerIds ?? []
+        : [];
+      if (candidates.length > 0) {
+        return interactiveRows(
+          'Encontramos más de un cliente que coincide con tus datos. Selecciona el registro que deseas usar.',
+          candidates.slice(0, 3).map((customerId) => ({ id: `appointment_customer:${customerId}`, title: customerId.slice(0, 20) })),
+        );
+      }
+      return { type: 'text', text: 'Tus datos están completos. Un momento...' };
+    }
+    case 'SELECT_SERVICE':
+      return interactiveRows(
+        'Selecciona el servicio para tu cita.',
+        state.services.slice(0, 3).map((service) => ({ id: `appointment_service:${service.serviceId}`, title: service.name.slice(0, 20) })),
+      );
+    case 'SELECT_OFFERING':
+      return interactiveRows(
+        'Selecciona la opción que deseas reservar.',
+        state.products.slice(0, 3).map((product) => ({ id: `appointment_offering:${product.productId}`, title: product.name.slice(0, 20) })),
+      );
+    case 'ASK_DATE':
+      return { type: 'text', text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».' };
+    case 'SELECT_SLOT':
+      return interactiveRows(
+        'Selecciona un horario disponible.',
+        state.availableSlots.slice(0, 3).map((slot) => ({
+          id: `appointment_slot:${slot.start}`,
+          title: `${slot.start}–${slot.end}`.slice(0, 20),
+        })),
+      );
+    case 'FINALIZE_APPOINTMENT':
+      return interactiveRows('Todo está listo. Confirma para crear la cita.', [
+        { id: 'appointment_finalize', title: 'Confirmar cita' },
+      ]);
+    case 'APPOINTMENT_COMPLETE': {
+      const appointmentId = state.result?.appointmentId ?? 'created';
+      const date = state.result?.appointmentDate ?? state.appointmentDate ?? '';
+      const slot = state.result?.slot ?? state.selectedSlot;
+      return {
+        type: 'text',
+        text: `✅ Cita creada.\n\nID: ${appointmentId}${date ? `\nFecha: ${date}` : ''}${slot ? `\nHora: ${slot.start}–${slot.end}` : ''}`,
+      };
+    }
+    case 'APPOINTMENT_FAILED':
+      return {
+        type: 'text',
+        text: `No pudimos completar la cita.${state.failure?.code ? `\n\nCódigo: ${state.failure.code}` : ''}`,
+      };
+    case 'WAIT':
+      return { type: 'text', text: 'Un momento, estamos procesando tu cita.' };
+  }
 }

@@ -62,6 +62,9 @@ export type BookAppointmentInput = Readonly<{
 export type AppointmentRecord = Readonly<{
   appointmentId: string;
   customerId: string;
+  managedEntityId?: string;
+  caseId?: string;
+  resourceReservationId?: string;
   serviceId: string;
   productId: string;
   appointmentDate: string;
@@ -299,11 +302,11 @@ async function slotsWithClient(
 
   const occupiedResult = await client.query<{ start_time: string }>(
     `SELECT start_time::text
-       FROM appointments
+       FROM resource_reservations
       WHERE business_slug = $1
         AND resource_key = $2
-        AND appointment_date = $3::date
-        AND status = 'BOOKED'`,
+        AND reservation_date = $3::date
+        AND status IN ('HELD','BOOKED')`,
     [businessSlug, rule.resource_key, appointmentDate],
   );
   const occupied = new Set(occupiedResult.rows.map((row) => normalizeTime(row.start_time)));
@@ -345,9 +348,12 @@ async function appointmentById(client: PoolClient, appointmentId: string): Promi
     appointment_date: Date | string;
     start_time: string;
     end_time: string;
+    managed_entity_id: string | null;
+    case_id: string | null;
+    resource_reservation_id: string | null;
   }>(
     `SELECT appointment_id, customer_id, service_id, product_id, appointment_date,
-            start_time::text, end_time::text
+            start_time::text, end_time::text, managed_entity_id, case_id, resource_reservation_id
        FROM appointments
       WHERE appointment_id = $1`,
     [appointmentId],
@@ -359,6 +365,9 @@ async function appointmentById(client: PoolClient, appointmentId: string): Promi
   return {
     appointmentId: row.appointment_id,
     customerId: row.customer_id,
+    ...(row.managed_entity_id ? { managedEntityId: row.managed_entity_id } : {}),
+    ...(row.case_id ? { caseId: row.case_id } : {}),
+    ...(row.resource_reservation_id ? { resourceReservationId: row.resource_reservation_id } : {}),
     serviceId: row.service_id,
     productId: row.product_id,
     appointmentDate: normalizeDate(row.appointment_date),
@@ -377,6 +386,7 @@ export async function getAppointmentById(appointmentId: string): Promise<Appoint
 
 export async function bookAppointment(input: BookAppointmentInput): Promise<BookAppointmentResult> {
   const client = await db().connect();
+  let heldReservationId: string | undefined;
   try {
     await client.query('BEGIN');
     const commandResult = await client.query<{
@@ -429,14 +439,81 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
       return { kind: 'SLOT_CONFLICT', availableSlots: available };
     }
 
+    const resource = await client.query<{ resource_key: string }>(
+      `SELECT resource_key FROM service_availability_rules
+       WHERE business_slug=$1 AND product_id=$2 AND weekday=$3 AND active=TRUE LIMIT 1`,
+      [input.businessSlug, input.productId, weekday(input.appointmentDate)],
+    );
+    const resourceKey = resource.rows[0]?.resource_key;
+    if (!resourceKey) throw new Error('APPOINTMENT_RESOURCE_NOT_FOUND');
+
+    const managedEntityCandidate = `men_${randomUUID()}`;
+    const managedEntity = await client.query<{ managed_entity_id: string }>(
+      `INSERT INTO managed_entities
+        (managed_entity_id,business_slug,customer_id,entity_type,external_ref)
+       VALUES ($1,$2,$3,'CUSTOMER_SUBJECT','default')
+       ON CONFLICT (business_slug,customer_id,entity_type,external_ref)
+       DO UPDATE SET status='ACTIVE' RETURNING managed_entity_id`,
+      [managedEntityCandidate, input.businessSlug, input.customerId],
+    );
+    const managedEntityId = managedEntity.rows[0]!.managed_entity_id;
+
+    const existingReservation = await client.query<{ resource_reservation_id: string; status: string }>(
+      `SELECT resource_reservation_id,status FROM resource_reservations
+       WHERE business_slug=$1 AND workflow_id=$2 FOR UPDATE`,
+      [input.businessSlug, input.workflowId],
+    );
+    if (existingReservation.rows[0]?.status === 'BOOKED') {
+      const existing = command.appointment_id ? await appointmentById(client, command.appointment_id) : undefined;
+      if (!existing) throw new Error('BOOKED_RESERVATION_WITHOUT_APPOINTMENT');
+      await client.query('COMMIT');
+      return { kind: 'BOOKED', appointment: existing, replay: true };
+    }
+    heldReservationId = existingReservation.rows[0]?.resource_reservation_id ?? `rr_${randomUUID()}`;
+    if (existingReservation.rows[0]?.status === 'RELEASED') {
+      await client.query(
+        `UPDATE resource_reservations SET status='HELD',release_reason=NULL,updated_at=NOW()
+         WHERE resource_reservation_id=$1`, [heldReservationId],
+      );
+    } else if (!existingReservation.rows[0]) {
+      try {
+        await client.query(
+          `INSERT INTO resource_reservations (
+            resource_reservation_id,business_slug,customer_id,managed_entity_id,catalog_offering_id,
+            resource_key,reservation_date,start_time,end_time,workflow_id,status
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::time,$9::time,$10,'HELD')`,
+          [heldReservationId,input.businessSlug,input.customerId,managedEntityId,input.productId,resourceKey,
+            input.appointmentDate,selected.start,selected.end,input.workflowId],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code !== '23505') throw error;
+        heldReservationId = undefined;
+        await client.query('ROLLBACK');
+        return {
+          kind: 'SLOT_CONFLICT',
+          availableSlots: await listAppointmentSlots(input.businessSlug, input.productId, input.appointmentDate),
+        };
+      }
+    }
+    await client.query('COMMIT');
+
+    await client.query('BEGIN');
+    const caseId = `case_${randomUUID()}`;
+    await client.query(
+      `INSERT INTO operational_cases (case_id,business_slug,customer_id,managed_entity_id,workflow_id)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [caseId,input.businessSlug,input.customerId,managedEntityId,input.workflowId],
+    );
+
     const appointmentId = `apt_${randomUUID()}`;
     try {
       await client.query(
         `INSERT INTO appointments (
            appointment_id, business_slug, workflow_id, customer_id, service_id, product_id,
-           appointment_date, start_time, end_time, timezone, resource_key, status
+           appointment_date, start_time, end_time, timezone, resource_key, status,
+           managed_entity_id, case_id, resource_reservation_id
          )
-         SELECT $1, $2, $3, $4, $5, $6, $7::date, $8::time, $9::time, $10, r.resource_key, 'BOOKED'
+         SELECT $1, $2, $3, $4, $5, $6, $7::date, $8::time, $9::time, $10, r.resource_key, 'BOOKED', $12, $13, $14
            FROM service_availability_rules r
           WHERE r.business_slug = $2
             AND r.product_id = $6
@@ -455,12 +532,22 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
           selected.end,
           input.timezone ?? 'America/Lima',
           weekday(input.appointmentDate),
+          managedEntityId,
+          caseId,
+          heldReservationId,
         ],
       );
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === '23505') {
         await client.query('ROLLBACK');
+        if (heldReservationId) {
+          await db().query(
+            `UPDATE resource_reservations SET status='RELEASED',release_reason='APPOINTMENT_SLOT_CONFLICT',updated_at=NOW()
+             WHERE resource_reservation_id=$1 AND status='HELD'`,
+            [heldReservationId],
+          );
+        }
         return {
           kind: 'SLOT_CONFLICT',
           availableSlots: await listAppointmentSlots(input.businessSlug, input.productId, input.appointmentDate),
@@ -468,6 +555,19 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
       }
       throw error;
     }
+
+    await client.query(
+      `UPDATE resource_reservations SET status='BOOKED',case_id=$2,appointment_id=$3,updated_at=NOW()
+       WHERE resource_reservation_id=$1 AND status='HELD'`,
+      [heldReservationId,caseId,appointmentId],
+    );
+    await client.query(
+      `INSERT INTO operational_timeline_events (
+        timeline_event_id,business_slug,case_id,appointment_id,resource_reservation_id,event_type,workflow_id,payload_json
+       ) VALUES ($1,$2,$3,$4,$5,'APPOINTMENT_REGISTERED',$6,$7::jsonb)`,
+      [`tle_${randomUUID()}`,input.businessSlug,caseId,appointmentId,heldReservationId,input.workflowId,
+        JSON.stringify({ customerId: input.customerId, managedEntityId, catalogOfferingId: input.productId })],
+    );
 
     await client.query(
       `UPDATE appointment_commands
@@ -483,6 +583,9 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
       appointment: {
         appointmentId,
         customerId: input.customerId,
+        managedEntityId,
+        caseId,
+        resourceReservationId: heldReservationId,
         serviceId: input.serviceId,
         productId: input.productId,
         appointmentDate: input.appointmentDate,
@@ -491,6 +594,13 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* already closed/rolled back */ }
+    if (heldReservationId) {
+      await db().query(
+        `UPDATE resource_reservations SET status='RELEASED',release_reason='APPOINTMENT_CREATION_FAILED',updated_at=NOW()
+         WHERE resource_reservation_id=$1 AND status='HELD'`,
+        [heldReservationId],
+      );
+    }
     throw error;
   } finally {
     client.release();

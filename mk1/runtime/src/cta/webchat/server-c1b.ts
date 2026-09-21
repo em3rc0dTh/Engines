@@ -22,6 +22,7 @@ const STATIC_ROUTES = new Map<string, Readonly<{ file: string; contentType: stri
   ['/webchat/workflow.html', { file: 'workflow.html', contentType: 'text/html; charset=utf-8' }],
   ['/webchat/styles.css', { file: 'styles.css', contentType: 'text/css; charset=utf-8' }],
   ['/webchat/app.js', { file: 'app-c1b.js', contentType: 'text/javascript; charset=utf-8' }],
+  ['/webchat/session-recovery.js', { file: 'session-recovery.js', contentType: 'text/javascript; charset=utf-8' }],
   ['/webchat/workflow.js', { file: 'workflow.js', contentType: 'text/javascript; charset=utf-8' }],
 ]);
 
