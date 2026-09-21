@@ -11,7 +11,7 @@ missing signature rejection                  PASS
 invalid signature rejection                  PASS
 deployed X-Hub-Signature-256 enforcement     SEALED
 repository signed canonical bridge           CERTIFIED
-real provider comment delivery               OPEN
+real provider comment delivery               DEFERRED_META_COMPLIANCE
 hosted Worker -> Engines bridge              OPEN
 private continuation                         OPEN
 ~~~
@@ -43,5 +43,10 @@ Expected runtime marker: META_FACEBOOK_COMMENT_CANONICAL_BRIDGE_PASS.
 Evidence:
 - mk1/Build/evidence/meta-page-hmac-security-seal-2026-09-21.md
 - mk1/Build/evidence/meta-facebook-comments-feed-evidence-2026-09-21.md
+- mk1/Build/evidence/meta-facebook-comments-provider-gate-deferred-2026-09-21.md
 
 Dashboard item=status proves authenticated feed transport only. A signed synthetic runtime probe is not a real provider comment.
+
+## Provider-real deferral
+
+The Page installation was inspected with a Page Access Token. `subscribed_apps` initially contained only `messages` and `messaging_postbacks`; `feed` was then added explicitly and verified. A fresh real comment created after that change still produced no provider webhook while the Meta app remained unpublished. The remaining gate is therefore deferred to the future Business Verification / Access Verification / Live publication campaign, not treated as an Engines code defect.
