@@ -1,61 +1,83 @@
 {
-  "schemaVersion": 1,
-  "snapshotDate": "2026-09-07",
+  "schemaVersion": 2,
+  "snapshotDate": "2026-09-21",
   "coreRepository": "em3rc0dTh/Engines",
+  "stableRef": "main",
+  "developmentRef": "developer",
   "policy": "one-repository-per-external-integration",
+  "reproductionIndex": "mk1/CTA/REPRODUCE.md",
   "integrations": [
     {
       "id": "cli",
-      "targetRepository": "Engines-Integration-CLI",
       "kind": "native-lab-surface",
-      "mk": "mk0",
+      "mk": "mk0/mk1",
       "sourceRef": "main",
       "status": "certified-laboratory"
     },
     {
       "id": "http-api",
-      "targetRepository": "Engines-Integration-HTTP-API",
       "kind": "native-api-surface",
-      "mk": "mk0",
+      "mk": "mk0/mk1",
       "sourceRef": "main",
       "status": "certified-laboratory"
     },
     {
       "id": "webchat",
-      "targetRepository": "Engines-Integration-WebChat",
       "kind": "channel",
       "mk": "mk1",
-      "sourceRef": "build/mk1-customer-channels-integrated",
-      "status": "certified-human-verified"
+      "sourceRef": "main",
+      "status": "physically-verified-poc"
     },
     {
       "id": "telegram",
-      "targetRepository": "Engines-Integration-Telegram",
       "kind": "external-provider",
       "provider": "Telegram Bot API",
       "mk": "mk1",
-      "sourceRef": "build/mk1-customer-channels-integrated",
-      "historicalProviderRef": "build/mk1-c2-telegram-bot-api-official",
-      "status": "physically-verified-sealed"
+      "sourceRef": "main",
+      "status": "physically-verified"
     },
     {
       "id": "whatsapp-kapso",
-      "targetRepository": "Engines-Integration-WhatsApp-Kapso",
       "kind": "external-provider",
       "provider": "Kapso",
       "mk": "mk1",
-      "sourceRef": "build/mk1-customer-channels-integrated",
-      "historicalProviderRef": "build/mk1-c4p-kapso-official",
-      "status": "sandbox-physically-verified"
+      "sourceRef": "main",
+      "status": "physically-verified"
     },
     {
       "id": "whatsapp-meta-cloud-api",
-      "targetRepository": "Engines-Integration-WhatsApp-Meta",
       "kind": "external-provider",
       "provider": "Meta Cloud API",
       "mk": "mk1",
-      "sourceRef": "build/mk1-c4p-whatsapp-cloud-api-official",
-      "status": "deterministic-pass-physical-pending"
+      "sourceRef": "main",
+      "historicalProviderRef": "feature/cta-whatsapp-meta-cloud-api",
+      "status": "deterministic-certified-physical-open"
+    },
+    {
+      "id": "messenger",
+      "kind": "external-provider",
+      "provider": "Meta Messenger",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "historicalProviderRef": "stage-20260918",
+      "status": "real-transport-verified-full-cta-open"
+    },
+    {
+      "id": "facebook-comments",
+      "kind": "external-provider",
+      "provider": "Meta Page feed",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "historicalProviderRef": "feature/cta-meta-facebook-comments-poc",
+      "status": "dashboard-and-synthetic-edge-verified-real-provider-open"
+    },
+    {
+      "id": "tiktok",
+      "kind": "external-provider",
+      "provider": "TikTok",
+      "mk": "mk1",
+      "sourceRef": "main",
+      "status": "deterministic-only"
     }
   ]
 }

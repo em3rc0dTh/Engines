@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log*
+coverage
+.tmp
+attachment-store
+.git
+.github

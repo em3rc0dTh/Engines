@@ -1,106 +1,81 @@
 # Engines — Branch / Integration Ledger
 
-Snapshot: 2026-09-07
+Snapshot: 2026-09-21
 
-This document is the `main`-branch index for version and integration lineage. It does not delete branches and it does not treat documentation-only movement as runtime certification.
+The branch model is intentionally simple: stable recognition lives on `main`, active integration starts from `developer`, and provider-specific CTA branches are temporary evidence-producing lanes.
 
-## Stable refs
-
-```text
-main                         MK0 certified runtime + cross-version registry
-developer                    integration/staging ref; not a feature branch
-release/mk0-complete         frozen MK0 release authority
-```
-
-## MK1 integrated customer/channel anchor
+## Canonical topology
 
 ```text
-build/mk1-customer-channels-integrated
+main
+└── developer
+    └── new bounded feature/provider branches
+
+historical CTA evidence refs
+├── feature/cta-orchestration-register-appointment-poc
+├── stage-20260918
+├── feature/cta-meta-facebook-comments-poc
+└── feature/cta-whatsapp-meta-cloud-api
 ```
 
-This anchor contains the consolidated Customer/CTA messaging line through:
+Historical refs are not development bases. Their commits, PR discussions, CI runs and evidence remain inspectable.
 
-```text
-Customer Registration Policy V2
-Durable ChannelExecutionCore
-WebChat durable semantics
-Telegram adapter
-WhatsApp adapter/transport port
-C2/C4 local real-Temporal E2E
-B2 Customer soft-duplicate resolution
-Telegram official Bot API physical certification
-Kapso WhatsApp Sandbox physical certification
-```
+## CTA integration receipts
 
-The Kapso PR was merged into this anchor on 2026-09-07 with merge commit:
-
-```text
-b4378d90216829549f739415ffff45aa41bef068
-```
-
-## Meaningful MK1 branches
-
-| Scope | Branch | Status / policy |
+| PR | Lane | State |
 |---|---|---|
-| Services S5 | `build/mk1-s5-services-snapshots` | historical certified milestone |
-| Services S6 | `build/mk1-s6-services-multibusiness` | certified milestone; keep through S8 closure |
-| Services S7 | `build/mk1-s7-appointment-services-integration` | certified milestone |
-| WebChat C1A | `build/mk1-c0-c1-webchat` | certified + human |
-| WebChat C1B | `build/mk1-c1b-durable-channel` | certified + restart/human |
-| Customer channels integrated | `build/mk1-customer-channels-integrated` | current consolidated messaging anchor |
-| Telegram official Bot API | `build/mk1-c2-telegram-bot-api-official` | physically sealed history; extraction candidate |
-| WhatsApp Kapso | `build/mk1-c4p-kapso-official` | physically verified history; merged into integrated anchor; extraction candidate |
-| WhatsApp Meta Cloud API | `build/mk1-c4p-whatsapp-cloud-api-official` | deterministic pass; physical gate pending |
-| Scheduler architecture | `design/mk1-services-scheduler-integration` | design authority only |
-| Messaging architecture | `design/mk1-telegram-whatsapp-official-channels` | design authority only |
+| #24 | canonical Register Appointment CTA | MERGED into developer |
+| #35 | Meta Messenger M1 transport | MERGED into canonical CTA line |
+| #36 | Facebook Comments Page.feed | MERGED into canonical CTA line |
+| #37 | direct Meta WhatsApp Cloud API | MERGED into developer |
 
-## Integration repository policy
+All four lanes are part of the integrated CTA baseline promoted to `main`. Provider physical truth boundaries remain unchanged by merge.
 
-Target topology:
+## Branch policy
 
-```text
-Engines
-├── provider-neutral core/contracts
-├── canonical version docs
-└── integrations/ registry
+| Branch/ref | Role | Policy |
+|---|---|---|
+| `main` | stable repository truth and canonical CTA recognition | KEEP |
+| `developer` | active integration line / start point for new CTA work | KEEP |
+| canonical CTA historical feature refs | exact evidence lineage | NO NEW WORK |
+| provider-specific future feature branches | one bounded transport/security/certification scope | MERGE BACK then historical |
 
-Engines-Integration-WebChat
-Engines-Integration-Telegram
-Engines-Integration-WhatsApp-Kapso
-Engines-Integration-WhatsApp-Meta
-Engines-Integration-<future-provider>
-```
-
-One external provider integration should not become a permanent source-code subtree owned by the core repository. Until repository extraction occurs, bounded provider branches preserve the executable history; `main/integrations/<provider>` preserves the central registry, contracts, runbooks and evidence pointers.
-
-## Current channel truth
+## Integrated capability truth
 
 ```text
-CLI / HTTP-Postman                         ✅ historical MK0 surfaces
-WebChat C1A                                ✅ CERTIFIED + HUMAN VERIFIED
-WebChat C1B                                ✅ CERTIFIED + HUMAN RESTART VERIFIED
-Telegram official Bot API                  ✅ PHYSICALLY VERIFIED / SEALED
-WhatsApp local adapter                     ✅ AUTOMATED + HUMAN VERIFIED
-WhatsApp Kapso Sandbox                     ✅ PHYSICALLY VERIFIED
-WhatsApp Meta Cloud API                    ✅ DETERMINISTIC PASS / PHYSICAL PENDING
+CLI / HTTP-Postman                         certified laboratory
+WebChat                                    physically verified within PoC
+Telegram official Bot API                  physically verified
+WhatsApp / Kapso                           physically verified
+Messenger                                  real inbound + outbound transport verified
+Facebook Page.feed                         dashboard transport verified
+Facebook comment CTA                       synthetic edge replay verified
+WhatsApp direct Meta Cloud API             deterministic certified / physical open
+TikTok                                     deterministic only
 ```
 
-## Current build sequence
+## Branch solidity rule
 
-```text
-MK0                                         ✅ CLOSED
-MK1 messaging/customer integrations          ✅ major provider gates closed except direct Meta physical path
-MK1 Services S8                              ⏭ NEXT CORE GATE
-Scheduler runtime                            ⏭ after Services G1 closure
-Agent / MCP / LLM routing                    ⏭ last
-```
+A CTA/provider branch is considered solid only when it contains or references:
 
-## Branch hygiene rules
+1. executable implementation;
+2. deterministic regression coverage;
+3. simple clean-clone reproduction instructions;
+4. secret-name contract with no secret values committed;
+5. sanitized fixtures/evidence;
+6. explicit evidence class (deterministic, synthetic, dashboard, real provider, full E2E);
+7. explicit non-claims;
+8. a merge path back to `developer` and then `main`.
 
-1. Every bounded architecture/build/certification gate gets its own branch.
-2. `main` and `developer` are not scratch or feature branches.
-3. A runtime claim stays attached to the exact executed source SHA even when later documentation commits exist.
-4. Provider branches may be retained as extraction/certification history after merge.
-5. Never delete a branch automatically; verify ancestry, PR state and evidence first.
-6. `mk0/runtime` stays frozen.
-7. A provider integration may not move Customer, Services, Scheduler, Temporal or persistence business policy into provider code.
+The canonical cross-channel checklist is `mk1/CTA/REPRODUCE.md`.
+
+## Hygiene rules
+
+1. Do not create permanent business forks per provider.
+2. Provider adapters may own transport concerns, never domain policy.
+3. Exact runtime claims stay attached to the executed SHA/receipt.
+4. CI green does not imply provider physical certification.
+5. Synthetic replay does not imply real provider delivery.
+6. Preserve evidence before deleting historical refs.
+7. `mk0/runtime` remains frozen.
+8. New CTA work starts from `developer`, not from merged historical branches.

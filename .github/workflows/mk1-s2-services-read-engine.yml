@@ -1,0 +1,108 @@
+name: mk1 S2 Services read engine certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/mk1-s2-services-read-engine
+    paths:
+      - 'mk1/runtime/**'
+      - '.github/workflows/mk1-s2-services-read-engine.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-s2-services-read-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-services-s2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check runtime
+        run: npm run check
+
+      - name: Services S1 contract regression
+        run: npm run test:services:s1
+
+      - name: Services S2 compatibility tests
+        run: npm run test:services:s2
+
+      - name: Frozen regression subset
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:b7
+          npm run test:appointment
+
+      - name: Start clean Compose laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for CTA health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              curl -fsS http://127.0.0.1:8787/health
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta temporal migrate
+          exit 1
+
+      - name: Certify deterministic Services read engine
+        run: docker compose exec -T worker npm run probe:services:s2
+
+      - name: Certify inherited Appointment behavior
+        run: npx tsx scripts/certify-register-new-appointment.ts
+        env:
+          ENGINES_CTA_URL: http://127.0.0.1:8787
+
+      - name: Capture S2 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/mk1-s2
+          git rev-parse HEAD > /tmp/mk1-s2/git-sha.txt
+          cd mk1/runtime
+          docker compose ps -a > /tmp/mk1-s2/compose-ps.txt || true
+          docker compose logs migrate > /tmp/mk1-s2/migrate.log 2>&1 || true
+          docker compose logs worker > /tmp/mk1-s2/worker.log 2>&1 || true
+          docker compose logs cta > /tmp/mk1-s2/cta.log 2>&1 || true
+          docker compose logs postgres > /tmp/mk1-s2/postgres.log 2>&1 || true
+
+      - name: Upload S2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-s2-services-read-engine-${{ github.run_id }}
+          path: /tmp/mk1-s2
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true

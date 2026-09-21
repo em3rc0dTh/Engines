@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "cta-orchestration-register-appointment.v1",
+  "businessSlug": "golden-business",
+  "canonicalAction": "register_appointment",
+  "catalogOfferingId": "prd_car_wash_basic",
+  "supportedDeterministicChannels": [
+    "web",
+    "whatsapp",
+    "telegram",
+    "api",
+    "messenger",
+    "facebook_comment",
+    "tiktok"
+  ],
+  "successInvariants": {
+    "logicalIngressCount": 1,
+    "workflowCount": 1,
+    "caseCount": 1,
+    "appointmentCount": 1,
+    "resourceReservationCount": 1,
+    "resourceReservationStatus": "BOOKED",
+    "ingressStatus": "COMPLETED"
+  },
+  "compensationInvariant": {
+    "from": "HELD",
+    "to": "RELEASED",
+    "reason": "APPOINTMENT_CREATION_FAILED"
+  },
+  "physicalCertification": {
+    "web": "pending",
+    "whatsapp": "pending_for_appointment",
+    "telegram": "pending_for_appointment",
+    "api": "ci_pending",
+    "messenger": "pending",
+    "facebook_comment": "pending",
+    "tiktok": "provider_capability_not_established"
+  }
+}

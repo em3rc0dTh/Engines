@@ -1,0 +1,74 @@
+{
+  "artifact": "c1b_durable_channel_v0",
+  "version": "0.1.0",
+  "status": "frozen-expectations-before-certification",
+  "phaseBoundary": {
+    "agent": false,
+    "mcp": false,
+    "llmRouting": false,
+    "telegram": false,
+    "whatsapp": false
+  },
+  "cases": [
+    {
+      "id": "C1B-001",
+      "title": "Durable conversation binding",
+      "expect": "one PostgreSQL binding maps WEBCHAT externalConversationId to one Appointment workflowId"
+    },
+    {
+      "id": "C1B-002",
+      "title": "Adapter restart recovery",
+      "expect": "after WebChat process restart the externalConversationId resolves to the same workflowId from PostgreSQL"
+    },
+    {
+      "id": "C1B-003",
+      "title": "Exact start replay",
+      "expect": "same inbound identity and same canonical START material returns the same workflowId with one logical Workflow start"
+    },
+    {
+      "id": "C1B-004",
+      "title": "Exact update replay",
+      "expect": "same inbound identity and same canonical update material returns the recorded result without a second logical Workflow update"
+    },
+    {
+      "id": "C1B-005",
+      "title": "Material conflict",
+      "expect": "same business/channel/externalMessageId with different canonical material returns CHANNEL_EVENT_IDENTITY_CONFLICT"
+    },
+    {
+      "id": "C1B-006",
+      "title": "Conflict is mutation free",
+      "expect": "Workflow projection before and after conflicting material is unchanged"
+    },
+    {
+      "id": "C1B-007",
+      "title": "Browser duplicate-submit safety",
+      "expect": "duplicate transport submission does not produce duplicate Customer/Appointment effects"
+    },
+    {
+      "id": "C1B-008",
+      "title": "Hardened complete Appointment",
+      "expect": "the complete explicit channel action sequence reaches COMPLETED/CREATED with issues=[]"
+    },
+    {
+      "id": "C1B-009",
+      "title": "C1A visibility retained",
+      "expect": "Workflow inspector and channel response expose the same real Temporal phase, nextAction and 12-step projection"
+    },
+    {
+      "id": "C1B-010",
+      "title": "Provider-independent execution core",
+      "expect": "adapter registry owns provider composition; no Agent/MCP/provider business branch is introduced"
+    },
+    {
+      "id": "C1B-011",
+      "title": "Business-scoped event identity",
+      "expect": "the same externalMessageId can be used independently in two different business scopes without collision"
+    },
+    {
+      "id": "C1B-012",
+      "title": "Durable terminal event response",
+      "expect": "APPLIED or REJECTED event terminal response is stored and returned on exact replay"
+    }
+  ]
+}

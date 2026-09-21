@@ -1,0 +1,167 @@
+name: mk1 C1B durable channel semantics
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/mk1-c1b-durable-channel
+    paths:
+      - 'mk1/runtime/**'
+      - 'mk1/Brainstorming/04-c1b-durable-channel-semantics.md'
+      - 'mk1/Design/04-c1b-durable-channel-contract.md'
+      - 'mk1/Plan/03-c1b-durable-channel-gate.md'
+      - 'mk1/golden-dataset/c1b-durable-channel-v0.json'
+      - '.github/workflows/mk1-c1b-durable-channel.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-c1b-durable-channel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-c1b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Strict typecheck
+        run: npm run check
+
+      - name: Channel contracts and adapter tests
+        run: |
+          npm run test:channel:c0
+          npm run test:channel:c1b
+
+      - name: Frozen Customer CTA Appointment regressions
+        run: |
+          npm run test:b1
+          npm run test:b3
+          npm run test:appointment
+
+      - name: Start clean Temporal and durable channel laboratory
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          docker compose ps
+
+      - name: Wait for Worker CTA and channel core
+        run: |
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null \
+              && curl -fsS http://127.0.0.1:8788/health >/dev/null \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta channel-core temporal migrate
+          exit 1
+
+      - name: Start hardened WebChat adapter
+        run: |
+          nohup npm run webchat:server > /tmp/webchat-c1b-before.log 2>&1 &
+          echo $! > /tmp/webchat-c1b.pid
+
+      - name: Wait for hardened WebChat
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8790/health >/dev/null \
+              && curl -fsS http://127.0.0.1:8790/webchat/ | grep -q 'CTA WEBCHAT POC'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/webchat-c1b-before.log || true
+          exit 1
+
+      - name: Prove replay conflict and create durable binding
+        run: C1B_PHASE=prepare npm run probe:webchat:c1b | tee /tmp/c1b-prepare.txt
+        env:
+          ENGINES_WEBCHAT_URL: http://127.0.0.1:8790
+          C1B_STATE_FILE: /tmp/engines-c1b-state.json
+
+      - name: Restart WebChat adapter process
+        run: |
+          BEFORE=$(cat /tmp/webchat-c1b.pid)
+          kill "$BEFORE"
+          for attempt in $(seq 1 20); do
+            if ! kill -0 "$BEFORE" 2>/dev/null; then break; fi
+            sleep 0.2
+          done
+          nohup npm run webchat:server > /tmp/webchat-c1b-after.log 2>&1 &
+          AFTER=$!
+          echo "$AFTER" > /tmp/webchat-c1b.pid
+          echo "before=$BEFORE after=$AFTER" | tee /tmp/webchat-restart.txt
+          test "$BEFORE" != "$AFTER"
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8790/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/webchat-c1b-after.log || true
+          exit 1
+
+      - name: Recover binding and complete same Workflow
+        run: C1B_PHASE=complete npm run probe:webchat:c1b | tee /tmp/c1b-complete.txt
+        env:
+          ENGINES_WEBCHAT_URL: http://127.0.0.1:8790
+          C1B_STATE_FILE: /tmp/engines-c1b-state.json
+
+      - name: Regress C1A visibility through hardened server
+        run: npm run probe:webchat:c1 | tee /tmp/c1a-regression.txt
+        env:
+          ENGINES_WEBCHAT_URL: http://127.0.0.1:8790
+
+      - name: Capture C1B evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/mk1-c1b
+          git rev-parse HEAD > /tmp/mk1-c1b/git-sha.txt
+          cp /tmp/c1b-prepare.txt /tmp/mk1-c1b/ 2>/dev/null || true
+          cp /tmp/c1b-complete.txt /tmp/mk1-c1b/ 2>/dev/null || true
+          cp /tmp/c1a-regression.txt /tmp/mk1-c1b/ 2>/dev/null || true
+          cp /tmp/webchat-restart.txt /tmp/mk1-c1b/ 2>/dev/null || true
+          cp /tmp/webchat-c1b-before.log /tmp/mk1-c1b/ 2>/dev/null || true
+          cp /tmp/webchat-c1b-after.log /tmp/mk1-c1b/ 2>/dev/null || true
+          curl -fsS http://127.0.0.1:8788/health > /tmp/mk1-c1b/channel-health.json 2>/dev/null || true
+          curl -fsS http://127.0.0.1:8790/health > /tmp/mk1-c1b/webchat-health.json 2>/dev/null || true
+          cd mk1/runtime
+          docker compose ps -a > /tmp/mk1-c1b/compose-ps.txt || true
+          docker compose logs channel-core > /tmp/mk1-c1b/channel-core.log 2>&1 || true
+          docker compose logs worker > /tmp/mk1-c1b/worker.log 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c "SELECT business_slug,channel,external_conversation_id,workflow_id,operation,binding_status FROM channel_conversation_bindings ORDER BY created_at;" > /tmp/mk1-c1b/bindings.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c "SELECT business_slug,channel,external_message_id,external_conversation_id,status,error_code FROM channel_inbound_events ORDER BY created_at;" > /tmp/mk1-c1b/inbound-events.txt 2>&1 || true
+
+      - name: Upload C1B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-c1b-durable-channel-${{ github.run_id }}
+          path: /tmp/mk1-c1b
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/webchat-c1b.pid ]; then kill $(cat /tmp/webchat-c1b.pid) 2>/dev/null || true; fi
+          docker compose down -v --remove-orphans || true

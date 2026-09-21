@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "mk0.attachment-fixtures.v1",
+  "syntheticDataOnly": true,
+  "fixtures": [
+    {
+      "fixtureId": "synthetic-id-front-v1",
+      "path": "synthetic-id-front-v1.png",
+      "mediaType": "image/png",
+      "byteLength": 75,
+      "sha256": "248c43a8627c6db8f95626beaca3b056bcfafcd036a4344dd3ed14e1e704da84",
+      "goldenCases": ["GD-003", "GD-004", "GD-009", "GD-010"]
+    },
+    {
+      "fixtureId": "synthetic-supporting-document-v1",
+      "path": "synthetic-supporting-document-v1.txt",
+      "mediaType": "text/plain",
+      "byteLength": 67,
+      "sha256": "c4de8a6ee133dfc935ccb27071170ea692d1261f30cb18cd35269a1d09cf1609",
+      "goldenCases": ["GD-004"]
+    }
+  ]
+}

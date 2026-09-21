@@ -17,17 +17,17 @@ Engines-Integration-WhatsApp-Meta        one integration repo
 Engines-Integration-<provider>           one repo for each future external integration
 ```
 
-Until those repositories are split physically, the current certified implementations remain on their bounded historical/build branches. `integrations/` in `main` is the registry that explains status, source branch, evidence, boundaries and how to boot each integration without mixing provider policy into the Engine.
+Until integrations are split physically, their current integrated implementations live in this repository. `main` is the stable recognition point; `developer` is the active integration line. Historical provider branches remain evidence refs only.
 
 ## Version truth
 
 ```text
 MK0  ✅ CLOSED / frozen certified laboratory
-MK1  🔧 ACTIVE / staged on explicit branches
+MK1  🔧 ACTIVE / integrated CTA baseline on main; future bounded work starts from developer
 MK2  ⚪ future
 ```
 
-`main` retains the certified MK0 runtime and the cross-version registry/documentation. Active MK1 runtime work is not faked by moving `main`; it remains on explicit branches until a bounded promotion gate is approved.
+`main` retains the frozen MK0 laboratory and the current integrated MK1 CTA/channel baseline. New bounded work is developed on `developer`/feature branches and returns to `main` only through an explicit integration gate.
 
 Canonical lifecycle:
 
@@ -106,7 +106,37 @@ Runtime                                          ⚪ NOT CERTIFIED
 AGENT / MCP / LLM ROUTING                        ❌ INTENTIONALLY LAST
 ```
 
-The physically verified Kapso slice is merged into the consolidated customer-channel integration anchor. The direct Meta Cloud API implementation remains a separate bounded provider branch because its physical delivery gate has not been closed.
+## CTA / Provider recognition index
+
+Canonical CTA/channel documentation and reproducible setup now starts at [`mk1/CTA/README.md`](mk1/CTA/README.md).
+
+```text
+Register Appointment canonical CTA              ✅ CERTIFIED POC
+WebChat browser path                            ✅ PHYSICALLY VERIFIED
+Telegram official Bot API                       ✅ PHYSICALLY VERIFIED
+WhatsApp / Kapso                                ✅ PHYSICALLY VERIFIED
+Messenger Page transport                        ✅ REAL INBOUND + OUTBOUND
+Messenger real CTA -> Temporal -> persistence    ⚪ OPEN
+Facebook Page.feed dashboard transport           ✅ VERIFIED
+Facebook comment synthetic edge replay           ✅ VERIFIED
+Facebook real provider comment delivery          ⚪ OPEN
+TikTok provider transport                        ⚪ DETERMINISTIC ONLY
+```
+
+Evidence classes remain separate: deterministic tests, sanitized synthetic replay, provider-dashboard transport and real external-provider delivery are never treated as equivalent.
+
+The Meta Page callback topology is:
+
+```text
+Page callback
+  /webhooks/meta/messenger
+        ├── entry[].messaging[]            -> Messenger
+        └── entry[].changes[field=feed]    -> Facebook Comments
+```
+
+The Graph API `User` object is not part of the Messenger/Facebook Comments CTA path.
+
+The physically verified Kapso slice and the modern direct Meta Cloud API implementation are integrated into the canonical line. Direct Meta WhatsApp physical delivery remains explicitly open even though its deterministic implementation is now integrated.
 
 ## Repository map
 
@@ -129,7 +159,10 @@ The physically verified Kapso slice is merged into the consolidated customer-cha
 │   ├── webchat/
 │   ├── telegram/
 │   ├── whatsapp-kapso/
-│   └── whatsapp-meta-cloud-api/
+│   ├── whatsapp-meta-cloud-api/
+│   ├── messenger/
+│   ├── facebook-comments/
+│   └── tiktok/
 └── mk0/
     ├── README.md
     ├── Brainstorming/
@@ -142,7 +175,7 @@ The physically verified Kapso slice is merged into the consolidated customer-cha
     └── runtime/
 ```
 
-Active MK1 branches contain the matching `mk1/` structure with `Brainstorming`, `Design`, `Plan`, `Build`, `Test`, `mining-site/quarries`, `golden-dataset` and `runtime`. The integration registry points to those branches until MK1 is promoted as a complete milestone.
+`main` now contains the integrated `mk1/` CTA/channel structure. Historical branches remain useful only for exact source-bound evidence; new CTA work starts from `developer`.
 
 ## Quick start
 
@@ -157,7 +190,7 @@ docker compose up --build -d
 curl -fsS http://127.0.0.1:8787/health
 ```
 
-For MK1 and provider-specific boot commands, use [`docs/BOOTSTRAP.md`](docs/BOOTSTRAP.md). Secrets are always environment-only and must never be committed.
+For MK1 CTA/channel reproduction, start with [`mk1/CTA/REPRODUCE.md`](mk1/CTA/REPRODUCE.md), then use [`docs/BOOTSTRAP.md`](docs/BOOTSTRAP.md) for runtime bring-up. Secrets are always environment-only and must never be committed.
 
 ## Data model direction
 

@@ -1,0 +1,1 @@
+B2 machine evidence is produced by `.github/workflows/mk0-b2-ci.yml` and uploaded as a GitHub Actions artifact. The durable certification summary is `mk0/Build/evidence/B2-temporal-continuity-certification-2026-08-24.md`.

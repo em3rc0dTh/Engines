@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Engines WebChat PoC</title>
+  <link rel="stylesheet" href="/webchat/styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="chat-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ENGINES · CTA WEBCHAT POC</p>
+          <h1>Register New Appointment</h1>
+        </div>
+        <div class="status-pill" id="connectionStatus">connecting…</div>
+      </header>
+
+      <section class="workflow-strip" aria-label="Workflow status">
+        <div><span>Workflow</span><strong id="workflowId">not started</strong></div>
+        <div><span>Status</span><strong id="workflowStatus">—</strong></div>
+        <div><span>Temporal phase</span><strong id="phase">—</strong></div>
+        <div><span>Next action</span><strong id="nextAction">—</strong></div>
+      </section>
+
+      <section class="messages" id="messages" aria-live="polite"></section>
+
+      <section class="composer">
+        <div class="choices" id="choices"></div>
+        <div class="input-row" id="inputRow">
+          <input id="messageInput" autocomplete="off" placeholder="Start the Workflow first" disabled />
+          <button id="sendButton" disabled>Send</button>
+        </div>
+        <div class="action-row">
+          <label>
+            Business
+            <input id="businessSlug" value="golden-business" />
+          </label>
+          <button class="primary" id="startButton">Start Workflow</button>
+          <a id="inspectorLink" class="secondary disabled" href="/webchat/workflow.html">Open Workflow Inspector</a>
+        </div>
+      </section>
+    </section>
+
+    <aside class="steps-panel">
+      <div class="panel-heading">
+        <p class="eyebrow">LIVE WORKFLOW MAP</p>
+        <h2>Every step</h2>
+      </div>
+      <ol id="steps" class="steps"></ol>
+      <details>
+        <summary>Raw durable state</summary>
+        <pre id="rawState">No Workflow state yet.</pre>
+      </details>
+    </aside>
+  </main>
+  <script type="module" src="/webchat/app.js"></script>
+</body>
+</html>

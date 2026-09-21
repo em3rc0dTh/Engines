@@ -10,12 +10,16 @@ Provider          native web transport
 Current status    ✅ C1A + C1B CERTIFIED / HUMAN VERIFIED
 ```
 
-## Current source lineage
+## Canonical source after 2026-09-21
+
+Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
+
+## Historical source lineage
 
 ```text
 build/mk1-c0-c1-webchat        C1A visible Workflow-driven WebChat
 build/mk1-c1b-durable-channel  C1B durable conversation/event semantics
-build/mk1-customer-channels-integrated  consolidated current customer/channel anchor
+main  consolidated current customer/channel anchor
 ```
 
 ## Architecture
@@ -93,7 +97,7 @@ Core channel replay/conflict behavior is shared with later Telegram/WhatsApp ada
 
 ```bash
 git fetch origin --prune
-git switch build/mk1-customer-channels-integrated
+git switch main
 cd mk1/runtime
 npm ci
 npm run check

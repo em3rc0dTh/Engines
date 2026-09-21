@@ -1,0 +1,244 @@
+services:
+  postgres:
+    image: postgres:17.8-alpine
+    environment:
+      POSTGRES_USER: engines
+      POSTGRES_PASSWORD: engines
+      POSTGRES_DB: engines_mk0
+    volumes:
+      - engines_mk0_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engines -d engines_mk0"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mongo:
+    image: mongo:8.0.29
+    volumes:
+      - engines_mk0_mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  temporal:
+    build:
+      context: .
+    command: ["temporal", "server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 45
+      start_period: 3s
+
+  migrate:
+    build:
+      context: .
+    environment:
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: engines_mk0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    command:
+      - sh
+      - -lc
+      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run migrate:services && npm run migrate:channel && npm run migrate:cta-orchestration && npm run mongo:init:b6
+    restart: "no"
+
+  worker:
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: engines_mk0
+      ATTACHMENT_STORE_ROOT: /data/attachments
+      ENGINES_WORKER_READY_FILE: /tmp/engines-mk0-worker-ready
+    depends_on:
+      temporal:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - engines_mk0_attachments:/data/attachments
+    command: ["npm", "run", "worker:appointment"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /tmp/engines-mk0-worker-ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+
+  cta:
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: engines_mk0
+      ATTACHMENT_STORE_ROOT: /data/attachments
+      CORE_HTTP_HOST: 0.0.0.0
+      CORE_HTTP_PORT: "8787"
+    depends_on:
+      worker:
+        condition: service_healthy
+    volumes:
+      - engines_mk0_attachments:/data/attachments
+    ports:
+      - "8787:8787"
+    command: ["npm", "run", "cta:http:postman"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8787/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  channel-core:
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      ENGINES_CHANNEL_HOST: 0.0.0.0
+      ENGINES_CHANNEL_PORT: "8788"
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8788:8788"
+    command: ["npm", "run", "channel:server"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8788/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  messaging-lab:
+    profiles: ["manual"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      ENGINES_MESSAGING_LAB_BUSINESS_SLUG: golden-business
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["npm", "run", "lab:messaging-registration"]
+
+  telegram-bot:
+    profiles: ["telegram"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ENGINES_TELEGRAM_BUSINESS_SLUG: ${ENGINES_TELEGRAM_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["npm", "run", "telegram:bot"]
+    restart: "no"
+
+  whatsapp-kapso:
+    profiles: ["kapso"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      KAPSO_API_KEY: ${KAPSO_API_KEY:-}
+      KAPSO_WEBHOOK_SECRET: ${KAPSO_WEBHOOK_SECRET:-}
+      KAPSO_PHONE_NUMBER_ID: ${KAPSO_PHONE_NUMBER_ID:-}
+      KAPSO_GRAPH_API_VERSION: ${KAPSO_GRAPH_API_VERSION:-v24.0}
+      KAPSO_WEBHOOK_HOST: 0.0.0.0
+      KAPSO_WEBHOOK_PORT: "8791"
+      ENGINES_WHATSAPP_BUSINESS_SLUG: ${ENGINES_WHATSAPP_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8791:8791"
+    command: ["npm", "run", "whatsapp:kapso"]
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8791/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  whatsapp-cloud-api:
+    profiles: ["whatsapp-meta"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-}
+      WHATSAPP_WEBHOOK_HOST: 0.0.0.0
+      WHATSAPP_WEBHOOK_PORT: "8790"
+      ENGINES_WHATSAPP_BUSINESS_SLUG: ${ENGINES_WHATSAPP_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8790:8790"
+    command: ["npm", "run", "whatsapp:cloud-api"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8790/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+    restart: "no"
+
+volumes:
+  engines_mk0_postgres:
+  engines_mk0_mongo:
+  engines_mk0_attachments:
