@@ -14,6 +14,7 @@ import { PostgresServicesRepository } from '../../persistence/postgres/services.
 import { ChannelCoreCTAOrchestrationPort } from '../canonical/channel-orchestration.port.js';
 import { toCanonicalCTAEvent } from '../canonical/compatibility.js';
 import { CanonicalCTADispatcher } from '../canonical/dispatcher.js';
+import { canonicalizeFacebookPageComments, parseMetaPageRoutes } from '../meta/meta-page-ingress.js';
 import { projectAppointmentWorkflow } from './appointment-workflow-view.js';
 import { AppointmentChannelExecutionCore } from './appointment-channel-execution.js';
 import { parseCanonicalChannelEnvelope } from './validation.js';
@@ -35,7 +36,7 @@ function sendJson(response: ServerResponse, statusCode: number, value: unknown):
   response.end(body);
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const chunk of request) {
@@ -44,8 +45,13 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
     if (bytes > MAX_BODY_BYTES) throw new Error('CHANNEL_BODY_TOO_LARGE');
     chunks.push(buffer);
   }
-  if (bytes === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  const rawBody = await readBody(request);
+  if (!rawBody) return {};
+  return JSON.parse(rawBody) as unknown;
 }
 
 function conversationId(pathname: string): string | undefined {
@@ -91,6 +97,8 @@ async function run(): Promise<void> {
     ingressRepository,
     new ChannelCoreCTAOrchestrationPort(execution),
   );
+  const metaAppSecret = process.env.META_APP_SECRET?.trim() ?? '';
+  const metaPageRoutes = parseMetaPageRoutes(process.env.ENGINES_META_PAGE_ROUTES_JSON);
 
   const server = createServer(async (request, response) => {
     try {
@@ -105,6 +113,39 @@ async function run(): Promise<void> {
           orchestration: 'temporal',
           agent: false,
           mcp: false,
+        });
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/meta/page/events') {
+        if (!metaAppSecret) {
+          sendJson(response, 503, { ok: false, code: 'META_APP_SECRET_NOT_CONFIGURED' });
+          return;
+        }
+
+        const rawBody = await readBody(request);
+        const events = canonicalizeFacebookPageComments({
+          rawBody,
+          headers: request.headers,
+          appSecret: metaAppSecret,
+          routes: metaPageRoutes,
+          receivedAt: new Date().toISOString(),
+        });
+
+        const results = [];
+        for (const event of events) {
+          const dispatched = await ctaDispatcher.dispatch(event);
+          results.push({
+            replayed: dispatched.duplicate,
+            workflowId: dispatched.ingress.workflowId,
+            ingress: dispatched.ingress,
+          });
+        }
+
+        sendJson(response, 200, {
+          ok: true,
+          accepted: events.length,
+          results,
         });
         return;
       }
@@ -202,6 +243,18 @@ async function run(): Promise<void> {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
+      if (message === 'META_WEBHOOK_UNAUTHENTICATED') {
+        sendJson(response, 401, { ok: false, code: message });
+        return;
+      }
+      if (message.startsWith('META_PAGE_ROUTE_NOT_CONFIGURED:')) {
+        sendJson(response, 422, { ok: false, code: 'META_PAGE_ROUTE_NOT_CONFIGURED', error: message });
+        return;
+      }
+      if (error instanceof SyntaxError) {
+        sendJson(response, 400, { ok: false, code: 'META_PAYLOAD_INVALID', error: message });
+        return;
+      }
       if (message.startsWith('CHANNEL_EVENT_INVALID') || message === 'CHANNEL_OPERATION_NOT_SUPPORTED') {
         sendJson(response, 400, { ok: false, code: message.split(':')[0], error: message });
         return;

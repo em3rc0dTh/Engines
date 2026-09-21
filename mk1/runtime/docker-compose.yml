@@ -120,6 +120,8 @@ services:
       POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
       ENGINES_CHANNEL_HOST: 0.0.0.0
       ENGINES_CHANNEL_PORT: "8788"
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      ENGINES_META_PAGE_ROUTES_JSON: ${ENGINES_META_PAGE_ROUTES_JSON:-}
     depends_on:
       worker:
         condition: service_healthy
