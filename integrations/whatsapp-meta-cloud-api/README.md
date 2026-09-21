@@ -11,10 +11,14 @@ Status            ✅ BUILT / DETERMINISTIC PASS
 Physical status   🧪 DIRECT META PHYSICAL GATE PENDING
 ```
 
-## Current source lineage
+## Canonical source after 2026-09-21
+
+Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
+
+## Architecture
 
 ```text
-Provider branch  build/mk1-c4p-whatsapp-cloud-api-official
+Provider branch  feature/cta-whatsapp-meta-cloud-api
 PR               #21 open
 ```
 
@@ -144,7 +148,7 @@ outbound consent → interactive reply-button shape
 
 ```bash
 git fetch origin --prune
-git switch build/mk1-c4p-whatsapp-cloud-api-official
+git switch feature/cta-whatsapp-meta-cloud-api
 git pull
 cd mk1/runtime
 npm ci
