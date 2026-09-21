@@ -4,48 +4,35 @@ Date: 2026-09-21
 
 ## Decision
 
-Messenger and Facebook Comments remain separate provider adapters but share the single Meta Graph API `Page` webhook callback configured for the app.
+Messenger and Facebook Comments share the Meta Graph API Page callback but remain separate provider adapters.
 
 ~~~text
-Meta Page callback
-  -> entry[].messaging[]                 -> Messenger adapter
-  -> entry[].changes[field="feed"]       -> Facebook Comment adapter
+Page callback
+  -> entry[].messaging[]            -> Messenger transport
+  -> entry[].changes[field=feed]    -> Facebook Page feed
 ~~~
 
-The callback path remains `/webhooks/meta/messenger` because that URL is already physically proven. Renaming it would require provider re-verification without changing the contract.
+## Security boundary
 
-## Object boundary
+The permanent edge now verifies X-Hub-Signature-256 over the exact raw body before parsing. Physical tests proved valid Messenger delivery, valid Page.feed delivery, missing-signature rejection and invalid-signature rejection.
 
-Use:
+Engines re-verifies the original raw body and original signature at /meta/page/events.
 
-~~~text
-Page
-~~~
+## Authority boundary
 
-Do not use:
+Cloudflare owns HTTPS availability, Meta GET challenge, raw-body HMAC, transport-family observability and optional exact-body forwarding.
 
-~~~text
-User
-~~~
+Cloudflare does not own CITA -> START_APPOINTMENT, business routing, Temporal workflow selection or persistence policy.
 
-for the Messenger/Facebook Comments CTA route.
+FacebookCommentAdapter owns trigger semantics.
 
-## Facebook Comment acceptance rule
+## Acceptance rule
 
-Only normalize a comment when all are true:
+Only feed/comment/add events with page, post, comment, sender and message fields are eligible after HMAC verification.
 
-~~~text
-change.field == "feed"
-value.item   == "comment"
-value.verb   == "add"
-page id      present
-post id      present
-comment id   present
-sender id    present
-message      present
-~~~
+Page ID must resolve through an explicit trusted Page-to-business map.
 
-Explicit appointment triggers:
+## Adapter trigger rule
 
 ~~~text
 cita
@@ -54,23 +41,17 @@ agendar
 agendar cita
 ~~~
 
-Unrelated comments are ignored.
-
 ## Privacy boundary
-
-A public comment is only a public trigger.
 
 ~~~text
 publicTriggerOnly=true
 privateContinuationRequired=true
 ~~~
 
-Do not request personal appointment information in the public comment thread.
+## Idempotency
 
-## Security boundary
-
-Repository decoders verify `X-Hub-Signature-256` against `META_APP_SECRET` before canonicalization. The deployed Cloudflare edge still requires a separate physical invalid-signature rejection proof.
+providerEventId is anchored to facebook:comment:<commentId>. Exact redelivery must start at most one workflow.
 
 ## Non-claims
 
-Dashboard `feed` test evidence and unsigned synthetic replay do not equal real provider comment delivery.
+Dashboard feed delivery is not real Facebook comment delivery. Signed synthetic runtime proof is not provider-origin physical proof. Temporal start is not completed private appointment journey.
