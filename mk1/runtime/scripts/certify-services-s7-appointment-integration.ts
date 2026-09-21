@@ -114,10 +114,42 @@ async function provideExistingCustomer(token: string, workflowId: string, custom
   assert(updateResult(response).ok === true, 'existing customer resolve rejected');
 }
 
+async function crossManagedEntityGate(token: string, workflowId: string): Promise<void> {
+  let current = await waitFor(
+    workflowId,
+    (value) => value.phase === 'WAITING_FOR_MANAGED_ENTITY' || value.phase === 'WAITING_FOR_SERVICE',
+    'managed entity wait',
+  );
+  if (current.phase === 'WAITING_FOR_SERVICE') return;
+
+  const managed = record(current.managedEntity) ?? {};
+  const candidates = list(managed.candidates);
+  const selectable = candidates.find((candidate) => typeof candidate.managedEntityId === 'string');
+
+  let response: JsonRecord;
+  if (managed.status === 'NEEDS_SELECTION' && selectable) {
+    response = await post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/managed-entity/select`, {
+      inputId: inputId(token, 'managed-entity-select'),
+      managedEntityId: selectable.managedEntityId,
+    });
+    assert(updateResult(response).ok === true, 'ManagedEntity selection rejected');
+  } else {
+    response = await post(`/mk0/register-new-appointment/${encodeURIComponent(workflowId)}/managed-entity/create`, {
+      inputId: inputId(token, 'managed-entity-create'),
+      displayName: `S7 Vehicle ${token}`,
+      externalRef: `S7-${token}`,
+      summary: 'Services S7 appointment integration vehicle',
+    });
+    assert(updateResult(response).ok === true, 'ManagedEntity creation rejected');
+  }
+  await waitFor(workflowId, (value) => value.phase === 'WAITING_FOR_SERVICE', 'service wait');
+}
+
 async function selectCanonicalBasicOffering(
   token: string,
   workflowId: string,
 ): Promise<Readonly<{ service: JsonRecord; offering: JsonRecord }>> {
+  await crossManagedEntityGate(token, workflowId);
   let current = await waitFor(workflowId, (value) => value.phase === 'WAITING_FOR_SERVICE', 'service wait');
   const service = list(current.services).find((item) => item.serviceId === 'svc_car_wash');
   assert(service, 'canonical Car Wash Service missing');
