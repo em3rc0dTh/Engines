@@ -19,9 +19,9 @@ Date: 2026-09-21
 - FacebookCommentAdapter remains trigger authority;
 - deterministic runtime probe added for signed comment -> canonical CTA -> Temporal start -> persistence -> replay dedupe.
 
-## Current repository gate
+## Repository gate — CERTIFIED
 
-Require exact-head CI:
+Exact-head CI PASS on source 4da5e6e379f2d4b9022f1abaebfc40575caefe23, run 35628769099, successful rerun job 106430339207. Required:
 
 ~~~text
 TypeScript PASS
