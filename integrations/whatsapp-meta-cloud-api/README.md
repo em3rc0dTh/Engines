@@ -13,16 +13,17 @@ Physical status   🧪 DIRECT META PHYSICAL GATE PENDING
 
 ## Canonical source after 2026-09-21
 
-Current reproduction starts from `main`. Historical branch/SHA references below exist only for exact evidence provenance. New work starts from `developer`.
+Current reproduction starts from `main`. New work starts from `developer`.
 
-## Architecture
+## Historical source lineage
 
 ```text
-Provider branch  feature/cta-whatsapp-meta-cloud-api
-PR               #21 open
+legacy provider ref   build/mk1-c4p-whatsapp-cloud-api-official   PR #21 historical
+modern provider ref   feature/cta-whatsapp-meta-cloud-api         PR #37 merged
+canonical source      main
 ```
 
-This provider branch remains separate from the consolidated Kapso path because its real Meta-delivery proof has not been closed.
+The implementation is integrated even though real direct-Meta delivery remains an open physical gate.
 
 ## Architecture
 
@@ -148,7 +149,7 @@ outbound consent → interactive reply-button shape
 
 ```bash
 git fetch origin --prune
-git switch feature/cta-whatsapp-meta-cloud-api
+git switch main
 git pull
 cd mk1/runtime
 npm ci
@@ -181,7 +182,7 @@ Temporary physical-test exposure:
 cloudflared tunnel --url http://localhost:8790
 ```
 
-Use the branch physical runbook for the exact callback path and Meta console subscription. Keep all real secrets out of Git and evidence receipts.
+Use `mk1/Test/c4p-meta-whatsapp-cloud-api-physical-runbook-2026-09-04.md` for the exact callback path and Meta console subscription. Keep all real secrets out of Git and evidence receipts.
 
 ## Non-claims
 
