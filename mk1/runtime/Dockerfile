@@ -6,7 +6,7 @@ ARG TEMPORAL_CLI_SHA256=b94417b9a8760b30217f4b881dabce4b16a76a38b5e99e2eca3ce358
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSLo /tmp/temporal.tar.gz "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/temporal_cli_${TEMPORAL_CLI_VERSION}_linux_amd64.tar.gz" \
+    && curl --retry 5 --retry-delay 2 --retry-all-errors -fsSLo /tmp/temporal.tar.gz "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/temporal_cli_${TEMPORAL_CLI_VERSION}_linux_amd64.tar.gz" \
     && echo "${TEMPORAL_CLI_SHA256}  /tmp/temporal.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/temporal.tar.gz -C /usr/local/bin temporal \
     && chmod 0755 /usr/local/bin/temporal \

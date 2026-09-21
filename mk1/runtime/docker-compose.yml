@@ -56,7 +56,7 @@ services:
     command:
       - sh
       - -lc
-      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run migrate:services && npm run migrate:channel && npm run migrate:cta-orchestration && npm run migrate:scheduler && npm run migrate:scheduler:g2:s6 && npm run migrate:scheduler:g2:s7 && npm run mongo:init:b6
+      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run migrate:services && npm run migrate:channel && npm run migrate:cta-orchestration && npm run migrate:managed-entity && npm run migrate:scheduler && npm run migrate:scheduler:g2:s6 && npm run migrate:scheduler:g2:s7 && npm run mongo:init:b6
     restart: "no"
 
   worker:
@@ -124,6 +124,8 @@ services:
       POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
       ENGINES_CHANNEL_HOST: 0.0.0.0
       ENGINES_CHANNEL_PORT: "8788"
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      ENGINES_META_PAGE_ROUTES_JSON: ${ENGINES_META_PAGE_ROUTES_JSON:-}
     depends_on:
       worker:
         condition: service_healthy
@@ -138,6 +140,32 @@ services:
       timeout: 3s
       retries: 30
       start_period: 2s
+
+  webchat:
+    profiles: ["webchat"]
+    build:
+      context: .
+    environment:
+      ENGINES_CTA_URL: http://cta:8787
+      ENGINES_CHANNEL_URL: http://channel-core:8788
+      ENGINES_WEBCHAT_BUSINESS_SLUG: golden-business
+      ENGINES_WEBCHAT_HOST: 0.0.0.0
+      ENGINES_WEBCHAT_PORT: "8790"
+    depends_on:
+      cta:
+        condition: service_healthy
+      channel-core:
+        condition: service_healthy
+    ports:
+      - "8790:8790"
+    command: ["npm", "run", "webchat:server"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8790/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
 
   messaging-lab:
     profiles: ["manual"]
@@ -208,6 +236,39 @@ services:
       timeout: 3s
       retries: 30
       start_period: 2s
+
+  whatsapp-cloud-api:
+    profiles: ["whatsapp-meta"]
+    build:
+      context: .
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: engines-mk0-registration
+      POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-}
+      WHATSAPP_WEBHOOK_HOST: 0.0.0.0
+      WHATSAPP_WEBHOOK_PORT: "8790"
+      ENGINES_WHATSAPP_BUSINESS_SLUG: ${ENGINES_WHATSAPP_BUSINESS_SLUG:-golden-business}
+    depends_on:
+      worker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8790:8790"
+    command: ["npm", "run", "whatsapp:cloud-api"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8790/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+    restart: "no"
 
 volumes:
   engines_mk0_postgres:
