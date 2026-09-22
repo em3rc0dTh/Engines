@@ -21,6 +21,15 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 - Digest: sha256:dc0c267b96037169fbe62af02862ba3f9cdd5b2f1264679eff2908162958d4ef
 - Verdict: PRE-AGENT SEALED
 
+### Agent Layer A0 conversational contract
+
+- [agent-layer-a0-certification-2026-09-22.md](agent-layer-a0-certification-2026-09-22.md)
+- Executed exact-head authority: 3b53202b55e2c7309ea2bea7fc0dfb481329d0ab
+- Run: 35784801132
+- Seal artifact: mk1-agent-a0-seal-35784801132
+- Digest: sha256:9ca44bdd7dd67a860f6c101094b1ad515c5509ee49af449cde2421e4446302c3
+- Verdict: AGENT A0 SEALED
+
 ## Historical receipts
 
 Older receipts in this directory remain valid only within their documented source, scope and truth boundaries. Do not reinterpret a historical ResourceReservation receipt as proof of the current SchedulerReservation topology.

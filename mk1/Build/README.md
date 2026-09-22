@@ -30,7 +30,9 @@ Customer / CTA channels
   Channel × ManagedEntity             ✅ SEALED
 
 PRE-AGENT integrated platform         ✅ SEALED
-Agent / MCP                            ⏭ NEXT PHASE / OUT OF THIS SEAL
+Agent A0 conversational contract       ✅ SEALED
+Agent A1 local inference               ⏭ NEXT
+MCP                                    ⏸ OUT OF A0/A1
 ~~~
 
 Canonical 2026-09-22 closure receipts:
@@ -38,11 +40,13 @@ Canonical 2026-09-22 closure receipts:
 - [Channel × ManagedEntity physical seal](evidence/channel-managed-entity-provider-physical-seal-2026-09-22.md)
 - [PRE-AGENT final integrated seal](evidence/platform-pre-agent-final-seal-2026-09-22.md)
 - [Channel × ManagedEntity build note](channel-managed-entity-appointment.md)
+- [Agent Layer A0 certification](evidence/agent-layer-a0-certification-2026-09-22.md)
 
 ## Evidence ledger
 
 | Gate | Source SHA | Run | Job | Artifact | SHA-256 | Receipt |
 |---|---|---:|---:|---:|---|---|
+| Agent A0 conversational contract | `3b53202b55e2c7309ea2bea7fc0dfb481329d0ab` | `35784801132` | `agent-a0-seal` | `mk1-agent-a0-seal-35784801132` | `9ca44bdd7dd67a860f6c101094b1ad515c5509ee49af449cde2421e4446302c3` | [receipt](evidence/agent-layer-a0-certification-2026-09-22.md) |
 | Channel × ManagedEntity physical seal | physical lineage cf9f8b8… → bd25a49… → 5561836… | — | — | — | — | [receipt](evidence/channel-managed-entity-provider-physical-seal-2026-09-22.md) |
 | PRE-AGENT integrated seal | 5561836de64b0e8dc3cd0c71b77316940affd337 | 35759357879 | terminal exact-head seal | platform-solidity-seal-35759357879 | dc0c267b96037169fbe62af02862ba3f9cdd5b2f1264679eff2908162958d4ef | [receipt](evidence/platform-pre-agent-final-seal-2026-09-22.md) |
 | G0 | audit closure | — | — | — | — | [`g0-core-126-audit-closure-2026-08-31.md`](evidence/g0-core-126-audit-closure-2026-08-31.md) |
@@ -155,9 +159,10 @@ production readiness                       ❌
 ## Current next work
 
 ~~~text
-PRE-AGENT      ✅ SEALED
-PR #34         ✅ READY FOR MERGE REVIEW
-Agent / MCP    ⏭ NEXT PHASE AFTER OWNER INTEGRATION DECISION
+PRE-AGENT      ✅ SEALED + MERGED
+Agent A0       ✅ SEALED
+Agent A1       ⏭ REAL LOCAL 1.5B INFERENCE
+MCP            ⏸ LATER
 ~~~
 
-The pre-Agent seal does not authorize production rollout and does not itself merge PR #34.
+A1 must consume A0 and the certified Engine contracts. It may not move business authority into the model.

@@ -104,7 +104,9 @@
     "migrate:managed-entity": "tsx scripts/migrate-postgres-managed-entity.ts",
     "probe:managed-entity": "tsx scripts/certify-managed-entity-me1.ts",
     "fixture:me1:physical": "tsx scripts/prepare-managed-entity-me1-physical.ts",
-    "verify:me1:physical": "tsx scripts/verify-managed-entity-me1-physical.ts"
+    "verify:me1:physical": "tsx scripts/verify-managed-entity-me1-physical.ts",
+    "test:agent:a0": "tsx --test src/contracts/agent-layer/*.test.ts",
+    "probe:agent:a0": "tsx scripts/certify-agent-a0.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",

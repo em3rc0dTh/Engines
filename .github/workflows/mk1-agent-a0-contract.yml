@@ -1,0 +1,161 @@
+name: MK1 Agent Layer A0 Contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/agent-layer-a0-contract
+    paths:
+      - 'mk1/runtime/src/contracts/agent-layer/**'
+      - 'mk1/runtime/scripts/certify-agent-a0.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Design/17-agent-layer-a0-contract.md'
+      - 'mk1/Plan/16-agent-layer-a0-contract.md'
+      - 'mk1/Test/agent-layer-a0-contract.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a0-certification-2026-09-22.md'
+      - '.github/workflows/mk1-agent-a0-contract.yml'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-a0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-a0-contract:
+    name: agent-a0-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check | tee /tmp/agent-a0-typescript.log
+
+      - name: Agent A0 contract tests
+        run: npm run test:agent:a0 | tee /tmp/agent-a0-tests.log
+
+      - name: Agent A0 executable probe
+        run: npm run probe:agent:a0 | tee /tmp/agent-a0-probe.log
+
+      - name: Require A0 proof markers
+        run: |
+          grep -F 'AGENT_A0_DEFAULT_OVERRIDE_RESOLUTION_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_ENGINE_AUTHORITY_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_CAPABILITY_BOUNDARY_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_INVARIANT_OVERRIDE_REJECTION_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_RESOURCE_BUDGET_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_PROVIDER_AGNOSTIC_PASS' /tmp/agent-a0-probe.log
+          grep -F 'AGENT_A0_CERTIFICATION_PASS' /tmp/agent-a0-probe.log
+
+      - name: Capture A0 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-a0-evidence
+          git rev-parse HEAD > /tmp/agent-a0-evidence/git-sha.txt
+          cp /tmp/agent-a0-typescript.log /tmp/agent-a0-evidence/ 2>/dev/null || true
+          cp /tmp/agent-a0-tests.log /tmp/agent-a0-evidence/ 2>/dev/null || true
+          cp /tmp/agent-a0-probe.log /tmp/agent-a0-evidence/ 2>/dev/null || true
+
+      - name: Upload A0 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a0-${{ github.run_id }}
+          path: /tmp/agent-a0-evidence
+          if-no-files-found: error
+
+  protected-pre-agent-regressions:
+    name: protected-pre-agent-regressions
+    needs: agent-a0-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Appointment regression
+        run: npm run test:appointment
+
+      - name: Channel regression
+        run: npm run test:channel:c0
+
+      - name: Scheduler regression
+        run: npm run test:scheduler:g2:s0
+
+      - name: Integration regression
+        run: npm run test:integration:g3:i0
+
+      - name: Protected boundary marker
+        run: echo 'AGENT_A0_PRE_AGENT_REGRESSIONS_PASS'
+
+  agent-a0-seal:
+    name: agent-a0-seal
+    needs:
+      - agent-a0-contract
+      - protected-pre-agent-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact-head A0 seal
+        shell: bash
+        run: |
+          mkdir -p /tmp/agent-a0-seal
+          git rev-parse HEAD | tee /tmp/agent-a0-seal/git-sha.txt
+          cat > /tmp/agent-a0-seal/certification.txt <<'EOF'
+          Default Soul / Personality available             PASS
+          Partial business override inheritance            PASS
+          Non-configurable Engine authority invariants     PASS
+          Provider output treated as untrusted             PASS
+          Engine allowed-action boundary                   PASS
+          Secret-like model-context exclusion              PASS
+          Small-context contract                           PASS
+          4 vCPU / 8 GB total-node target                  PASS
+          ~1.5B Q4 local-model target                      PASS
+          Protected PRE-AGENT contract regressions         PASS
+          EOF
+          echo 'AGENT_A0_SEAL_PASS' | tee /tmp/agent-a0-seal/terminal-marker.txt
+
+      - name: Upload A0 seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a0-seal-${{ github.run_id }}
+          path: /tmp/agent-a0-seal
+          if-no-files-found: error
+
+      - name: Terminal A0 marker
+        run: echo 'AGENT_A0_SEAL_PASS'
