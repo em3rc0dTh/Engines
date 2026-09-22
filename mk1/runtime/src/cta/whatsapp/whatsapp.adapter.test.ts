@@ -183,6 +183,30 @@ test('WA-APPT-004 appointment renderer exposes ManagedEntity, service and only t
   assert.equal(service.type, 'interactive');
   assert.ok(Array.isArray(service.buttons));
 
+  const noAvailabilityState = {
+    ...serviceState,
+    phase: 'WAITING_FOR_DATE',
+    nextAction: 'PROVIDE_DATE',
+    issues: [{
+      code: 'NO_AVAILABILITY',
+      path: 'appointmentDate',
+      message: 'no available slots for 2026-09-26',
+    }],
+  } as AppointmentStateProjection;
+  assert.match(String(renderWhatsAppAppointment(noAvailabilityState).text), /No hay horarios disponibles para esa fecha/);
+
+  const pastDateState = {
+    ...serviceState,
+    phase: 'WAITING_FOR_DATE',
+    nextAction: 'PROVIDE_DATE',
+    issues: [{
+      code: 'PAST_DATE',
+      path: 'appointmentDate',
+      message: 'date is before business-local today',
+    }],
+  } as AppointmentStateProjection;
+  assert.match(String(renderWhatsAppAppointment(pastDateState).text), /Esa fecha ya pasó/);
+
   const createdButAuditing = {
     ...serviceState,
     workflowStatus: 'RUNNING',

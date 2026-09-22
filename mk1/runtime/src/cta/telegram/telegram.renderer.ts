@@ -89,6 +89,16 @@ function inlineRows(items: readonly Readonly<{ text: string; callback_data: stri
   return { inline_keyboard: items.map((item) => [item]) };
 }
 
+function appointmentDatePrompt(state: AppointmentStateProjection): string {
+  if (state.issues.some((item) => item.code === 'NO_AVAILABILITY')) {
+    return 'No hay horarios disponibles para esa fecha. Elige otra fecha. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  if (state.issues.some((item) => item.code === 'PAST_DATE')) {
+    return 'Esa fecha ya pasó. Elige una fecha futura. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  return '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+}
+
 export function renderTelegramAppointment(
   state: AppointmentStateProjection,
   intent: AppointmentRenderIntent = telegramAppointmentRenderIntent(state),
@@ -152,7 +162,7 @@ export function renderTelegramAppointment(
       }))),
     };
     case 'ASK_DATE': return {
-      text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».',
+      text: appointmentDatePrompt(state),
       replyMarkup: { remove_keyboard: true },
     };
     case 'SELECT_SLOT': return {

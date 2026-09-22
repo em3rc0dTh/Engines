@@ -11,6 +11,16 @@ function interactiveRows(
   return { type: 'interactive', body, buttons: items };
 }
 
+function appointmentDatePrompt(state: AppointmentStateProjection): string {
+  if (state.issues.some((item) => item.code === 'NO_AVAILABILITY')) {
+    return 'No hay horarios disponibles para esa fecha. Elige otra fecha. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  if (state.issues.some((item) => item.code === 'PAST_DATE')) {
+    return 'Esa fecha ya pasó. Elige una fecha futura. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  return '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+}
+
 export function renderWhatsAppRegistration(intent: 'CONSENT' | CustomerRegistrationRenderIntent): Readonly<Record<string, unknown>> {
   if (intent === 'CONSENT') return {
     type: 'interactive', body: 'Hola 👋\n\n¿Nos autorizas a registrar tus datos para atenderte desde nuestro sistema?',
@@ -128,7 +138,7 @@ export function renderWhatsAppAppointment(
         state.products.slice(0, 3).map((product) => ({ id: `appointment_offering:${product.productId}`, title: product.name.slice(0, 20) })),
       );
     case 'ASK_DATE':
-      return { type: 'text', text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».' };
+      return { type: 'text', text: appointmentDatePrompt(state) };
     case 'SELECT_SLOT':
       return interactiveRows(
         'Selecciona un horario disponible.',

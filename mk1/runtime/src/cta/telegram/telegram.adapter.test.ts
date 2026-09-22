@@ -228,6 +228,28 @@ test('TG-APPT-004 renderer follows the durable Appointment projection through se
   assert.equal(telegramAppointmentRenderIntent(serviceState), 'SELECT_SERVICE');
   assert.match(JSON.stringify(renderTelegramAppointment(serviceState).replyMarkup), /appointment_service:svc_car_wash/);
 
+  const noAvailabilityState = appointmentState({
+    phase: 'WAITING_FOR_DATE',
+    nextAction: 'PROVIDE_DATE',
+    issues: [{
+      code: 'NO_AVAILABILITY',
+      path: 'appointmentDate',
+      message: 'no available slots for 2026-09-26',
+    }],
+  });
+  assert.match(renderTelegramAppointment(noAvailabilityState).text, /No hay horarios disponibles para esa fecha/);
+
+  const pastDateState = appointmentState({
+    phase: 'WAITING_FOR_DATE',
+    nextAction: 'PROVIDE_DATE',
+    issues: [{
+      code: 'PAST_DATE',
+      path: 'appointmentDate',
+      message: 'date is before business-local today',
+    }],
+  });
+  assert.match(renderTelegramAppointment(pastDateState).text, /Esa fecha ya pasó/);
+
   const slotState = appointmentState({
     phase: 'WAITING_FOR_SLOT',
     availableSlots: [{ start: '06:00', end: '06:30', durationMinutes: 30 }],
