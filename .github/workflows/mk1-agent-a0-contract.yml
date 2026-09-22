@@ -12,6 +12,9 @@ on:
       - 'mk1/Design/17-agent-layer-a0-contract.md'
       - 'mk1/Plan/16-agent-layer-a0-contract.md'
       - 'mk1/Test/agent-layer-a0-contract.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a0-certification-2026-09-22.md'
       - '.github/workflows/mk1-agent-a0-contract.yml'
   pull_request:
     branches:
