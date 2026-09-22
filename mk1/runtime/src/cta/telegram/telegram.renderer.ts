@@ -61,10 +61,10 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
       if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
-    // Telegram provider interaction for ME1 is intentionally gated until the
-    // provider regression slice. Temporal owns the new phase now; Telegram
-    // must not invent selection/creation semantics independently.
-    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
+    case 'WAITING_FOR_MANAGED_ENTITY':
+      if (state.nextAction === 'SELECT_MANAGED_ENTITY') return 'SELECT_MANAGED_ENTITY';
+      if (state.nextAction === 'CREATE_MANAGED_ENTITY') return 'CREATE_MANAGED_ENTITY';
+      return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
@@ -134,7 +134,7 @@ export function renderTelegramAppointment(
       }))),
     };
     case 'CREATE_MANAGED_ENTITY': return {
-      text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+      text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.\n\nEscribe: nombre | referencia estable\nEjemplo: Renault Logan 2018 | ABC-123`,
       replyMarkup: { remove_keyboard: true },
     };
     case 'SELECT_SERVICE': return {

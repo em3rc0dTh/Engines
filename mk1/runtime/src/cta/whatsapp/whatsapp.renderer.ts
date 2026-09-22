@@ -53,9 +53,10 @@ export function whatsappAppointmentRenderIntent(state: AppointmentStateProjectio
       if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
-    // ManagedEntity interaction is owned by Temporal now. Native WhatsApp
-    // selection/creation remains gated to the provider regression slice.
-    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
+    case 'WAITING_FOR_MANAGED_ENTITY':
+      if (state.nextAction === 'SELECT_MANAGED_ENTITY') return 'SELECT_MANAGED_ENTITY';
+      if (state.nextAction === 'CREATE_MANAGED_ENTITY') return 'CREATE_MANAGED_ENTITY';
+      return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
@@ -114,7 +115,7 @@ export function renderWhatsAppAppointment(
     case 'CREATE_MANAGED_ENTITY':
       return {
         type: 'text',
-        text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+        text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.\n\nEscribe: nombre | referencia estable\nEjemplo: Renault Logan 2018 | ABC-123`,
       };
     case 'SELECT_SERVICE':
       return interactiveRows(

@@ -35,6 +35,15 @@ function callbackValue(data: string, prefix: string): string {
   return value;
 }
 
+function managedEntityCreationPayload(text: string): Readonly<{ displayName: string; externalRef: string }> {
+  const separator = text.indexOf('|');
+  if (separator < 1) throw new Error('TELEGRAM_MANAGED_ENTITY_INPUT_INVALID');
+  const displayName = text.slice(0, separator).trim();
+  const externalRef = text.slice(separator + 1).trim();
+  if (!displayName || !externalRef) throw new Error('TELEGRAM_MANAGED_ENTITY_INPUT_INVALID');
+  return { displayName, externalRef };
+}
+
 export class TelegramAdapter implements ChannelAdapter<unknown> {
   readonly channel = 'TELEGRAM' as const;
 
@@ -71,6 +80,14 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
           ...base,
           action: 'PROVIDE_CUSTOMER',
           payload: { customerId: callbackValue(data, 'appointment_customer:') },
+        };
+      }
+      if (data.startsWith('appointment_managed_entity:')) {
+        if (route.appointmentRenderIntent !== 'SELECT_MANAGED_ENTITY') contextRequired();
+        return {
+          ...base,
+          action: 'SELECT_MANAGED_ENTITY',
+          payload: { managedEntityId: callbackValue(data, 'appointment_managed_entity:') },
         };
       }
       if (data.startsWith('appointment_service:')) {
@@ -132,6 +149,10 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
       if (appointmentIntent === 'ASK_DATE') {
         if (!text) contextRequired();
         return { ...base, action: 'SET_DATE', payload: { dateInput: text } };
+      }
+      if (appointmentIntent === 'CREATE_MANAGED_ENTITY') {
+        if (!text) contextRequired();
+        return { ...base, action: 'CREATE_MANAGED_ENTITY', payload: managedEntityCreationPayload(text) };
       }
       if (appointmentIntent in APPOINTMENT_PATCH_BY_INTENT) {
         if (!text) contextRequired();

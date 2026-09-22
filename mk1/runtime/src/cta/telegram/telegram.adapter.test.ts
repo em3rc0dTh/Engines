@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import {
+  GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+  type AppointmentStateProjection,
+} from '../../contracts/register-new-appointment/index.js';
 import { TelegramAdapter } from './telegram.adapter.js';
 import {
   renderTelegramAppointment,
@@ -128,6 +131,21 @@ test('TG-APPT-003 appointment buttons normalize to the same canonical orchestrat
     businessSlug: 'golden-business', appointmentRenderIntent: 'RESOLVE_CUSTOMER',
   })?.action, 'RESOLVE_CUSTOMER');
 
+  const managed = adapter.normalizeInbound(callback('appointment_managed_entity:men_logan', 56), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_MANAGED_ENTITY',
+  });
+  assert.equal(managed?.action, 'SELECT_MANAGED_ENTITY');
+  assert.deepEqual(managed?.payload, { managedEntityId: 'men_logan' });
+
+  const created = adapter.normalizeInbound(message('Renault Logan 2018 | ABC-123', 62), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'CREATE_MANAGED_ENTITY',
+  });
+  assert.equal(created?.action, 'CREATE_MANAGED_ENTITY');
+  assert.deepEqual(created?.payload, { displayName: 'Renault Logan 2018', externalRef: 'ABC-123' });
+  assert.throws(() => adapter.normalizeInbound(message('Renault Logan 2018', 63), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'CREATE_MANAGED_ENTITY',
+  }), /TELEGRAM_MANAGED_ENTITY_INPUT_INVALID/);
+
   assert.deepEqual(adapter.normalizeInbound(callback('appointment_service:svc_car_wash', 56), {
     businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_SERVICE',
   })?.payload, { serviceId: 'svc_car_wash' });
@@ -158,6 +176,38 @@ test('TG-APPT-003 appointment buttons normalize to the same canonical orchestrat
 });
 
 test('TG-APPT-004 renderer follows the durable Appointment projection through selection and terminal completion', () => {
+  const managedEntity = {
+    managedEntityId: 'men-logan',
+    type: 'vehicle',
+    displayName: 'Renault Logan 2018',
+    summary: 'ABC-123',
+  } as const;
+  const managedSelectionState = appointmentState({
+    phase: 'WAITING_FOR_MANAGED_ENTITY',
+    customer: { status: 'EXISTING', customerId: 'cus_1', customer: { name: 'Pepito' } },
+    managedEntity: {
+      status: 'NEEDS_SELECTION',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [managedEntity],
+    },
+    nextAction: 'SELECT_MANAGED_ENTITY',
+  });
+  assert.equal(telegramAppointmentRenderIntent(managedSelectionState), 'SELECT_MANAGED_ENTITY');
+  assert.match(JSON.stringify(renderTelegramAppointment(managedSelectionState).replyMarkup), /appointment_managed_entity:men-logan/);
+
+  const managedCreationState = appointmentState({
+    phase: 'WAITING_FOR_MANAGED_ENTITY',
+    customer: { status: 'CREATED', customerId: 'cus_new', customer: { name: 'Nuevo' } },
+    managedEntity: {
+      status: 'NEEDS_CREATION',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [],
+    },
+    nextAction: 'CREATE_MANAGED_ENTITY',
+  });
+  assert.equal(telegramAppointmentRenderIntent(managedCreationState), 'CREATE_MANAGED_ENTITY');
+  assert.match(renderTelegramAppointment(managedCreationState).text, /nombre \| referencia estable/);
+
   const serviceState = appointmentState({
     phase: 'WAITING_FOR_SERVICE',
     customer: { status: 'CREATED', customerId: 'cus_1', customer: { name: 'Pepito' } },

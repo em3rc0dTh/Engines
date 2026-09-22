@@ -106,6 +106,22 @@ test('WA-APPT-002 appointment customer text maps only in durable appointment con
 
 test('WA-APPT-003 interactive selections stay on canonical appointment actions', () => {
   const base = transport.verifyAndNormalize(body, { 'x-hub-signature-256': signature });
+
+  const managed = adapter.normalizeInbound({ ...base, interactiveId: 'appointment_managed_entity:men_logan' }, {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_MANAGED_ENTITY',
+  });
+  assert.equal(managed?.action, 'SELECT_MANAGED_ENTITY');
+  assert.deepEqual(managed?.payload, { managedEntityId: 'men_logan' });
+
+  const created = adapter.normalizeInbound(asTextEvent(base, 'Renault Logan 2018 | ABC-123'), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'CREATE_MANAGED_ENTITY',
+  });
+  assert.equal(created?.action, 'CREATE_MANAGED_ENTITY');
+  assert.deepEqual(created?.payload, { displayName: 'Renault Logan 2018', externalRef: 'ABC-123' });
+  assert.throws(() => adapter.normalizeInbound(asTextEvent(base, 'Renault Logan 2018'), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'CREATE_MANAGED_ENTITY',
+  }), /WHATSAPP_MANAGED_ENTITY_INPUT_INVALID/);
+
   const service = adapter.normalizeInbound({ ...base, interactiveId: 'appointment_service:svc_car_wash' }, {
     businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_SERVICE',
   });
@@ -118,12 +134,39 @@ test('WA-APPT-003 interactive selections stay on canonical appointment actions',
   assert.equal(finalize?.action, 'FINALIZE_APPOINTMENT');
 });
 
-test('WA-APPT-004 appointment renderer exposes service and only terminal completion states', () => {
+test('WA-APPT-004 appointment renderer exposes ManagedEntity, service and only terminal completion states', () => {
   const managedEntity = {
     managedEntityId: 'men-1',
     type: 'vehicle',
     displayName: 'Renault Logan',
   } as const;
+  const managedSelectionState = {
+    workflowId: 'wf-me-select', workflowStatus: 'RUNNING', phase: 'WAITING_FOR_MANAGED_ENTITY',
+    customer: { status: 'EXISTING', customerId: 'cus-1' },
+    managedEntity: {
+      status: 'NEEDS_SELECTION',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [managedEntity],
+    },
+    services: [], products: [], availableSlots: [], nextAction: 'SELECT_MANAGED_ENTITY', issues: [],
+  } as AppointmentStateProjection;
+  assert.equal(whatsappAppointmentRenderIntent(managedSelectionState), 'SELECT_MANAGED_ENTITY');
+  assert.match(JSON.stringify(renderWhatsAppAppointment(managedSelectionState)), /appointment_managed_entity:men-1/);
+
+  const managedCreationState = {
+    ...managedSelectionState,
+    workflowId: 'wf-me-create',
+    customer: { status: 'CREATED', customerId: 'cus-new' },
+    managedEntity: {
+      status: 'NEEDS_CREATION',
+      policy: GALLO_VEHICLE_MANAGED_ENTITY_POLICY,
+      candidates: [],
+    },
+    nextAction: 'CREATE_MANAGED_ENTITY',
+  } as AppointmentStateProjection;
+  assert.equal(whatsappAppointmentRenderIntent(managedCreationState), 'CREATE_MANAGED_ENTITY');
+  assert.match(String(renderWhatsAppAppointment(managedCreationState).text), /nombre \| referencia estable/);
+
   const serviceState = {
     workflowId: 'wf-1', workflowStatus: 'RUNNING', phase: 'WAITING_FOR_SERVICE',
     customer: { status: 'EXISTING', customerId: 'cus-1' },
