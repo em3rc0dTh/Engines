@@ -131,11 +131,17 @@ test('TG-APPT-003 appointment buttons normalize to the same canonical orchestrat
     businessSlug: 'golden-business', appointmentRenderIntent: 'RESOLVE_CUSTOMER',
   })?.action, 'RESOLVE_CUSTOMER');
 
-  const managed = adapter.normalizeInbound(callback('appointment_managed_entity:men_logan', 56), {
+  const managed = adapter.normalizeInbound(callback('ame:men_logan', 56), {
     businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_MANAGED_ENTITY',
   });
   assert.equal(managed?.action, 'SELECT_MANAGED_ENTITY');
   assert.deepEqual(managed?.payload, { managedEntityId: 'men_logan' });
+
+  const managedLegacy = adapter.normalizeInbound(callback('appointment_managed_entity:men_logan', 64), {
+    businessSlug: 'golden-business', appointmentRenderIntent: 'SELECT_MANAGED_ENTITY',
+  });
+  assert.equal(managedLegacy?.action, 'SELECT_MANAGED_ENTITY');
+  assert.deepEqual(managedLegacy?.payload, { managedEntityId: 'men_logan' });
 
   const created = adapter.normalizeInbound(message('Renault Logan 2018 | ABC-123', 62), {
     businessSlug: 'golden-business', appointmentRenderIntent: 'CREATE_MANAGED_ENTITY',
@@ -177,7 +183,7 @@ test('TG-APPT-003 appointment buttons normalize to the same canonical orchestrat
 
 test('TG-APPT-004 renderer follows the durable Appointment projection through selection and terminal completion', () => {
   const managedEntity = {
-    managedEntityId: 'men-logan',
+    managedEntityId: 'men_e874d7ed-8a3f-438d-a03e-37bb92b0a764',
     type: 'vehicle',
     displayName: 'Renault Logan 2018',
     summary: 'ABC-123',
@@ -193,7 +199,12 @@ test('TG-APPT-004 renderer follows the durable Appointment projection through se
     nextAction: 'SELECT_MANAGED_ENTITY',
   });
   assert.equal(telegramAppointmentRenderIntent(managedSelectionState), 'SELECT_MANAGED_ENTITY');
-  assert.match(JSON.stringify(renderTelegramAppointment(managedSelectionState).replyMarkup), /appointment_managed_entity:men-logan/);
+  const managedMarkup = renderTelegramAppointment(managedSelectionState).replyMarkup as {
+    inline_keyboard: readonly (readonly { callback_data: string }[])[];
+  };
+  const managedCallback = managedMarkup.inline_keyboard[0]![0]!.callback_data;
+  assert.equal(managedCallback, 'ame:men_e874d7ed-8a3f-438d-a03e-37bb92b0a764');
+  assert.ok(Buffer.byteLength(managedCallback, 'utf8') <= 64);
 
   const managedCreationState = appointmentState({
     phase: 'WAITING_FOR_MANAGED_ENTITY',

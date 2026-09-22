@@ -82,12 +82,13 @@ export class TelegramAdapter implements ChannelAdapter<unknown> {
           payload: { customerId: callbackValue(data, 'appointment_customer:') },
         };
       }
-      if (data.startsWith('appointment_managed_entity:')) {
+      if (data.startsWith('ame:') || data.startsWith('appointment_managed_entity:')) {
         if (route.appointmentRenderIntent !== 'SELECT_MANAGED_ENTITY') contextRequired();
+        const prefix = data.startsWith('ame:') ? 'ame:' : 'appointment_managed_entity:';
         return {
           ...base,
           action: 'SELECT_MANAGED_ENTITY',
-          payload: { managedEntityId: callbackValue(data, 'appointment_managed_entity:') },
+          payload: { managedEntityId: callbackValue(data, prefix) },
         };
       }
       if (data.startsWith('appointment_service:')) {

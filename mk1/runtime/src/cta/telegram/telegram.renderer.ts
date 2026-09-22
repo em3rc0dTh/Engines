@@ -130,7 +130,7 @@ export function renderTelegramAppointment(
       text: `Selecciona ${state.managedEntity.policy.label.toLowerCase()}.`,
       replyMarkup: inlineRows(state.managedEntity.candidates.map((entity) => ({
         text: entity.displayName,
-        callback_data: `appointment_managed_entity:${entity.managedEntityId}`,
+        callback_data: `ame:${entity.managedEntityId}`,
       }))),
     };
     case 'CREATE_MANAGED_ENTITY': return {
