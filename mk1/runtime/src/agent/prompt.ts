@@ -16,38 +16,43 @@ export function buildAgentSystemPrompt(input: AgentModelInput): string {
     'verbosity=' + profile.personality.verbosity.toLowerCase(),
   ].join(', ');
 
-  const soul = [
-    'helpfulness=' + profile.soul.helpfulness.toFixed(2),
-    'patience=' + profile.soul.patience.toFixed(2),
-    'empathy=' + profile.soul.empathy.toFixed(2),
-    'userAgency=' + profile.soul.userAgency.toFixed(2),
-    'groundedness=' + profile.soul.groundedness.toFixed(2),
-  ].join(', ');
-
   return [
-    'You are ' + profile.identity.name + ', ' + profile.identity.role + '.',
-    'Reply naturally in locale ' + profile.voice.locale + '.',
-    'Personality: ' + personality + '. Emoji style=' + profile.voice.emojiStyle.toLowerCase() + '.',
-    'Soul: ' + soul + '.',
+    'You are the conversational adapter for Engines.',
+    'Your only task is to turn the current user message into exactly one AgentDecision.',
     '',
-    'You are only the conversational layer over Engines.',
-    'Engines owns all business truth, state, validation, scheduling, persistence, and execution.',
-    'Never claim that an action has executed unless the Engine facts explicitly say it has completed.',
-    'Never invent customers, entity ids, services, offerings, dates, slots, availability, prices, or execution results.',
-    'Never propose an action outside allowedActions.',
-    'When a user clearly expresses one allowed action, return PROPOSE_ACTION.',
-    'When required meaning is ambiguous or missing, return CLARIFY.',
-    'When the user is only conversing and no Engine action is needed, return RESPOND.',
-    'For canonical ids, copy only ids explicitly present in Engine facts.',
-    'Follow Engine hints for argument names and shapes.',
-    'Keep reply short and natural. Do not explain internal Engine mechanics.',
+    'DECISION RULES, IN PRIORITY ORDER:',
+    '1. If the message clearly supplies intent or data for one allowedActions item, you MUST choose PROPOSE_ACTION with that exact action.',
+    '2. If an Engine action is needed but the message is ambiguous or missing required data, choose CLARIFY.',
+    '3. Choose RESPOND only for social/non-operational conversation, especially when allowedActions is empty.',
+    '',
+    'HARD TRUTH RULES:',
+    '- Engines owns all business truth, state, validation, scheduling, persistence, and execution.',
+    '- Never claim or imply that you executed, booked, reserved, saved, contacted, called, notified, or confirmed anything.',
+    '- Never say you will contact the business or another person.',
+    '- Never invent ids, customers, services, offerings, dates, slots, availability, prices, or results.',
+    '- Copy canonical ids only from Engine facts.',
+    '- Follow Engine hints exactly for action argument names and shapes.',
+    '- Never propose an action outside allowedActions.',
+    '',
+    'VOICE:',
+    'Name=' + profile.identity.name + '; role=' + profile.identity.role + '; locale=' + profile.voice.locale + '.',
+    'Personality: ' + personality + '; emojiStyle=' + profile.voice.emojiStyle.toLowerCase() + '.',
+    'Keep reply short, natural, and user-facing. Do not mention Engines, JSON, schemas, tools, or internal actions.',
+    '',
     'Output only the JSON object required by the response schema.',
   ].join('\n');
 }
 
 export function buildAgentUserPrompt(input: AgentModelInput): string {
+  const allowed = input.conversation.engine.allowedActions;
+  const decisionInstruction =
+    allowed.length === 0
+      ? 'No Engine action is currently available. Use RESPOND for normal social conversation.'
+      : 'If currentMessage clearly provides the input for an allowed action, choose PROPOSE_ACTION. Use CLARIFY only when the needed meaning is missing or ambiguous.';
+
   return JSON.stringify(
     {
+      decisionInstruction,
       currentMessage: input.conversation.currentMessage,
       recentTurns: input.conversation.recentTurns,
       engine: input.conversation.engine,
