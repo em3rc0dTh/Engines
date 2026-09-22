@@ -107,7 +107,9 @@ export class LlamaCppAgentModelProvider implements AgentModelProvider {
           stream: false,
           response_format: {
             type: 'json_schema',
-            schema: buildAgentDecisionJsonSchema(input),
+            json_schema: {
+              schema: buildAgentDecisionJsonSchema(input),
+            },
           },
         }),
         signal: controller.signal,
