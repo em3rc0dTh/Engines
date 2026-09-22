@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
+import { createServer, type RequestListener, type Server } from 'node:http';
 import test from 'node:test';
 
 import {
@@ -36,7 +36,7 @@ function input() {
 }
 
 async function withServer(
-  handler: Parameters<typeof createServer>[0],
+  handler: RequestListener,
   run: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   const server: Server = createServer(handler);
@@ -59,7 +59,7 @@ test('A1 llama.cpp provider sends bounded schema-constrained deterministic reque
   await withServer((request, response) => {
     let body = '';
     request.setEncoding('utf8');
-    request.on('data', (chunk) => {
+    request.on('data', (chunk: string) => {
       body += chunk;
     });
     request.on('end', () => {
