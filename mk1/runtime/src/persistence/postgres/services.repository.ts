@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from './resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type {
   EligibilityRuleSet,
@@ -7,7 +8,9 @@ import type {
   ServiceDependency,
   ServiceOffering,
   ServiceRequirement,
+  ServiceSchedulingProfile,
 } from '../../contracts/services-engine/index.js';
+import { validateServiceSchedulingProfile } from '../../contracts/services-engine/index.js';
 
 function asStringArray(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return [];
@@ -40,6 +43,15 @@ function pricingFromRow(row: {
     default:
       throw new Error(`SERVICES_PRICE_KIND_UNKNOWN:${row.price_kind}`);
   }
+}
+
+function schedulingFromRow(value: unknown): ServiceSchedulingProfile | undefined {
+  if (value === null || value === undefined) return undefined;
+  const issues = validateServiceSchedulingProfile(value);
+  if (issues.length > 0) {
+    throw new Error(`SERVICES_SCHEDULING_PROFILE_PROJECTION_INVALID:${JSON.stringify(issues)}`);
+  }
+  return value as ServiceSchedulingProfile;
 }
 
 function serviceFromRow(row: {
@@ -79,6 +91,7 @@ type OfferingRow = Readonly<{
   price_kind: string;
   price_amount_minor: string | number | null;
   price_currency: string | null;
+  scheduling_profile: unknown;
 }>;
 
 type RequirementRow = Readonly<{
@@ -173,7 +186,8 @@ export class PostgresServicesRepository {
       `SELECT p.product_id, p.service_id, p.business_slug, p.product_code,
               p.product_name, p.description, p.status, p.revision,
               p.duration_minutes, p.priority, p.tags,
-              p.price_kind, p.price_amount_minor, p.price_currency
+              p.price_kind, p.price_amount_minor, p.price_currency,
+              p.scheduling_profile
          FROM service_products p
          JOIN service_catalog s
            ON s.business_slug = p.business_slug AND s.service_id = p.service_id
@@ -195,7 +209,8 @@ export class PostgresServicesRepository {
       `SELECT product_id, service_id, business_slug, product_code,
               product_name, description, status, revision,
               duration_minutes, priority, tags,
-              price_kind, price_amount_minor, price_currency
+              price_kind, price_amount_minor, price_currency,
+              scheduling_profile
          FROM service_products
         WHERE business_slug = $1
           AND (product_id = $2 OR product_code = $2)
@@ -263,6 +278,7 @@ export class PostgresServicesRepository {
 
     return rows.map((row) => {
       const eligibilityRuleSet = eligibilityFromRow(eligibilityByOffering.get(row.product_id));
+      const scheduling = schedulingFromRow(row.scheduling_profile);
       return {
         offeringId: row.product_id,
         serviceId: row.service_id,
@@ -279,6 +295,7 @@ export class PostgresServicesRepository {
         requirements: requirementsByOffering.get(row.product_id) ?? [],
         dependencies: dependenciesByOffering.get(row.product_id) ?? [],
         ...(eligibilityRuleSet ? { eligibilityRuleSet } : {}),
+        ...(scheduling ? { scheduling } : {}),
       } satisfies ServiceOffering;
     });
   }
@@ -288,7 +305,7 @@ let defaultPool: Pool | undefined;
 let defaultRepository: PostgresServicesRepository | undefined;
 
 export function servicesRepository(): PostgresServicesRepository {
-  defaultPool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  defaultPool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'services-repository');
   defaultRepository ??= new PostgresServicesRepository(defaultPool);
   return defaultRepository;
 }

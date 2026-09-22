@@ -1,0 +1,214 @@
+name: MK1 Integration G3-I2 Durable Outbound Delivery
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/integration/outbound.ts'
+      - 'mk1/runtime/src/persistence/postgres/integration-outbound-ledger.repository.ts'
+      - 'mk1/runtime/migrations/013_integration_outbound_ledger.sql'
+      - 'mk1/runtime/scripts/migrate-postgres-integration-g3-i2.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i2.ts'
+      - 'mk1/Test/g3-integration-engine-i2.md'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i2-certification-2026-09-16.md'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - '.github/workflows/mk1-integration-g3-i2.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i2-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/engines_mk0
+
+jobs:
+  outbound-contracts:
+    name: g3-i2-outbound-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: TypeScript
+        run: npm run check | tee /tmp/g3-i2-typescript.log
+      - name: Integration sequential certification ledger
+        run: npm run verify:integration:g3 | tee /tmp/g3-i2-ledger.log
+      - name: I0 contract + I1 registry predecessors
+        run: |
+          npm run test:integration:g3:i0 | tee /tmp/g3-i2-i0.log
+          npx tsx --test src/integration/registry.test.ts | tee /tmp/g3-i2-i1.log
+      - name: Outbound authority boundary
+        run: |
+          if grep -R -E "orchestration/temporal|cta/|contracts/(scheduler-engine|services-engine)" \
+            src/integration/outbound.ts src/persistence/postgres/integration-outbound-ledger.repository.ts; then
+            echo 'G3-I2 crossed a protected authority boundary' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I2_AUTHORITY_BOUNDARY_PASS' | tee /tmp/g3-i2-authority.log
+      - name: Capture contract evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i2-contract-evidence
+          git rev-parse HEAD > /tmp/g3-i2-contract-evidence/git-sha.txt
+          cp /tmp/g3-i2-*.log /tmp/g3-i2-contract-evidence/ 2>/dev/null || true
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i2-contracts-${{ github.run_id }}
+          path: /tmp/g3-i2-contract-evidence
+          if-no-files-found: error
+
+  outbound-postgres:
+    name: g3-i2-postgres-outbound
+    needs: outbound-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: engines_mk0
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d engines_mk0"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Apply I1 + I2 migrations
+        run: |
+          npx tsx scripts/migrate-postgres-integration-g3-i1.ts | tee /tmp/g3-i2-migrate-i1.log
+          npx tsx scripts/migrate-postgres-integration-g3-i2.ts | tee /tmp/g3-i2-migrate.log
+      - name: Re-certify I1 predecessor
+        run: |
+          npx tsx scripts/certify-integration-g3-i1.ts | tee /tmp/g3-i2-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/g3-i2-i1-probe.log
+      - name: Certify durable outbound ledger
+        run: npx tsx scripts/certify-integration-g3-i2.ts | tee /tmp/g3-i2-probe.log
+      - name: Require G3-I2 proof markers
+        run: |
+          grep -F 'INTEGRATION_G3_I2_ENQUEUE_IDEMPOTENCY_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_ATOMIC_CLAIM_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_RETRY_SCHEDULE_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_BOUNDED_RETRY_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_LEASE_RECOVERY_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_BUSINESS_ISOLATION_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_SECRET_BOUNDARY_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_DURABLE_OUTBOUND_PASS' /tmp/g3-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_CERTIFICATION_PASS' /tmp/g3-i2-probe.log
+      - name: Capture persistence evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i2-postgres-evidence
+          git rev-parse HEAD > /tmp/g3-i2-postgres-evidence/git-sha.txt
+          cp /tmp/g3-i2-*.log /tmp/g3-i2-postgres-evidence/ 2>/dev/null || true
+      - name: Upload persistence evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i2-postgres-${{ github.run_id }}
+          path: /tmp/g3-i2-postgres-evidence
+          if-no-files-found: error
+
+  protected-predecessor-regressions:
+    name: g3-i2-protected-predecessor-regressions
+    needs: outbound-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Scheduler + Services + Appointment regressions
+        run: |
+          npm run test:scheduler:g2:s0
+          npm run test:scheduler:g2:s6
+          npm run test:services:s1
+          npm run test:appointment
+      - name: CTA/channel regressions
+        run: |
+          npm run test:cta:poc
+          npm run test:channel:c0
+      - name: Protected predecessor marker
+        run: echo 'INTEGRATION_G3_I2_PREDECESSOR_REGRESSION_PASS'
+
+  integration-g3-i2-seal:
+    name: integration-g3-i2-seal
+    needs:
+      - outbound-contracts
+      - outbound-postgres
+      - protected-predecessor-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G3-I2 seal
+        run: |
+          mkdir -p /tmp/g3-i2-seal
+          git rev-parse HEAD | tee /tmp/g3-i2-seal/git-sha.txt
+          cat > /tmp/g3-i2-seal/certification.txt <<'EOF'
+          Durable outbound command ledger               PASS
+          Business-scoped operation idempotency         PASS
+          Material conflict rejection                   PASS
+          Atomic delivery claim                         PASS
+          Retry scheduling                              PASS
+          Bounded attempt exhaustion                    PASS
+          Lease-expiry crash recovery                   PASS
+          Terminal replay                               PASS
+          Multi-business isolation                      PASS
+          Secret boundary                               PASS
+          I0-I1 predecessors                            PASS
+          Scheduler/Services/Appointment regressions    PASS
+          EOF
+          echo 'INTEGRATION_G3_I2_CERTIFICATION_PASS' | tee /tmp/g3-i2-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i2-seal-${{ github.run_id }}
+          path: /tmp/g3-i2-seal
+          if-no-files-found: error
+      - name: Terminal certification marker
+        run: echo 'INTEGRATION_G3_I2_CERTIFICATION_PASS'

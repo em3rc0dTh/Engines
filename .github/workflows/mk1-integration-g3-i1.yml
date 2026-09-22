@@ -1,0 +1,226 @@
+name: MK1 Integration G3-I1 Connection Registry
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/integration/**'
+      - 'mk1/runtime/src/persistence/postgres/integration-registry.repository.ts'
+      - 'mk1/runtime/migrations/012_integration_registry.sql'
+      - 'mk1/runtime/scripts/migrate-postgres-integration-g3-i1.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i1.ts'
+      - 'mk1/Test/g3-integration-engine-i1.md'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i1-certification-2026-09-16.md'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - '.github/workflows/mk1-integration-g3-i1.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i1-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/engines_mk0
+
+jobs:
+  registry-contracts:
+    name: g3-i1-registry-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check | tee /tmp/g3-i1-typescript.log
+
+      - name: Integration sequential certification ledger
+        run: npm run verify:integration:g3 | tee /tmp/g3-i1-ledger.log
+
+      - name: G3-I0 predecessor contracts
+        run: |
+          npm run test:integration:g3:i0 | tee /tmp/g3-i1-i0-contracts.log
+          npm run probe:integration:g3:i0 | tee /tmp/g3-i1-i0-probe.log
+          grep -F 'INTEGRATION_G3_I0_CERTIFICATION_PASS' /tmp/g3-i1-i0-probe.log
+
+      - name: G3-I1 registry unit tests
+        run: npx tsx --test src/integration/*.test.ts | tee /tmp/g3-i1-registry-tests.log
+
+      - name: Authority import boundary
+        run: |
+          if grep -R -E "contracts/(scheduler-engine|services-engine)|orchestration/temporal|cta/" \
+            src/integration src/persistence/postgres/integration-registry.repository.ts; then
+            echo 'Integration registry crossed a protected authority boundary' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I1_AUTHORITY_BOUNDARY_PASS' | tee /tmp/g3-i1-authority.log
+
+      - name: Capture contract evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i1-contract-evidence
+          git rev-parse HEAD > /tmp/g3-i1-contract-evidence/git-sha.txt
+          cp /tmp/g3-i1-*.log /tmp/g3-i1-contract-evidence/ 2>/dev/null || true
+
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i1-contracts-${{ github.run_id }}
+          path: /tmp/g3-i1-contract-evidence
+          if-no-files-found: error
+
+  registry-postgres:
+    name: g3-i1-postgres-registry
+    needs: registry-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: engines_mk0
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d engines_mk0"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Apply Integration registry migration
+        run: npx tsx scripts/migrate-postgres-integration-g3-i1.ts | tee /tmp/g3-i1-migration.log
+
+      - name: Certify provider/connection/secret-reference registry
+        run: npx tsx scripts/certify-integration-g3-i1.ts | tee /tmp/g3-i1-probe.log
+
+      - name: Require G3-I1 proof markers
+        run: |
+          grep -F 'INTEGRATION_G3_I1_PROVIDER_REGISTRY_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CONNECTION_REGISTRY_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_SECRET_REFERENCE_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CAPABILITY_GUARD_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_REVISION_GUARD_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_BUSINESS_ISOLATION_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_REGISTRY_SEMANTICS_PASS' /tmp/g3-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/g3-i1-probe.log
+
+      - name: Capture persistence evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i1-postgres-evidence
+          git rev-parse HEAD > /tmp/g3-i1-postgres-evidence/git-sha.txt
+          cp /tmp/g3-i1-*.log /tmp/g3-i1-postgres-evidence/ 2>/dev/null || true
+
+      - name: Upload persistence evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i1-postgres-${{ github.run_id }}
+          path: /tmp/g3-i1-postgres-evidence
+          if-no-files-found: error
+
+  protected-predecessor-regressions:
+    name: g3-i1-protected-predecessor-regressions
+    needs: registry-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Scheduler + Services + Appointment regressions
+        run: |
+          npm run test:scheduler:g2:s0
+          npm run test:scheduler:g2:s6
+          npm run test:services:s1
+          npm run test:appointment
+      - name: CTA/channel transport regressions
+        run: |
+          npm run test:cta:poc
+          npm run test:channel:c0
+      - name: Protected predecessor marker
+        run: echo 'INTEGRATION_G3_I1_PREDECESSOR_REGRESSION_PASS'
+
+  integration-g3-i1-seal:
+    name: integration-g3-i1-seal
+    needs:
+      - registry-contracts
+      - registry-postgres
+      - protected-predecessor-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G3-I1 seal
+        run: |
+          mkdir -p /tmp/g3-i1-seal
+          git rev-parse HEAD | tee /tmp/g3-i1-seal/git-sha.txt
+          cat > /tmp/g3-i1-seal/certification.txt <<'EOF'
+          Provider registry                              PASS
+          Business-scoped connection registry           PASS
+          Secret-reference-only persistence             PASS
+          Capability subset enforcement                 PASS
+          Connection enable/disable lifecycle           PASS
+          Optimistic revision guard                     PASS
+          Multi-business connection isolation           PASS
+          I0 canonical authority boundary preserved     PASS
+          Scheduler/Services/Appointment regressions    PASS
+          EOF
+          echo 'INTEGRATION_G3_I1_CERTIFICATION_PASS' | tee /tmp/g3-i1-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i1-seal-${{ github.run_id }}
+          path: /tmp/g3-i1-seal
+          if-no-files-found: error
+      - name: Terminal certification marker
+        run: echo 'INTEGRATION_G3_I1_CERTIFICATION_PASS'

@@ -2,11 +2,13 @@
 
 ## Status
 
-**DESIGN CANDIDATE — PRE-BUILD**
+**G2-S0 through G2-S9 CERTIFIED — TERMINAL G2 CLOSURE**
 
-The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle.
+The Scheduler Engine is the platform authority for concrete time/resource feasibility and allocation lifecycle. The certified path covers contract/persistence foundation, resource and schedule management, deterministic availability, atomic reservations, durable one-resource holds, multi-business isolation, frozen Services demand handoff, Scheduler-backed Appointment orchestration, bounded real multi-resource atomicity, and a final clean cross-gate closure.
 
-## 1. Responsibility
+Final exact-head run IDs and artifact digests are recorded on PR #32 after the documentation-complete seal so the branch is not mutated merely to copy its own CI metadata.
+
+## 1. Responsibility and authority boundary
 
 > **Given one immutable scheduling demand, determine feasible time/resource allocations and commit/release them safely under concurrency.**
 
@@ -14,145 +16,105 @@ Scheduler owns:
 
 ```text
 resources
-resource capabilities
-schedule templates
-schedule overrides
+capabilities
+schedule templates and overrides
 capacity
 availability generation
-holds
+one-resource holds
 reservations
-assignments
-booking conflicts
-reservation lifecycle
+resource assignments
+capacity conflicts
+Scheduler operation identity/replay
 ```
 
-Scheduler does not own:
+Scheduler does **not** own:
 
 ```text
 Service/Offering commercial semantics
 Customer profiles
-Appointment conversation state
-channel/provider rendering
+Appointment conversation/domain orchestration
+provider/channel rendering
 payment execution
 external provider integrations
 ```
 
-## 2. Core domain
-
-### 2.1 Resource
-
-```ts
-type SchedulerResource = Readonly<{
-  resourceId: string;
-  businessSlug: string;
-  code: string;
-  kind: string;
-  name: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  timeZone: string;
-  capacity: number;
-  capabilities: readonly ResourceCapability[];
-  revision: number;
-}>;
-
-type ResourceCapability = Readonly<{
-  code: string;
-  capacityUnits?: number;
-  metadata?: Readonly<Record<string, unknown>>;
-}>;
-```
-
-Examples of resource `kind` are data, not branches: `PERSON`, `ROOM`, `BAY`, `VEHICLE`, `MACHINE`, `POOL`.
-
-### 2.2 Schedule template
-
-```ts
-type ScheduleTemplate = Readonly<{
-  scheduleId: string;
-  businessSlug: string;
-  resourceId: string;
-  timeZone: string;
-  weeklyWindows: readonly WeeklyAvailabilityWindow[];
-  revision: number;
-}>;
-```
-
-A weekly window expresses recurring working availability, not bookings.
-
-### 2.3 Schedule override
-
-```ts
-type ScheduleOverride = Readonly<{
-  overrideId: string;
-  businessSlug: string;
-  resourceId: string;
-  startAt: string;
-  endAt: string;
-  kind: 'AVAILABLE' | 'UNAVAILABLE' | 'CAPACITY';
-  capacity?: number;
-  reasonCode?: string;
-  revision: number;
-}>;
-```
-
-Overrides support holidays, leave, maintenance, exceptional opening, temporary capacity changes, etc.
-
-### 2.4 Hold
-
-```ts
-type SchedulerHold = Readonly<{
-  holdId: string;
-  businessSlug: string;
-  demandId: string;
-  startAt: string;
-  endAt: string;
-  assignments: readonly ResourceAssignment[];
-  expiresAt: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'RELEASED' | 'CONSUMED';
-}>;
-```
-
-### 2.5 Reservation
-
-```ts
-type SchedulerReservation = Readonly<{
-  reservationId: string;
-  businessSlug: string;
-  demandId: string;
-  startAt: string;
-  endAt: string;
-  timeZone: string;
-  assignments: readonly ResourceAssignment[];
-  status: 'RESERVED' | 'CANCELLED' | 'COMPLETED';
-  revision: number;
-  createdAt: string;
-  updatedAt: string;
-}>;
-```
-
-## 3. Availability calculation
-
-Availability is a pure read over current scheduling truth plus immutable demand.
-
-Inputs:
+Canonical authority chain:
 
 ```text
-SchedulingDemand
-query window
-timezone
-resource capability constraints
-resource status
-weekly schedule
-schedule overrides
-active holds
-active reservations
-buffers
-capacity
+Services    = catalog/commercial + abstract scheduling semantics
+Scheduler   = concrete time/resource allocation
+Temporal    = durable orchestration authority
+Appointment = domain projection and interaction state
+PostgreSQL  = transactional operational truth
+MongoDB     = semantic/audit evidence, not active free/busy truth
+ObjectStore = attachment bytes/content integrity
 ```
 
-Output is a deterministic ordered list of `SlotCandidate` values.
+## 2. Certified domain baseline
 
-Default stable ordering:
+### SchedulerResource
+
+Business-scoped, revisioned, explicitly time-zoned and capacity-bounded. Resource kind and capability remain data, never product/vertical runtime branches.
+
+### Schedule
+
+Recurring weekly schedule windows and exceptional `AVAILABLE`, `UNAVAILABLE`, and `CAPACITY` overrides remain separate Scheduler truth surfaces.
+
+### SchedulingDemand
+
+`SchedulingDemand` is the immutable Services → Scheduler handoff. It freezes by value:
+
+```text
+business scope
+durable demand identity
+Service identity + revision
+Offering identity + revision
+duration
+capacity units
+abstract capability/resource-kind requirements
+pre/post buffers
+```
+
+Once persisted, Scheduler executes from that frozen material without re-reading mutable Services catalog head.
+
+### SlotCandidate
+
+`SlotCandidate` is deterministic and advisory. It is never persisted as reservation truth. From G2-S8 onward a candidate may contain multiple concrete assignments when the demand requires multiple independent capabilities.
+
+### Hold
+
+A `SchedulerHold` is durable PostgreSQL allocation truth with explicit assignments, occupied interval and persisted `expiresAt`. G2-S4 certifies the current one-resource hold lifecycle. G2-S8 and G2-S9 do not widen that claim to multi-resource holds.
+
+### Reservation
+
+A `SchedulerReservation` is persisted PostgreSQL allocation truth with explicit resource assignments and revision/status lifecycle. G2-S8 proves that one reservation may atomically own multiple assignment rows. G2-S9 re-audits that normalized truth jointly with Appointment and command-ledger state.
+
+## 3. G2-S0 — contract + persistence foundation
+
+Certified foundation includes Scheduler contract surface, resource/capability persistence, schedule/override persistence, immutable demand persistence, hold/reservation assignment schema, business-scoped relational isolation, Scheduler command identity ledger, advisory/non-persisted `SlotCandidate`, and a provider-agnostic Scheduler core.
+
+The historical G2-S0 regression guard is forward-compatible: later Appointment integration may consume Scheduler while the Scheduler foundation remains decoupled from Appointment-specific orchestration.
+
+## 4. G2-S1 — management semantics
+
+Certified commands:
+
+```text
+CreateResource
+UpdateResource
+SetResourceStatus
+SetScheduleTemplate
+PutScheduleOverride
+DeleteScheduleOverride
+```
+
+Successful mutation and `scheduler_commands` operation identity commit atomically. Same operation + same canonical material replays. Same operation + different material fails closed. Stale revisions and cross-business mutations cannot partially mutate state.
+
+## 5. G2-S2 — deterministic one-resource availability
+
+The certified one-resource availability primitive evaluates business scope, ACTIVE status, capability code/quantity, resource-kind constraints, weekly schedules, overrides, reservations, logically-unexpired holds, buffers, segment-wise capacity, granularity, preferred resource IDs and limits.
+
+Stable order:
 
 ```text
 startAt ASC
@@ -161,126 +123,272 @@ assignment resource IDs ASC
 candidateId ASC
 ```
 
-No randomness is required in G2 baseline.
+Candidate identity derives from canonical business/demand/time/assignment material, never randomness or response metadata.
 
-## 4. Time semantics
+## 6. G2-S3 — atomic one-resource reservation
 
-All persisted instants use unambiguous timestamp-with-offset/UTC representations. Business and resource time zones are explicit IANA-style identifiers.
-
-Rules:
-
-- no server-local implicit timezone;
-- daylight-saving transitions must not be silently flattened;
-- human date parsing remains a CTA/domain adapter concern before Scheduler query;
-- Scheduler receives canonical instants/windows.
-
-## 5. Granularity
-
-The first Scheduler implementation may use configurable slot granularity, e.g. 15 or 30 minutes, but the contract must not assume that Offering duration equals granularity.
-
-Example:
-
-```text
-granularity 15m
-offering duration 45m
-candidate start 10:15
-candidate end   11:00
-```
-
-## 6. Buffers
-
-Demand may include pre/post buffers. Buffers consume scheduling capacity even when the customer-visible service interval excludes them.
-
-```text
-resource occupancy = bufferBefore + service duration + bufferAfter
-```
-
-The reservation should retain enough data to reconstruct the occupied interval and customer-visible interval if they differ.
-
-## 7. Capacity model
-
-Each Resource has positive integer capacity. Each assignment consumes positive units.
-
-Baseline rule:
-
-```text
-sum(active reservation units + active hold units + requested units)
-<= effective capacity for the interval
-```
-
-Effective capacity can be modified by an override.
-
-## 8. Capability matching
-
-A Resource satisfies a `CapabilityDemand` only when required capability code/kind constraints match deterministically.
-
-No fuzzy matching, LLM inference or provider-specific business logic exists in this path.
-
-## 9. Assignment scope
-
-G2 baseline should certify one-resource demand first, but persistence/contracts should support multiple resource assignments because real businesses commonly require combinations such as:
-
-```text
-veterinarian + room
-technician + workshop bay
-vehicle + driver
-machine + operator
-```
-
-Multi-resource search/optimization may be a later Scheduler gate; it must not force a schema rewrite.
-
-## 10. Mutation commands
-
-Minimum management operations:
-
-```text
-CreateResource
-UpdateResource
-SetResourceStatus
-SetScheduleTemplate
-AddScheduleOverride
-UpdateScheduleOverride
-RemoveScheduleOverride
-```
-
-Minimum allocation operations:
-
-```text
-CreateHold
-ReleaseHold
-ConfirmReservation
-CancelReservation
-CompleteReservation
-```
-
-All mutations are business-scoped, idempotent and revision-aware where mutable existing state is changed.
-
-## 11. Atomic reservation confirmation
-
-`ConfirmReservation` is the critical correctness boundary.
-
-Required transaction behavior:
+`confirmReservationAtomic(...)` revalidates current Scheduler truth at commit time before persisting a reservation.
 
 ```text
 BEGIN
-  lock/revalidate relevant scheduling capacity
-  verify resource active
-  verify schedule/override feasibility
-  verify no conflicting capacity consumption
-  consume valid hold if supplied
-  insert reservation + assignments
+  validate command + immutable demand
+  lock business+operation idempotency key
+  replay identical prior successful operation if present
+  reject same operation identity + changed material
+  resolve advisory candidate
+  lock resource capacity
+  lock resource row FOR UPDATE
+  require ACTIVE
+  re-run deterministic availability
+  classify capacity loss / stale slot
+  persist immutable demand if new
+  insert reservation + assignment + successful command
 COMMIT
 ```
 
-A race loser receives a typed conflict and no partial reservation.
+Final-unit concurrency is certified as exactly one winner and one zero-effect loser.
 
-Implementation mechanism may evolve, but observable semantics are mandatory.
+## 7. Replay / idempotency
 
-## 12. Persistence direction
+```text
+same successful operationId + same material
+→ same durable result
+→ replayed = true
+→ no duplicate mutation
 
-PostgreSQL is canonical Scheduler truth.
+same operationId + changed material
+→ IDEMPOTENCY_MATERIAL_CONFLICT
+→ no second mutation
+```
 
-Candidate tables:
+Scheduler command identity is business-scoped.
+
+## 8. G2-S4 — holds, expiry and consumption
+
+Certified semantics include durable hold create/release/replay, persisted logical expiry independent of process timers, restart/re-entry correctness, atomic valid-hold consumption, `ACTIVE → CONSUMED`, and expired-hold zero-effect failure.
+
+Current certification boundary remains one concrete resource per hold.
+
+## 9. G2-S5 — multi-business generality
+
+The same Scheduler implementation proves business-scoped resource/capability/schedule/availability/hold/reservation/command state, same operation ID reuse across businesses, same resource code reuse across businesses, closed cross-business references and isolation of capacity exhaustion.
+
+Business differences remain data rather than runtime forks.
+
+## 10. G2-S6 — Services frozen-revision handoff
+
+Services owns abstract scheduling semantics through versioned scheduling profiles:
+
+```text
+capacityUnits
+requiredCapabilities[].code
+requiredCapabilities[].quantity
+requiredCapabilities[].resourceKinds?
+buffers.beforeMinutes
+buffers.afterMinutes
+```
+
+Runtime handoff:
+
+```text
+ServicesSelectionSnapshot
+→ materialize SchedulingDemand by value
+→ validate
+→ persist scheduler_demands + snapshot_hash
+→ Scheduler executes from frozen demand
+```
+
+The N→N+1 proof certifies that demand N retains its original scheduling semantics after mutable Services head advances, while a new demand sees N+1.
+
+## 11. G2-S7 — Scheduler-backed Appointment orchestration
+
+Canonical path:
+
+```text
+Services exact selection revision
+→ freeze SchedulingDemand
+→ Scheduler QueryAvailability
+→ advisory SlotCandidate
+→ user slot selection
+→ explicit Finalize
+→ atomic ConfirmReservation
+→ appointments.scheduler_reservation_id
+→ CTA/domain terminal projection
+```
+
+Temporal remains orchestration authority. Scheduler never becomes Customer or Appointment authority.
+
+Successful migrated Appointment truth uses `scheduler_reservations` plus `scheduler_reservation_assignments`; `appointments.resource_reservation_id` remains NULL on the migrated path, so there is no legacy shadow allocation.
+
+Finalization uses deterministic operation identity:
+
+```text
+appointment-finalize:<workflowId>
+```
+
+Retries replay the same Scheduler reservation. If Scheduler confirmation succeeds but downstream Appointment persistence permanently fails, ordinary retries first reuse the confirmed result; only after configured retry exhaustion does bounded saga compensation lock the operation/resource/reservation, verify no Appointment reference, transition `RESERVED → CANCELLED`, and preserve immutable command evidence.
+
+That compensation is not a generalized public cancellation lifecycle.
+
+G2-S7 remains a one-resource Appointment product slice.
+
+## 12. G2-S8 — certified multi-resource atomicity
+
+### 12.1 Scope
+
+G2-S8 implements a minimal real multi-resource Scheduler path rather than a paper deferral.
+
+Canonical certified fixture:
+
+```text
+SchedulingDemand
+  ├── BAY_ACCESS → one concrete BAY
+  └── TECHNICIAN → one concrete TECHNICIAN
+       ↓
+deterministic joint availability
+       ↓
+atomic multi-resource confirmation
+```
+
+The bounded semantics are:
+
+```text
+one distinct concrete resource per required capability demand
+one canonical query timezone across the selected set
+demand.capacityUnits consumed by each assignment
+candidate assignments ordered by resourceId
+capacity locks acquired by resourceId in deterministic order
+complete joint candidate revalidated at commit
+one reservation + all assignment rows + command result commit atomically
+```
+
+### 12.2 Joint availability
+
+`queryDeterministicMultiResourceAvailability(...)` composes the already-certified one-resource availability primitive independently for each capability demand, intersects matching time intervals, rejects reuse of the same concrete resource for two capability demands, and emits canonical joint candidates.
+
+This is deterministic composition, not a solver. No best-fit or optimization score is certified.
+
+### 12.3 Atomic confirmation
+
+`confirmMultiResourceReservationAtomic(...)` uses the same business-scoped command-ledger identity model as G2-S3, but serializes the full selected resource set.
+
+```text
+BEGIN
+  lock operation identity
+  if successful command already exists:
+    validate identical material/result identity
+    replay durable reservation immediately
+
+  resolve current joint candidate for new operation
+  sort assignments by resourceId
+  lock each scheduler-capacity key in that order
+  lock all selected resource rows in the same order
+  require every selected resource ACTIVE
+  revalidate complete joint candidate
+  persist immutable demand if new
+  insert one reservation
+  insert every resource assignment
+  insert successful command result
+COMMIT
+```
+
+The durable replay check intentionally precedes current availability resolution. A successful reservation consumes its own slot; therefore current free/busy state cannot be used as a replay gate.
+
+### 12.4 Concurrency invariant
+
+The dedicated PostgreSQL proof races two distinct operations for the same final BAY + TECHNICIAN pair/time interval:
+
+```text
+exactly one confirmation succeeds
+exactly one fails closed
+winner has one reservation + both assignments + command result
+loser has zero reservation / assignment / command effect
+```
+
+Deterministic resource lock ordering avoids operation-specific lock-order drift.
+
+### 12.5 Explicit non-claims
+
+G2-S8 does not certify:
+
+```text
+multi-resource hold create/consume
+solver / optimization / scoring / best-fit / routing
+heterogeneous candidate display timezones
+generalized staff shift / travel / sequence planning
+Appointment consuming multi-resource demands
+generalized cancellation/completion lifecycle
+```
+
+G2-S4 holds and the G2-S7 Appointment product path retain their existing one-resource boundaries.
+
+## 13. G2-S9 — final clean closure
+
+G2-S9 adds no normal feature scope. Its purpose is to certify that all previous Scheduler gates coexist on one exact final branch head and preserve their truth boundaries.
+
+Dedicated candidate proof:
+
+```text
+candidate head  3ad95d39d69c39c0ff8bc44f959f4087d75cc52c
+push run        35129373821  SUCCESS
+PR run          35129379874  SUCCESS
+```
+
+The terminal gate starts from pristine PostgreSQL/Mongo persistence and executes:
+
+```text
+full migration chain
+G2-S0 persistence
+G2-S1 management
+G2-S2 deterministic availability
+G2-S3 atomic one-resource reservation
+G2-S4 one-resource hold lifecycle
+G2-S5 multi-business isolation
+G2-S6 frozen Services demand handoff
+G2-S8 atomic multi-resource allocation
+Temporal + worker + CTA + channel runtime
+G2-S7 Appointment/Services integration
+CTA orchestration regression
+terminal relational truth audit
+```
+
+The final truth audit verifies the graph that remains after all those probes have executed together:
+
+```text
+Scheduler resources/reservations/assignments/holds/demands/commands present
+zero orphan scheduler_reservation_assignments
+Scheduler-backed Appointments have zero legacy ResourceReservation shadows
+G2-S7 Appointments point to RESERVED capacity with exactly one assignment
+G2-S8 reservations retain exactly BAY + TECHNICIAN assignments
+G2-S5 business fixtures remain materially present
+no duplicate business+operation command identities
+successful reservation commands keep durable result IDs
+```
+
+Static closure guards additionally prohibit provider/channel mechanics, Appointment workflow logic, or mutable Services table queries from leaking into Scheduler core.
+
+## 14. Forward-compatible predecessor gates
+
+Historical S0/S3/S4/S5/S6 guards protect the durable producer invariant:
+
+```text
+later consumers may use Scheduler
+BUT
+Scheduler foundation/reservation/hold/multi-business/Services-handoff core
+must not import or branch on Appointment/provider-specific orchestration
+```
+
+G2-S8 and G2-S9 continue that provider/channel-agnostic rule.
+
+## 15. Capacity/time semantics
+
+Capacity feasibility applies to occupied intervals including demand buffers. Persisted instants remain explicit offset/UTC values; Scheduler receives canonical instants and explicit IANA timezones. No implicit server-local time is permitted.
+
+The current G2-S8 joint-candidate proof requires a common canonical query timezone across the selected resource set. Cross-timezone optimization is not claimed by G2-S9.
+
+## 16. PostgreSQL authority
+
+Canonical Scheduler truth remains:
 
 ```text
 scheduler_resources
@@ -288,6 +396,7 @@ scheduler_resource_capabilities
 scheduler_schedule_templates
 scheduler_schedule_windows
 scheduler_schedule_overrides
+scheduler_demands
 scheduler_holds
 scheduler_hold_assignments
 scheduler_reservations
@@ -295,93 +404,71 @@ scheduler_reservation_assignments
 scheduler_commands
 ```
 
-MongoDB may hold semantic/audit events but never active free/busy truth.
+Composite business-scoped foreign keys protect declared relationships. The command ledger is unique on `(business_slug, operation_id)`. Immutable demand input is persisted by value with `snapshot_hash` and no live Services foreign-key coupling.
 
-## 13. Expiry model
+Multi-resource certification uses the existing normalized assignment table; no second allocation authority is introduced.
 
-Hold expiry must be based on persisted timestamps, not adapter/browser memory.
-
-A hold whose `expiresAt <= now` must not block new reservation confirmation even if cleanup has not physically deleted/updated the row yet. Cleanup is housekeeping; expiry semantics are logical truth.
-
-## 14. Cancellation and completion
-
-Cancellation releases future capacity according to reservation status/policy. Completion preserves historical allocation but no longer affects future scheduling.
-
-Scheduler lifecycle does not imply refund/payment behavior.
-
-## 15. Business isolation
-
-Every query and mutation includes `businessSlug`. Resource IDs must not bypass scope validation.
-
-The same resource code may exist in two businesses.
-
-## 16. Deterministic recommendation vs scheduling optimization
-
-Services recommendation answers **which Offering** is appropriate.
-
-Scheduler optimization answers **which feasible slot/resource assignment** is preferable.
-
-These are separate concerns and should remain separate algorithms/contracts.
-
-G2 baseline may return chronologically sorted feasible candidates before introducing sophisticated optimization.
-
-## 17. Observability projection
-
-Every allocation mutation should expose/capture:
+## 17. Certification path
 
 ```text
-operationId
-businessSlug
-demandId
-resource assignment IDs
-requested interval
-resulting reservation/hold ID
-conflict/error code
-Temporal workflow correlation when supplied
+G2-S0 contract + persistence foundation                       ✅ CERTIFIED
+G2-S1 resource/capability/schedule management                ✅ CERTIFIED
+G2-S2 deterministic availability reads                      ✅ CERTIFIED
+G2-S3 atomic single-resource reservation conflict           ✅ CERTIFIED
+G2-S4 holds + expiry/replay                                  ✅ CERTIFIED
+G2-S5 multi-business generality                              ✅ CERTIFIED
+G2-S6 Services snapshot/demand integration                   ✅ CERTIFIED
+G2-S7 Appointment Workflow integration                       ✅ CERTIFIED
+G2-S8 multi-resource assignment + atomicity                  ✅ CERTIFIED
+G2-S9 final clean certification                              ✅ CERTIFIED
 ```
 
-Secrets/provider credentials do not belong in Scheduler audit.
-
-## 18. Certification path proposal
+Machine terminal state:
 
 ```text
-G2-S0 Scheduler contract + persistence
-G2-S1 resource/schedule management
-G2-S2 deterministic availability reads
-G2-S3 atomic single-resource reservation conflict
-G2-S4 holds + expiry/replay
-G2-S5 multi-business generality
-G2-S6 Services snapshot integration
-G2-S7 Appointment Workflow integration
-G2-S8 multi-resource assignment or explicit deferral proof
-G2-S9 final clean certification
+G2-S0..G2-S9 = CERTIFIED
+currentNext  = null
 ```
 
-The exact gate numbering can be finalized in Plan before build.
+No Scheduler gate was allowed to advance until its predecessor had dedicated CI, protected predecessor regressions, terminal marker, artifact evidence, receipt/non-claims, machine-ledger transition, and same-gate exact-final-head rerun.
 
-## 19. Required negative cases
+## 18. Terminal truth boundary
+
+Scheduler G2 certifies:
 
 ```text
-unknown business
-cross-business resource reference
-inactive resource
-invalid timezone
-invalid/zero capacity
-malformed schedule window
-overlapping contradictory override
-unsatisfied capability
-no availability
-stale candidate
-expired hold
-double confirm replay
-same operation identity + different material
-concurrent capacity conflict
-cancel unknown reservation
-stale reservation revision
+deterministic resource/capability/schedule management
+deterministic one-resource availability
+atomic one-resource reservation under concurrency
+durable one-resource hold lifecycle and logical expiry
+multi-business isolation
+immutable Services scheduling-demand handoff
+Scheduler-backed one-resource Appointment finalization
+bounded exhausted-retry orphan-capacity compensation
+deterministic bounded multi-resource availability
+atomic BAY + TECHNICIAN reservation
+operation idempotency/replay
+all-or-nothing multi-resource concurrency
 ```
 
-## 20. Bounded future claim
+Scheduler G2 does **not** certify:
 
-Only executable evidence may eventually support:
+```text
+multi-resource holds
+solver / optimizer / ranking / best-fit / routing
+workforce planning or travel/sequence optimization
+heterogeneous cross-timezone optimization
+Appointment generalized multi-resource demand consumption
+generalized cancellation/completion lifecycle
+arbitrary historical Services reconstruction
+production SLA / load / HA / disaster recovery
+whole-platform release readiness
+Integration Engine provider behavior
+Agent/MCP intelligence
+```
 
-> The Scheduler Engine deterministically computes business-scoped resource availability and safely manages holds/reservations under explicit time, capability and capacity constraints, preserving idempotency, isolation and atomic conflict semantics independently of channel/provider presentation.
+## 19. Bounded terminal claim
+
+The Scheduler Engine G2 track is closed for its bounded deterministic scheduling scope. It is certified through G2-S9 for resource scheduling, durable one-resource holds, one- and multi-resource atomic reservations, multi-business isolation, immutable Services revision handoff, Scheduler-backed one-resource Appointment orchestration, replay/idempotency, bounded failure compensation, and final shared-state integrity.
+
+G2-S9 closure does not authorize merge. PR #32 remains draft/unmerged until explicit owner authorization. New normal Scheduler feature work must not be smuggled into the closed G2 claim; any later expansion requires a separately scoped post-G2 change and its own truth boundary.

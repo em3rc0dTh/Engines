@@ -61,10 +61,10 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
       if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
-    // Telegram provider interaction for ME1 is intentionally gated until the
-    // provider regression slice. Temporal owns the new phase now; Telegram
-    // must not invent selection/creation semantics independently.
-    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
+    case 'WAITING_FOR_MANAGED_ENTITY':
+      if (state.nextAction === 'SELECT_MANAGED_ENTITY') return 'SELECT_MANAGED_ENTITY';
+      if (state.nextAction === 'CREATE_MANAGED_ENTITY') return 'CREATE_MANAGED_ENTITY';
+      return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
@@ -87,6 +87,16 @@ export function telegramAppointmentRenderIntent(state: AppointmentStateProjectio
 
 function inlineRows(items: readonly Readonly<{ text: string; callback_data: string }>[]): Readonly<Record<string, unknown>> {
   return { inline_keyboard: items.map((item) => [item]) };
+}
+
+function appointmentDatePrompt(state: AppointmentStateProjection): string {
+  if (state.issues.some((item) => item.code === 'NO_AVAILABILITY')) {
+    return 'No hay horarios disponibles para esa fecha. Elige otra fecha. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  if (state.issues.some((item) => item.code === 'PAST_DATE')) {
+    return 'Esa fecha ya pasó. Elige una fecha futura. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  return '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
 }
 
 export function renderTelegramAppointment(
@@ -130,11 +140,11 @@ export function renderTelegramAppointment(
       text: `Selecciona ${state.managedEntity.policy.label.toLowerCase()}.`,
       replyMarkup: inlineRows(state.managedEntity.candidates.map((entity) => ({
         text: entity.displayName,
-        callback_data: `appointment_managed_entity:${entity.managedEntityId}`,
+        callback_data: `ame:${entity.managedEntityId}`,
       }))),
     };
     case 'CREATE_MANAGED_ENTITY': return {
-      text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+      text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.\n\nEscribe: nombre | referencia estable\nEjemplo: Renault Logan 2018 | ABC-123`,
       replyMarkup: { remove_keyboard: true },
     };
     case 'SELECT_SERVICE': return {
@@ -152,7 +162,7 @@ export function renderTelegramAppointment(
       }))),
     };
     case 'ASK_DATE': return {
-      text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».',
+      text: appointmentDatePrompt(state),
       replyMarkup: { remove_keyboard: true },
     };
     case 'SELECT_SLOT': return {

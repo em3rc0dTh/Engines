@@ -1,0 +1,291 @@
+name: MK1 Integration G3-I4 Kapso Real Provider Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g3-integration
+    paths:
+      - 'mk1/runtime/src/contracts/integration-engine/**'
+      - 'mk1/runtime/src/integration/**'
+      - 'mk1/runtime/src/persistence/postgres/integration-*.repository.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-readiness.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-real-outbound.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-real-webhook.ts'
+      - 'mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts'
+      - 'mk1/runtime/scripts/verify-integration-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/g3-integration-engine-i4.md'
+      - 'mk1/Test/g3-integration-engine-i4-human-runbook.md'
+      - 'mk1/Test/g3-integration-certification-ledger.json'
+      - 'mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md'
+      - 'mk1/Design/07-integration-engine-contract.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-integration-g3-i4.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-integration-g3-i4-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/engines_mk0
+  G3_I4_CERT_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  i4-contract-certification:
+    name: g3-i4-contract-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I4_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: TypeScript
+        run: npm run check | tee /tmp/g3-i4-typescript.log
+      - name: Verify I4 remains certified under the current sequential ledger
+        run: |
+          npm run verify:integration:g3 | tee /tmp/g3-i4-ledger.log
+          grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/g3-i4-ledger.log
+          node --input-type=module -e "import fs from 'node:fs'; const ledger=JSON.parse(fs.readFileSync('../Test/g3-integration-certification-ledger.json','utf8')); const i4=ledger.gates.find((gate)=>gate.id==='G3-I4'); if(!i4 || i4.status!=='CERTIFIED') process.exit(1); console.log('INTEGRATION_G3_I4_LEDGER_STATUS_PASS');"
+      - name: Re-certify I0 and I1 contract boundaries
+        run: |
+          npm run test:integration:g3:i0 | tee /tmp/g3-i4-i0.log
+          npx tsx --test src/integration/registry.test.ts | tee /tmp/g3-i4-i1.log
+      - name: Require physical receipt and repository-safe evidence
+        working-directory: .
+        run: |
+          grep -F '✅ CERTIFIED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_CERTIFICATION_PASS' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'INTEGRATION_G3_I4_REAL_PROVIDER_PASS' mk1/Test/g3-integration-engine-i4.md
+          grep -F '25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'replayed        false' mk1/Test/g3-integration-engine-i4.md
+          grep -F 'PASS — real-provider round trip completed.' mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md
+          if grep -E 'KAPSO_API_KEY[=:][[:space:]]*[^<[:space:]]|KAPSO_WEBHOOK_SECRET[=:][[:space:]]*[^<[:space:]]' \
+            mk1/Test/g3-integration-engine-i4.md \
+            mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md; then
+            echo 'Credential-like value found in committed I4 evidence' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I4_PHYSICAL_EVIDENCE_BOUNDARY_PASS' | tee /tmp/g3-i4-physical-evidence.log
+      - name: Prove implementation unchanged since physical source head
+        working-directory: .
+        run: |
+          physical_sha='25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22'
+          git cat-file -e "${physical_sha}^{commit}"
+          git diff --exit-code "$physical_sha" HEAD -- \
+            mk1/runtime/src/contracts/integration-engine \
+            mk1/runtime/src/integration \
+            mk1/runtime/src/persistence/postgres/integration-registry.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-outbound-ledger.repository.ts \
+            mk1/runtime/src/persistence/postgres/integration-inbound-ledger.repository.ts \
+            mk1/runtime/scripts/certify-integration-g3-i4-live-session.ts
+          echo 'INTEGRATION_G3_I4_PHYSICAL_IMPLEMENTATION_IDENTITY_PASS' | tee /tmp/g3-i4-implementation-identity.log
+      - name: Integration authority boundary
+        run: |
+          if grep -R -E "contracts/(scheduler-engine|services-engine)|cta/" \
+            src/integration/secret-resolution.ts \
+            src/integration/provider.ts \
+            src/integration/delivery-executor.ts \
+            src/integration/providers/kapso-whatsapp.ts; then
+            echo 'G3-I4 crossed a protected CTA/Services/Scheduler authority boundary' >&2
+            exit 1
+          fi
+          echo 'INTEGRATION_G3_I4_AUTHORITY_BOUNDARY_PASS' | tee /tmp/g3-i4-authority.log
+      - name: Capture contract certification evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i4-contract-evidence
+          test "$(git rev-parse HEAD)" = "$G3_I4_CERT_REF"
+          git rev-parse HEAD > /tmp/g3-i4-contract-evidence/git-sha.txt
+          cp /tmp/g3-i4-*.log /tmp/g3-i4-contract-evidence/ 2>/dev/null || true
+      - name: Upload contract certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-contract-certification-${{ github.run_id }}
+          path: /tmp/g3-i4-contract-evidence
+          if-no-files-found: error
+
+  i4-postgres-certification:
+    name: g3-i4-postgres-certification
+    needs: i4-contract-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: engines_mk0
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d engines_mk0"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I4_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Apply I1-I3 persistence migrations
+        run: |
+          npx tsx scripts/migrate-postgres-integration-g3-i1.ts | tee /tmp/g3-i4-migrate-i1.log
+          npx tsx scripts/migrate-postgres-integration-g3-i2.ts | tee /tmp/g3-i4-migrate-i2.log
+          npx tsx scripts/migrate-postgres-integration-g3-i3.ts | tee /tmp/g3-i4-migrate-i3.log
+      - name: Re-certify durable I1-I3 predecessors
+        run: |
+          npx tsx scripts/certify-integration-g3-i1.ts | tee /tmp/g3-i4-i1-probe.log
+          grep -F 'INTEGRATION_G3_I1_CERTIFICATION_PASS' /tmp/g3-i4-i1-probe.log
+          npx tsx scripts/certify-integration-g3-i2.ts | tee /tmp/g3-i4-i2-probe.log
+          grep -F 'INTEGRATION_G3_I2_CERTIFICATION_PASS' /tmp/g3-i4-i2-probe.log
+          npx tsx scripts/certify-integration-g3-i3.ts | tee /tmp/g3-i4-i3-probe.log
+          grep -F 'INTEGRATION_G3_I3_CERTIFICATION_PASS' /tmp/g3-i4-i3-probe.log
+      - name: Re-certify deterministic Kapso adapter boundary
+        run: npx tsx scripts/certify-integration-g3-i4-readiness.ts | tee /tmp/g3-i4-adapter.log
+      - name: Require deterministic I4 markers
+        run: |
+          grep -F 'INTEGRATION_G3_I4_SECRET_REF_RESOLUTION_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_OUTBOUND_MAPPING_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_PROVIDER_ERROR_MAPPING_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_WEBHOOK_VERIFICATION_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_INVALID_SIGNATURE_ZERO_DURABLE_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_SECRET_PERSISTENCE_BOUNDARY_PASS' /tmp/g3-i4-adapter.log
+          grep -F 'INTEGRATION_G3_I4_KAPSO_ADAPTER_READY_PASS' /tmp/g3-i4-adapter.log
+      - name: Capture persistence certification evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g3-i4-postgres-evidence
+          test "$(git rev-parse HEAD)" = "$G3_I4_CERT_REF"
+          git rev-parse HEAD > /tmp/g3-i4-postgres-evidence/git-sha.txt
+          cp /tmp/g3-i4-*.log /tmp/g3-i4-postgres-evidence/ 2>/dev/null || true
+      - name: Upload persistence certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-postgres-certification-${{ github.run_id }}
+          path: /tmp/g3-i4-postgres-evidence
+          if-no-files-found: error
+
+  i4-protected-regressions:
+    name: g3-i4-protected-predecessor-regressions
+    needs: i4-contract-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I4_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Scheduler + Services + Appointment regressions
+        run: |
+          npm run test:scheduler:g2:s0
+          npm run test:scheduler:g2:s6
+          npm run test:services:s1
+          npm run test:appointment
+      - name: CTA/channel/provider transport regressions
+        run: |
+          npm run test:cta:poc
+          npm run test:channel:c0
+          npm run test:telegram:bot-api
+          npm run test:whatsapp:kapso
+      - name: Protected predecessor marker
+        run: echo 'INTEGRATION_G3_I4_PREDECESSOR_REGRESSION_PASS'
+
+  integration-g3-i4-certification-seal:
+    name: integration-g3-i4-certification-seal
+    needs:
+      - i4-contract-certification
+      - i4-postgres-certification
+      - i4-protected-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.G3_I4_CERT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install runtime dependencies
+        working-directory: mk1/runtime
+        run: npm ci
+      - name: Verify final G3 ledger preserves I4 certification
+        working-directory: mk1/runtime
+        run: |
+          npm run verify:integration:g3 | tee /tmp/g3-i4-final-ledger.log
+          grep -F 'INTEGRATION_G3_CERTIFICATION_LEDGER_PASS' /tmp/g3-i4-final-ledger.log
+          node --input-type=module -e "import fs from 'node:fs'; const ledger=JSON.parse(fs.readFileSync('../Test/g3-integration-certification-ledger.json','utf8')); const i4=ledger.gates.find((gate)=>gate.id==='G3-I4'); if(!i4 || i4.status!=='CERTIFIED') process.exit(1); console.log('INTEGRATION_G3_I4_LEDGER_STATUS_PASS');"
+      - name: Build exact-head G3-I4 certification seal
+        run: |
+          test "$(git rev-parse HEAD)" = "$G3_I4_CERT_REF"
+          mkdir -p /tmp/g3-i4-certification-seal
+          git rev-parse HEAD | tee /tmp/g3-i4-certification-seal/git-sha.txt
+          cat > /tmp/g3-i4-certification-seal/certification.txt <<'EOF'
+          G3-I0 canonical Integration contracts              PASS
+          G3-I1 provider/connection registry                 PASS
+          G3-I2 durable outbound delivery ledger             PASS
+          G3-I3 authenticated inbound dedup ledger           PASS
+          G3-I4 deterministic Kapso adapter                  PASS
+          G3-I4 real Kapso outbound acceptance               PASS
+          G3-I4 real WhatsApp physical delivery              PASS
+          G3-I4 real signed Kapso webhook                    PASS
+          G3-I4 nonce-bound human round trip                 PASS
+          G3-I4 secret/raw transport durability boundary     PASS
+          Physical implementation identity                  PASS
+          Protected predecessor regressions                  PASS
+          Successor promotion preserves I4 certification     PASS
+          G3-I4 certification                                PASS
+          EOF
+          echo 'INTEGRATION_G3_I4_CERTIFICATION_PASS' | tee /tmp/g3-i4-certification-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integration-g3-i4-certification-${{ github.run_id }}
+          path: /tmp/g3-i4-certification-seal
+          if-no-files-found: error
+      - name: Certification terminal marker
+        run: echo 'INTEGRATION_G3_I4_CERTIFICATION_PASS'

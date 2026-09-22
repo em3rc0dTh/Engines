@@ -1,0 +1,292 @@
+name: MK1 Scheduler G2-S6 Services Frozen Demand Handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/g2-scheduler
+    paths:
+      - 'mk1/runtime/src/contracts/services-engine/**'
+      - 'mk1/runtime/src/contracts/scheduler-engine/**'
+      - 'mk1/runtime/src/persistence/postgres/services.repository.ts'
+      - 'mk1/runtime/src/persistence/postgres/services-management.repository.ts'
+      - 'mk1/runtime/src/scheduler/services-demand-handoff.ts'
+      - 'mk1/runtime/src/scheduler/services-demand-handoff.test.ts'
+      - 'mk1/runtime/src/scheduler/availability-engine.ts'
+      - 'mk1/runtime/migrations/010_services_scheduler_profile.sql'
+      - 'mk1/runtime/scripts/migrate-postgres-scheduler-g2-s6.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s6.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/Test/g2-scheduler-engine-s6.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/05-services-scheduler-boundary.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s6-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s6.yml'
+  pull_request:
+    branches:
+      - feature/pre-scheduler-node-edge-certification
+    paths:
+      - 'mk1/runtime/src/contracts/services-engine/**'
+      - 'mk1/runtime/src/contracts/scheduler-engine/**'
+      - 'mk1/runtime/src/persistence/postgres/services.repository.ts'
+      - 'mk1/runtime/src/persistence/postgres/services-management.repository.ts'
+      - 'mk1/runtime/src/scheduler/services-demand-handoff.ts'
+      - 'mk1/runtime/src/scheduler/services-demand-handoff.test.ts'
+      - 'mk1/runtime/src/scheduler/availability-engine.ts'
+      - 'mk1/runtime/migrations/010_services_scheduler_profile.sql'
+      - 'mk1/runtime/scripts/migrate-postgres-scheduler-g2-s6.ts'
+      - 'mk1/runtime/scripts/certify-scheduler-g2-s6.ts'
+      - 'mk1/runtime/scripts/verify-scheduler-certification-ledger.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/Test/g2-scheduler-engine-s6.md'
+      - 'mk1/Test/g2-scheduler-certification-ledger.json'
+      - 'mk1/Test/g2-scheduler-certification-policy.md'
+      - 'mk1/Design/05-services-scheduler-boundary.md'
+      - 'mk1/Design/06-scheduler-engine-contract.md'
+      - 'mk1/Build/evidence/scheduler-g2-s6-certification-2026-09-14.md'
+      - 'mk1/Plan/04-platform-steps-3-4-5-roadmap.md'
+      - '.github/workflows/mk1-scheduler-g2-s6.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-scheduler-g2-s6-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-and-boundaries:
+    name: g2-s6-contracts-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run check
+      - name: Scheduler sequential certification policy
+        run: npx tsx scripts/verify-scheduler-certification-ledger.ts
+      - name: G2-S0 contract regression
+        run: npm run test:scheduler:g2:s0
+      - name: Services handoff unit contract
+        run: npm run test:scheduler:g2:s6
+      - name: Protected Services / Appointment / CTA regressions
+        run: |
+          npm run test:services:s1
+          npm run test:services:s4
+          npm run test:appointment
+          npm run test:cta:poc
+      - name: Guard Services scheduling profile from concrete Scheduler identities
+        run: |
+          matches="$(grep -nE 'resourceId|scheduleId|holdId|reservationId' src/contracts/services-engine/types.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Concrete Scheduler identities leaked into Services scheduling profile contract.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S6_ABSTRACT_BOUNDARY_PASS'
+      - name: Guard handoff from provider or channel mechanics
+        run: |
+          matches="$(grep -RniE 'telegram|whatsapp|tiktok|webchat|kapso|messenger|facebook' \
+            src/scheduler/services-demand-handoff.ts \
+            src/contracts/services-engine/types.ts \
+            src/persistence/postgres/services.repository.ts \
+            src/persistence/postgres/services-management.repository.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Provider/channel mechanics leaked into Services→Scheduler handoff.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S6_GENERIC_BOUNDARY_PASS'
+      - name: Guard G2-S6 handoff from Appointment coupling
+        run: |
+          matches="$(grep -nEi 'register-new-appointment|appointment-scheduler|AppointmentResult' \
+            src/scheduler/services-demand-handoff.ts \
+            src/contracts/services-engine/types.ts \
+            src/persistence/postgres/services.repository.ts \
+            src/persistence/postgres/services-management.repository.ts || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo 'Appointment-specific orchestration leaked backward into the Services→Scheduler handoff.'
+            exit 1
+          fi
+          echo 'SCHEDULER_G2_S6_APPOINTMENT_DECOUPLING_PASS'
+      - name: Terminal contract marker
+        run: echo 'SCHEDULER_G2_S6_CONTRACTS_PASS'
+
+  postgres-services-handoff:
+    name: g2-s6-postgres-services-handoff
+    needs: contracts-and-boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: mk1/runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start clean PostgreSQL + MongoDB
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d postgres mongo
+      - name: Apply full migration chain including G2-S6
+        run: docker compose run --rm migrate | tee /tmp/g2-s6-migrate.log
+      - name: Re-certify G2-S0 persistence predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s0 | tee /tmp/g2-s6-s0.log
+          grep -F 'SCHEDULER_G2_S0_CONTRACT_PERSISTENCE_PASS' /tmp/g2-s6-s0.log
+      - name: Re-certify G2-S1 management predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s1.ts | tee /tmp/g2-s6-s1.log
+          grep -F 'SCHEDULER_G2_S1_MANAGEMENT_PASS' /tmp/g2-s6-s1.log
+      - name: Re-certify G2-S2 deterministic availability predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npx tsx scripts/certify-scheduler-g2-s2.ts | tee /tmp/g2-s6-s2.log
+          grep -F 'SCHEDULER_G2_S2_AVAILABILITY_PASS' /tmp/g2-s6-s2.log
+      - name: Re-certify G2-S3 atomic reservation predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s3 | tee /tmp/g2-s6-s3.log
+          grep -F 'SCHEDULER_G2_S3_ATOMIC_RESERVATION_PASS' /tmp/g2-s6-s3.log
+      - name: Re-certify G2-S4 hold lifecycle predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s4 | tee /tmp/g2-s6-s4.log
+          grep -F 'SCHEDULER_G2_S4_HOLD_LIFECYCLE_PASS' /tmp/g2-s6-s4.log
+      - name: Re-certify G2-S5 multi-business predecessor
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s5 | tee /tmp/g2-s6-s5.log
+          grep -F 'SCHEDULER_G2_S5_MULTIBUSINESS_PASS' /tmp/g2-s6-s5.log
+          echo 'SCHEDULER_G2_S6_PREDECESSOR_REGRESSION_PASS'
+      - name: Certify Services frozen revision to immutable Scheduler demand
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:scheduler:g2:s6 | tee /tmp/g2-s6-handoff.log
+          grep -F 'SCHEDULER_G2_S6_SERVICES_HANDOFF_PASS' /tmp/g2-s6-handoff.log
+      - name: Start inherited runtime
+        run: |
+          docker compose up --build -d temporal worker cta channel-core
+          for attempt in $(seq 1 75); do
+            if curl -fsS http://localhost:8788/health >/tmp/g2-s6-channel-health.json; then
+              if grep -Fq '"ok":true' /tmp/g2-s6-channel-health.json; then
+                exit 0
+              fi
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs worker cta channel-core temporal migrate
+          exit 1
+      - name: Re-certify inherited CTA orchestration path
+        run: |
+          docker compose run --rm --no-deps -T \
+            -e ENGINES_CHANNEL_URL=http://channel-core:8788 \
+            -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0 \
+            cta npm run probe:cta:poc | tee /tmp/g2-s6-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/g2-s6-cta.log
+          echo 'SCHEDULER_G2_S6_PLATFORM_REGRESSION_PASS'
+      - name: Capture G2-S6 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/g2-s6-evidence
+          git rev-parse HEAD > /tmp/g2-s6-evidence/git-sha.txt
+          cp /tmp/g2-s6-migrate.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s0.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s1.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s2.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s3.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s4.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-s5.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-handoff.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-cta.log /tmp/g2-s6-evidence/ 2>/dev/null || true
+          cp /tmp/g2-s6-channel-health.json /tmp/g2-s6-evidence/ 2>/dev/null || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,service_id,revision,service_name FROM service_catalog WHERE business_slug='g2-s6-services-handoff' ORDER BY service_id;" \
+            > /tmp/g2-s6-evidence/services-head.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,product_id,revision,duration_minutes,scheduling_profile FROM service_products WHERE business_slug='g2-s6-services-handoff' ORDER BY product_id;" \
+            > /tmp/g2-s6-evidence/offerings-head.txt 2>&1 || true
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -c \
+            "SELECT business_slug,demand_id,service_id,service_revision,offering_id,offering_revision,duration_minutes,capacity_units,required_capabilities,buffer_before_minutes,buffer_after_minutes,snapshot_hash FROM scheduler_demands WHERE business_slug='g2-s6-services-handoff' ORDER BY demand_id;" \
+            > /tmp/g2-s6-evidence/immutable-demands.txt 2>&1 || true
+      - name: Upload G2-S6 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s6-${{ github.run_id }}
+          path: /tmp/g2-s6-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  scheduler-g2-s6-seal:
+    name: scheduler-g2-s6-seal
+    needs:
+      - contracts-and-boundaries
+      - postgres-services-handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build G2-S6 receipt
+        run: |
+          mkdir -p /tmp/g2-s6-seal
+          git rev-parse HEAD | tee /tmp/g2-s6-seal/git-sha.txt
+          cat > /tmp/g2-s6-seal/certification.txt <<'EOF'
+          G2-S0..G2-S5 predecessor regressions          PASS
+          Services scheduling profile persistence       PASS
+          frozen Services revision N materialization    PASS
+          immutable Scheduler demand persistence        PASS
+          identical durable demand replay               PASS
+          mutable catalog N+1 cannot mutate demand N    PASS
+          demand N keeps N Scheduler semantics          PASS
+          new demand materialization sees N+1           PASS
+          demand identity material conflict fails closed PASS
+          Services profile contains no concrete resource identity PASS
+          inherited CTA/Temporal regression             PASS
+          G2-S6 handoff remains Appointment-decoupled   PASS
+          EOF
+          echo 'SCHEDULER_G2_S6_CERTIFICATION_PASS' | tee /tmp/g2-s6-seal/terminal-marker.txt
+      - name: Upload G2-S6 seal
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-g2-s6-seal-${{ github.run_id }}
+          path: /tmp/g2-s6-seal
+          if-no-files-found: error
+      - name: Terminal certification marker
+        run: echo 'SCHEDULER_G2_S6_CERTIFICATION_PASS'

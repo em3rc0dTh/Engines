@@ -1,0 +1,123 @@
+name: MK1 Platform OG0 Observability Governance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cert/platform-solidity-pre-agent
+    paths:
+      - 'mk1/runtime/src/observability/**'
+      - 'mk1/runtime/observability/**'
+      - 'mk1/runtime/docker-compose.observability.yml'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/runtime/docker-compose.layer6.yml'
+      - 'mk1/runtime/Dockerfile'
+      - 'mk1/runtime/src/persistence/postgres/resilient-pool.ts'
+      - 'mk1/runtime/scripts/certify-platform-og0-observability-governance.ts'
+      - '.github/workflows/mk1-platform-og0-observability-governance.yml'
+
+permissions:
+  contents: read
+
+env:
+  PLATFORM_OG0_CERT_REF: ${{ github.sha }}
+  ENGINES_OBSERVER_ADMIN_TOKEN: og0-ci-operator-token
+
+jobs:
+  observability-governance:
+    name: platform-og0-observability-governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_OG0_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Exact-head and TypeScript guards
+        run: |
+          test "$(git rev-parse HEAD)" = "$PLATFORM_OG0_CERT_REF"
+          npm run check
+      - name: Start full runtime plus observability plane
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose down -v --remove-orphans || true
+          $compose up --build -d postgres mongo minio temporal
+          $compose run --rm minio-init
+          $compose up --build -d migrate worker cta channel-core
+          $compose up --build -d platform-observer prometheus grafana otel-collector
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8890/health >/dev/null               && curl -fsS http://127.0.0.1:9090/-/ready >/dev/null               && curl -fsS http://127.0.0.1:3000/api/health >/dev/null               && curl -fsS http://127.0.0.1:13133/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          $compose ps -a
+          exit 1
+      - name: Generate real correlated audit evidence
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml             run --rm --no-deps -T             -e ENGINES_CHANNEL_URL=http://channel-core:8788             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run probe:cta:poc | tee /tmp/og0-cta.log
+          grep -F 'CTA_ORCHESTRATION_POC_PASS' /tmp/og0-cta.log
+      - name: Certify metrics, governance, audit, Grafana, Prometheus, and OTel
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose run --rm --no-deps -T \
+            -e ENGINES_OBSERVER_URL=http://platform-observer:8890 \
+            -e ENGINES_PROMETHEUS_URL=http://prometheus:9090 \
+            -e ENGINES_GRAFANA_URL=http://grafana:3000 \
+            -e ENGINES_OTEL_HEALTH_URL=http://otel-collector:13133 \
+            -e MONGO_URL=mongodb://mongo:27017 \
+            -e MONGO_DB=engines_mk0 \
+            -e ENGINES_OBSERVER_ADMIN_TOKEN="$ENGINES_OBSERVER_ADMIN_TOKEN" \
+            cta npx tsx scripts/certify-platform-og0-observability-governance.ts | tee /tmp/og0-core.log
+      - name: Prove component-down detection and alertability
+        run: |
+          compose='docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml'
+          $compose stop channel-core
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8890/metrics | grep -F 'engines_component_up{component="channel-core"} 0'; then break; fi
+            sleep 1
+          done
+          sleep 7
+          curl -fsS 'http://127.0.0.1:9090/api/v1/query?query=ALERTS%7Balertname%3D%22EnginesComponentDown%22%7D'             | tee /tmp/og0-alert.json
+          grep -F 'EnginesComponentDown' /tmp/og0-alert.json
+          echo 'OBSERVABILITY_COMPONENT_DOWN_ALERT_PASS'
+          $compose start channel-core
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8890/metrics | grep -F 'engines_component_up{component="channel-core"} 1'; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8890/health >/dev/null
+          echo 'OBSERVABILITY_COMPONENT_RECOVERY_PASS'
+      - name: Capture OG0 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/platform-og0-evidence
+          git rev-parse HEAD > /tmp/platform-og0-evidence/git-sha.txt
+          cp /tmp/og0-* /tmp/platform-og0-evidence/ 2>/dev/null || true
+          curl -fsS http://127.0.0.1:8890/metrics > /tmp/platform-og0-evidence/metrics.txt 2>/dev/null || true
+          curl -fsS http://127.0.0.1:9090/api/v1/rules > /tmp/platform-og0-evidence/prometheus-rules.json 2>/dev/null || true
+          docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml             logs --no-color platform-observer > /tmp/platform-og0-evidence/observer.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-og0-observability-governance-${{ github.run_id }}
+          path: /tmp/platform-og0-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.layer6.yml -f docker-compose.observability.yml down -v --remove-orphans || true
+      - name: Terminal marker
+        run: echo 'OBSERVABILITY_GOVERNANCE_CORE_PASS'
+# Final pre-Agent exact-head revalidation trigger.
+# Unified final-head certification trigger.
+# Unified exact-head revalidation trigger after ME1 physical seal reconciliation.

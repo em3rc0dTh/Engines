@@ -2,6 +2,7 @@ import {
   WEBCHAT_CONVERSATION_STORAGE_KEY,
   clearStaleConversationSession,
   isRecoverableStaleConversationError,
+  projectRecoveredTranscript,
 } from './session-recovery.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,6 +19,7 @@ const state = {
   lastPhaseSignature: '',
   polling: false,
   submitting: false,
+  transcriptHydrated: false,
 };
 
 function randomId(prefix) {
@@ -315,10 +317,19 @@ function renderInteraction() {
   setInput(null, 'Waiting for Workflow state', false);
 }
 
+function hydrateRecoveredTranscript(snapshot) {
+  if (state.transcriptHydrated || $('messages').childElementCount > 0) return;
+  for (const message of projectRecoveredTranscript(snapshot)) {
+    appendMessage(message.kind, message.text);
+  }
+  state.transcriptHydrated = true;
+}
+
 function render(snapshot) {
   state.snapshot = snapshot;
   state.view = snapshot.view;
   state.workflowId = snapshot.workflowId ?? state.workflowId;
+  hydrateRecoveredTranscript(snapshot);
   const durable = snapshot.state ?? {};
   $('workflowId').textContent = state.workflowId || '—';
   $('workflowStatus').textContent = durable.workflowStatus ?? '—';
@@ -345,6 +356,7 @@ function recoverStaleConversation(error) {
   const { staleConversationId, url } = clearStaleConversationSession(state, localStorage, location.href);
   history.replaceState({}, '', url);
   state.managedEntityDraft = {};
+  state.transcriptHydrated = false;
 
   $('startButton').disabled = false;
   $('businessSlug').disabled = false;

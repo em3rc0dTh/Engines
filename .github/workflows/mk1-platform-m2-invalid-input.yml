@@ -1,0 +1,115 @@
+name: MK1 Platform M2 Invalid Input Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cert/platform-solidity-pre-agent
+    paths:
+      - 'mk1/runtime/scripts/certify-platform-m2-invalid-input-recovery.ts'
+      - 'mk1/runtime/src/contracts/register-new-customer/**'
+      - 'mk1/runtime/src/contracts/register-new-appointment/**'
+      - 'mk1/runtime/src/cta/channel-core/**'
+      - 'mk1/runtime/src/cta/webchat/**'
+      - 'mk1/runtime/src/orchestration/temporal/**'
+      - 'mk1/runtime/src/persistence/postgres/**'
+      - 'mk1/runtime/docker-compose.yml'
+      - '.github/workflows/mk1-platform-m2-invalid-input.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-platform-m2-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLATFORM_M2_CERT_REF: ${{ github.sha }}
+
+jobs:
+  webchat-invalid-input-recovery:
+    name: platform-m2-webchat-invalid-input-recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PLATFORM_M2_CERT_REF }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Exact-head guard
+        run: test "$(git rev-parse HEAD)" = "$PLATFORM_M2_CERT_REF"
+      - name: TypeScript
+        run: npm run check
+      - name: Start pristine durable platform runtime
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up --build -d
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8787/health >/tmp/m2-cta-health.json \
+              && curl -fsS http://127.0.0.1:8788/health >/tmp/m2-channel-health.json \
+              && docker compose exec -T worker test -f /tmp/engines-mk0-worker-ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose ps -a
+          docker compose logs temporal worker cta channel-core migrate
+          exit 1
+      - name: Start WebChat adapter
+        run: |
+          nohup npm run webchat:server >/tmp/m2-webchat.log 2>&1 &
+          echo $! >/tmp/m2-webchat.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8790/health >/tmp/m2-webchat-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/m2-webchat.log || true
+          exit 1
+      - name: Execute invalid-input correction and idempotency campaign
+        env:
+          ENGINES_WEBCHAT_URL: http://127.0.0.1:8790
+          POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+        run: |
+          npx tsx scripts/certify-platform-m2-invalid-input-recovery.ts | tee /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_INVALID_EMAIL_REJECTION_PASS' /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_INVALID_PHONE_REJECTION_PASS' /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_INVALID_DATE_REJECTION_PASS' /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_CORRECTION_CONTINUITY_PASS' /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_NO_DUPLICATE_DURABLE_EFFECT_PASS' /tmp/platform-m2.log
+          grep -F 'PLATFORM_M2_INVALID_INPUT_RECOVERY_PASS' /tmp/platform-m2.log
+      - name: Capture M2 evidence
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/platform-m2-evidence
+          git rev-parse HEAD > /tmp/platform-m2-evidence/git-sha.txt
+          cp /tmp/platform-m2.log /tmp/platform-m2-evidence/ 2>/dev/null || true
+          cp /tmp/m2-*-health.json /tmp/platform-m2-evidence/ 2>/dev/null || true
+          cp /tmp/m2-webchat.log /tmp/platform-m2-evidence/ 2>/dev/null || true
+          docker compose -f mk1/runtime/docker-compose.yml ps -a > /tmp/platform-m2-evidence/compose-ps.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-m2-invalid-input-${{ github.run_id }}
+          path: /tmp/platform-m2-evidence
+          if-no-files-found: error
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/m2-webchat.pid ]; then kill "$(cat /tmp/m2-webchat.pid)" 2>/dev/null || true; fi
+          docker compose down -v --remove-orphans || true
+      - name: Terminal marker
+        run: echo 'PLATFORM_M2_INVALID_INPUT_RECOVERY_PASS'

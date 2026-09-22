@@ -42,6 +42,26 @@ export type EligibilityRuleSet = Readonly<{
   failureCode: string;
 }>;
 
+/**
+ * Services-owned abstract scheduling demand. It deliberately contains no
+ * concrete Scheduler resource identity. G2-S6 freezes this material by value
+ * into SchedulingDemand before Scheduler execution.
+ */
+export type ServiceSchedulingCapabilityDemand = Readonly<{
+  code: string;
+  quantity: number;
+  resourceKinds?: readonly string[];
+}>;
+
+export type ServiceSchedulingProfile = Readonly<{
+  capacityUnits: number;
+  requiredCapabilities: readonly ServiceSchedulingCapabilityDemand[];
+  buffers: Readonly<{
+    beforeMinutes: number;
+    afterMinutes: number;
+  }>;
+}>;
+
 export type ServiceDefinition = Readonly<{
   serviceId: string;
   businessSlug: string;
@@ -69,6 +89,8 @@ export type ServiceOffering = Readonly<{
   requirements: readonly ServiceRequirement[];
   dependencies: readonly ServiceDependency[];
   eligibilityRuleSet?: EligibilityRuleSet;
+  /** Optional because Services may also contain non-schedulable Offerings. */
+  scheduling?: ServiceSchedulingProfile;
 }>;
 
 export type ServiceOfferingSnapshot = Readonly<{
@@ -82,6 +104,7 @@ export type ServiceOfferingSnapshot = Readonly<{
   durationMinutes: number;
   pricing: PricingDescriptor;
   requirements: readonly ServiceRequirement[];
+  scheduling?: ServiceSchedulingProfile;
 }>;
 
 export type ServicesValidationIssueCode =
@@ -93,7 +116,8 @@ export type ServicesValidationIssueCode =
   | 'INVALID_PRICE'
   | 'INVALID_REQUIREMENT'
   | 'INVALID_DEPENDENCY'
-  | 'INVALID_ELIGIBILITY_RULE';
+  | 'INVALID_ELIGIBILITY_RULE'
+  | 'INVALID_SCHEDULING_PROFILE';
 
 export type ServicesValidationIssue = Readonly<{
   code: ServicesValidationIssueCode;

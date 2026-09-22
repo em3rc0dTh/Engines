@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createResilientPostgresPool } from '../../../persistence/postgres/resilient-pool.js';
 import { loadRuntimeConfig } from '../../../config/runtime-config.js';
 import { PostgresServicesRepository } from '../../../persistence/postgres/services.repository.js';
 import type { ServicesReadActivities } from './services-read.types.js';
@@ -7,7 +8,7 @@ let pool: Pool | undefined;
 let repository: PostgresServicesRepository | undefined;
 
 function servicesReadRepository(): PostgresServicesRepository {
-  pool ??= new Pool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 });
+  pool ??= createResilientPostgresPool({ connectionString: loadRuntimeConfig().postgresUrl, max: 8 }, 'services-read-activities');
   repository ??= new PostgresServicesRepository(pool);
   return repository;
 }

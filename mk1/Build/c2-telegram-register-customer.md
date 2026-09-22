@@ -17,4 +17,20 @@ Telegram supplies updates, chat/user identity, callback data, text and shared co
 - typecheck and WebChat C1B regression: PASS
 - Agent=false; MCP=false
 
-READY FOR deterministic harness testing. Real Telegram Bot API remains **NOT CERTIFIED**.
+## Current provider status
+
+The original C2 design above remains the registration adapter contract.
+
+As of the 2026-09-22 pre-Agent campaign:
+
+~~~text
+Telegram official Bot API RegisterNewCustomer   ✅ PHYSICALLY VERIFIED
+Telegram native RegisterNewAppointment          ✅ PHYSICALLY VERIFIED
+Telegram CREATE_MANAGED_ENTITY                  ✅ PHYSICALLY VERIFIED
+Telegram SELECT_MANAGED_ENTITY                  ✅ PHYSICALLY VERIFIED
+Telegram × ManagedEntity                        ✅ SEALED
+~~~
+
+See the Channel × ManagedEntity build note and the 2026-09-22 physical/final seal receipts.
+
+Webhook mode, production hosting, Agent and MCP remain outside this bounded certification.

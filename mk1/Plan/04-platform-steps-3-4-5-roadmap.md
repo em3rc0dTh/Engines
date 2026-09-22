@@ -1,199 +1,207 @@
-# MK1 — Steps 3–4–5 Execution Roadmap
+# Platform Steps 3–5 Roadmap — Integration G3 Terminal Closure
 
-## Status
+Integration remains a separate authority from Services, Scheduler, Appointment, CTA/channel ingress and Temporal orchestration.
 
-**DESIGN ROADMAP — BUILD NOT STARTED FOR SCHEDULER/INTEGRATION**
-
-This roadmap advances the architecture shown in the platform diagram while preserving current certified work.
-
-## Current certified baseline
+Canonical track:
 
 ```text
-Step 1 CTA / Channels
-  WebChat C1A+C1B                       ✅ CERTIFIED + HUMAN VERIFIED
-  Telegram C2                           DESIGN/BUILD PREP
-
-Step 2 Temporal Orchestration           ✅ FOUNDATION CERTIFIED
-
-Step 3 Services Engine
-  S0–S5                                 ✅ CERTIFIED
-  S6–S8                                 OPEN
-
-Step 4 Scheduler Engine                 DESIGN NOW
-
-Step 5 Integration Engine               BOUNDARY DESIGN NOW / BUILD LATER
+BRANCH  build/g3-integration
+PR      #33 — Integration G3 canonical track
+BASE    feature/pre-scheduler-node-edge-certification @ 3b1d43d87ef7bb9805e01bcaaf8260008327b1f1
 ```
 
-## Track A — Services completion
+## Sequential gate state
 
 ```text
-S6 Multi-business generality
-S7 Appointment integration with new Services contract
-S8 final clean G1 certification
+G3-I0 canonical command/event contracts + authority boundary   ✅ CERTIFIED
+G3-I1 connection/provider registry + secret references         ✅ CERTIFIED
+G3-I2 durable outbound command + retry/idempotency ledger       ✅ CERTIFIED
+G3-I3 authenticated inbound webhook + deduplication ledger      ✅ CERTIFIED
+G3-I4 first real provider adapter — Kapso WhatsApp              ✅ CERTIFIED
+G3-I5 Temporal composition + failure/recovery certification     ✅ CERTIFIED
+
+currentNext = null
 ```
 
-Before S7 closes, the Appointment flow must consume canonical Services snapshots rather than legacy assumptions. Do not couple S7 to a non-existent Scheduler implementation beyond the frozen handoff contract.
+The G3 sequential-hard-gate track has no remaining implementation gate.
 
-## Track B — Scheduler design/build
+## I0–I3 deterministic core
 
-Proposed gates:
+G3-I0 froze provider-neutral `IntegrationCommand` / `IntegrationEvent` contracts and the secret/provider-mechanics exclusion boundary.
+
+G3-I1 materialized business-scoped provider/connection configuration while persisting only secret references, never credential values.
+
+G3-I2 became the single durable authority for outbound operation identity, provider-attempt count, retry timing, lease recovery and terminal provider outcome.
+
+G3-I3 established authentication-before-durability for inbound provider events, provider-event deduplication and canonical `IntegrationEvent` persistence without raw webhook/signature material.
+
+## G3-I4 — real provider adapter certified
+
+Kapso WhatsApp is the first physically certified Integration provider.
+
+Physical implementation source head:
 
 ```text
-G2-S0 Contract + persistence foundation
-G2-S1 Resource/capability/schedule management
-G2-S2 Deterministic availability engine
-G2-S3 Atomic reservation + concurrency conflict
-G2-S4 Holds + expiry + replay
-G2-S5 Multi-business generality
-G2-S6 Services snapshot/demand integration
-G2-S7 Appointment Workflow integration
-G2-S8 Multi-resource assignment proof or explicit deferral
-G2-S9 Final clean Scheduler certification
+25ec2f0dd53c3eb2e56f6230d1d0402e8e3a0c22
 ```
 
-### G2-S0
-
-Deliver:
+Observed physical markers:
 
 ```text
-SchedulerResource
-ResourceCapability
-ScheduleTemplate
-ScheduleOverride
-SchedulingDemand
-SlotCandidate
-Hold
-Reservation
-PostgreSQL schema
-contract tests
+INTEGRATION_G3_I4_REAL_OUTBOUND_ACCEPTED
+INTEGRATION_G3_I4_REAL_WEBHOOK_ACCEPTED
+INTEGRATION_G3_I4_REAL_PROVIDER_PASS
 ```
 
-No Appointment rewrite yet.
-
-### G2-S1
-
-Certify versioned/idempotent management of resources and schedule definitions.
-
-### G2-S2
-
-Certify deterministic read-only availability generation from schedules, overrides, capabilities, capacity and existing allocations.
-
-### G2-S3
-
-Certify the critical invariant:
+The physical round trip exercised:
 
 ```text
-two concurrent confirmations for last capacity
-→ exactly one success
-→ exactly one typed conflict
-→ no partial second business effect
+IntegrationCommand
+→ I1 registry
+→ I2 outbound ledger
+→ Kapso Integration adapter
+→ real Kapso API
+→ real WhatsApp delivery
+→ nonce-bound human reply
+→ signed Kapso v2 webhook
+→ Kapso Integration verifier
+→ I3 inbound ledger
+→ canonical IntegrationEvent
 ```
 
-### G2-S4
-
-Add expiring holds and prove replay/restart semantics.
-
-### G2-S5
-
-Run materially different business fixtures through the same Scheduler implementation with zero vertical branches.
-
-### G2-S6
-
-Feed Scheduler from immutable Services `SchedulingDemand` derived from frozen Offering revisions. Prove catalog head N+1 does not silently change an active scheduling demand from N.
-
-### G2-S7
-
-Migrate `RegisterNewAppointment`:
+Repository-safe evidence:
 
 ```text
-Services selection
-→ SchedulingDemand
-→ QueryAvailability
-→ selected candidate
-→ optional hold
-→ explicit Finalize
-→ ConfirmReservation
-→ Appointment result references Scheduler reservation
+mk1/Test/g3-integration-engine-i4.md
+mk1/Build/evidence/integration-g3-i4-certification-2026-09-17.md
 ```
 
-Preserve `availability shown != reservation persisted`.
+A closed WhatsApp 24-hour service window was observed as a real HTTP 422 rejection before the authorized recipient opened the window. The subsequent current-G3 round trip passed. That operational provider policy is not elevated into Integration authority.
 
-## Track C — Integration boundary
+## G3-I5 — Temporal composition and recovery certified
 
-Do not build a broad provider platform yet.
+I5 composes the already-certified Integration engine through Temporal while preserving I2/I3 authority.
 
-Prepare common contracts first, then choose the first concrete integration from actual product need.
-
-Likely first implementations:
+Executable surfaces:
 
 ```text
-payment provider
-or
-notification provider
+mk1/runtime/src/orchestration/temporal/activities/integration-delivery.types.ts
+mk1/runtime/src/orchestration/temporal/activities/integration-delivery.activities.ts
+mk1/runtime/src/orchestration/temporal/workflows/integration.workflows.ts
+mk1/runtime/src/orchestration/temporal/workers/integration.worker.ts
+mk1/runtime/scripts/certify-integration-g3-i5.ts
+.github/workflows/mk1-integration-g3-i5.yml
 ```
 
-Future gate shape:
+Candidate proof branch head:
 
 ```text
-I0 Integration command/event contracts
-I1 connection/provider registry + secret references
-I2 durable outbound command/retry ledger
-I3 authenticated inbound webhook/idempotency ledger
-I4 first real provider adapter
-I5 Temporal composition + failure/recovery proof
+72ccb5d0cd5e2cd251fbf25ea9f6731e642361a5
 ```
 
-## Track D — Telegram C2
-
-Telegram proceeds independently of Scheduler/Integration implementation.
-
-Before physical/manual bot testing, build synthetic deterministic proof:
+Candidate run and artifact:
 
 ```text
-TelegramAdapter
-trusted route config
-Telegram update identity
-text + callback normalization
-reuse ChannelExecutionCore
-reuse channel_conversation_bindings
-reuse channel_inbound_events
-bot-process restart recovery
-full synthetic Appointment flow
-WebChat regression
+run        35249039047
+artifact   integration-g3-i5-candidate-35249039047
+artifactId 10509345555
+digest     sha256:af89ce47a80be6bbe7a30c123873d53cd038787ace9b09458a41a7cadb02cb68
 ```
 
-A real bot token/network test is explicitly deferred until requested.
-
-## Cross-track dependency rules
+The candidate started real PostgreSQL and a real Temporal development server, built a workflow bundle and ran a worker. Required markers all passed:
 
 ```text
-Telegram must not wait for Scheduler.
-Scheduler must consume Services snapshots, not channels.
-Integration must not become a prerequisite for core scheduling.
-Appointment may migrate to Scheduler only after Scheduler conflict semantics are certified.
-Agent/MCP waits until deterministic Steps 1–7 are sufficiently mature.
+INTEGRATION_G3_I5_ACTIVITY_RETRY_TERMINAL_REPLAY_PASS
+INTEGRATION_G3_I5_I2_RETRY_AUTHORITY_PASS
+INTEGRATION_G3_I5_TERMINAL_FAILURE_PASS
+INTEGRATION_G3_I5_CANONICAL_EVENT_HANDOFF_PASS
+INTEGRATION_G3_I5_WORKFLOW_REPLAY_NO_DUPLICATE_PROVIDER_ATTEMPT_PASS
+INTEGRATION_G3_I5_WORKFLOW_HISTORY_BOUNDARY_PASS
+INTEGRATION_G3_I5_CERTIFICATION_PASS
 ```
 
-## Immediate design decisions frozen by this roadmap
+### Certified authority split
 
 ```text
-Services = commercial/catalog semantics
-Scheduler = concrete time/resource allocation
-Integration = external-system adapter/delivery mechanics
-Telegram interactive ingress = CTA, not Integration
-PostgreSQL = Scheduler transactional truth
-Temporal = orchestration authority
-Mongo = audit/semantic evidence
+Temporal
+  = workflow orchestration, replay, waiting and process recovery
+
+Integration activity boundary
+  = execution entry into certified Integration engine surfaces
+
+I2 outbound ledger
+  = only provider-attempt count, retry schedule, lease and terminal-delivery authority
+
+I3 inbound ledger
+  = authenticated inbound acceptance and provider-event dedup authority
 ```
 
-## Next executable work after design review
+Temporal activity retry does not itself mean another provider delivery attempt. The certification deliberately failed an activity after I2 had already durably recorded `SUCCEEDED`; Temporal retried the activity under the same business/operation identity and I2 returned the existing terminal record. Provider call count remained one.
 
-Recommended sequence:
+A separate retryable-provider scenario proved:
 
 ```text
-1. Continue Services S6 on its existing Services certification line.
-2. Open a dedicated Scheduler build branch from a documented compatible MK1 head.
-3. Implement G2-S0 contracts/persistence only.
-4. In parallel, implement C2 Telegram synthetic adapter proof on its own channel branch.
-5. Do not integrate Appointment with Scheduler until G2-S3 conflict correctness is proven.
+provider attempt 1 → RETRYABLE
+I2                 → RETRY_WAIT + nextAttemptAt
+Temporal           → waits
+provider attempt 2 → SUCCEEDED
 ```
+
+Temporal did not create a second provider retry counter or calculate a competing provider backoff.
+
+A permanent provider rejection also returned deterministic `FAILED_PERMANENT / PROVIDER_REJECTED` after one provider call.
+
+Canonical inbound `IntegrationEvent` handoff crossed a real Temporal workflow boundary without passing raw webhook transport material or credentials.
+
+Repository-safe evidence:
+
+```text
+mk1/Test/g3-integration-engine-i5.md
+mk1/Build/evidence/integration-g3-i5-certification-2026-09-17.md
+```
+
+## Frozen authority boundaries after G3 closure
+
+```text
+Services     = commercial/catalog + abstract scheduling semantics
+Scheduler    = concrete time/resource allocation
+Appointment  = appointment business orchestration
+CTA/Channel  = interactive conversation ingress/egress
+Integration  = external-system registry, delivery, provider adapter, webhook/dedup mechanics
+Temporal     = durable workflow orchestration/replay/recovery
+I2           = provider delivery retry/attempt authority
+I3           = authenticated inbound acceptance/dedup authority
+PostgreSQL   = transactional operational truth
+MongoDB      = operational document/audit/semantic evidence
+Object Store = attachment bytes/content integrity
+```
+
+## Truth boundary
+
+G3 terminal closure does not claim:
+
+```text
+production rollout authorization
+all WhatsApp/provider policies or message types
+multiple physically certified providers
+global exactly-once external effects in every provider ambiguity window
+Agent/MCP completion
+PR #33 merge authorization
+```
+
+G3-I4 is the physical external-provider proof. G3-I5 uses a deterministic certification provider behind a real Temporal + PostgreSQL runtime to prove composition/recovery; it is not relabelled as a second physical provider proof.
+
+## Final closure procedure
+
+The documentation-complete branch head must rerun the dedicated G3-I5 workflow and require:
+
+```text
+Integration certified gates: 6
+Integration next gate: none — final closure certified
+INTEGRATION_G3_CERTIFICATION_LEDGER_PASS
+INTEGRATION_G3_I5_CERTIFICATION_PASS
+```
+
+Protected predecessor regressions must remain green on that same final head.
+
+After exact-head seal succeeds, G3 is terminally certified. PR #33 remains draft/open/unmerged until explicit owner authorization.

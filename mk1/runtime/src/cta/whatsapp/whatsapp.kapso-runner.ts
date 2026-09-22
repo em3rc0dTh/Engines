@@ -1,6 +1,6 @@
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Pool } from 'pg';
+import { createResilientPostgresPool } from '../../persistence/postgres/resilient-pool.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import type { RegistrationStateProjection } from '../../contracts/register-new-customer/index.js';
@@ -192,7 +192,7 @@ async function main(): Promise<void> {
   const graphApiVersion = process.env.KAPSO_GRAPH_API_VERSION?.trim() || 'v24.0';
 
   const config = loadRuntimeConfig();
-  const pool = new Pool({ connectionString: config.postgresUrl, max: 6 });
+  const pool = createResilientPostgresPool({ connectionString: config.postgresUrl, max: 6 }, 'whatsapp-kapso');
   const repository = new PostgresChannelRepository(pool);
   const ingressRepository = new PostgresCTAIngressRepository(pool);
   const servicesRepository = new PostgresServicesRepository(pool);

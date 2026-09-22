@@ -11,6 +11,16 @@ function interactiveRows(
   return { type: 'interactive', body, buttons: items };
 }
 
+function appointmentDatePrompt(state: AppointmentStateProjection): string {
+  if (state.issues.some((item) => item.code === 'NO_AVAILABILITY')) {
+    return 'No hay horarios disponibles para esa fecha. Elige otra fecha. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  if (state.issues.some((item) => item.code === 'PAST_DATE')) {
+    return 'Esa fecha ya pasó. Elige una fecha futura. Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+  }
+  return '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».';
+}
+
 export function renderWhatsAppRegistration(intent: 'CONSENT' | CustomerRegistrationRenderIntent): Readonly<Record<string, unknown>> {
   if (intent === 'CONSENT') return {
     type: 'interactive', body: 'Hola 👋\n\n¿Nos autorizas a registrar tus datos para atenderte desde nuestro sistema?',
@@ -53,9 +63,10 @@ export function whatsappAppointmentRenderIntent(state: AppointmentStateProjectio
       if (!hasEmail && !hasPhone) return 'ASK_CUSTOMER_EMAIL';
       return state.nextAction === 'RESOLVE_CUSTOMER' ? 'RESOLVE_CUSTOMER' : 'WAIT';
     }
-    // ManagedEntity interaction is owned by Temporal now. Native WhatsApp
-    // selection/creation remains gated to the provider regression slice.
-    case 'WAITING_FOR_MANAGED_ENTITY': return 'WAIT';
+    case 'WAITING_FOR_MANAGED_ENTITY':
+      if (state.nextAction === 'SELECT_MANAGED_ENTITY') return 'SELECT_MANAGED_ENTITY';
+      if (state.nextAction === 'CREATE_MANAGED_ENTITY') return 'CREATE_MANAGED_ENTITY';
+      return 'WAIT';
     case 'WAITING_FOR_SERVICE': return 'SELECT_SERVICE';
     case 'WAITING_FOR_PRODUCT': return 'SELECT_OFFERING';
     case 'WAITING_FOR_DATE': return 'ASK_DATE';
@@ -114,7 +125,7 @@ export function renderWhatsAppAppointment(
     case 'CREATE_MANAGED_ENTITY':
       return {
         type: 'text',
-        text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.`,
+        text: `Necesitamos crear ${state.managedEntity.policy.label.toLowerCase()} antes de continuar.\n\nEscribe: nombre | referencia estable\nEjemplo: Renault Logan 2018 | ABC-123`,
       };
     case 'SELECT_SERVICE':
       return interactiveRows(
@@ -127,7 +138,7 @@ export function renderWhatsAppAppointment(
         state.products.slice(0, 3).map((product) => ({ id: `appointment_offering:${product.productId}`, title: product.name.slice(0, 20) })),
       );
     case 'ASK_DATE':
-      return { type: 'text', text: '¿Para qué fecha deseas la cita? Puedes escribir, por ejemplo, «viernes» o «2026-09-11».' };
+      return { type: 'text', text: appointmentDatePrompt(state) };
     case 'SELECT_SLOT':
       return interactiveRows(
         'Selecciona un horario disponible.',
