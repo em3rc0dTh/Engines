@@ -18,4 +18,22 @@ WhatsApp can provide a verified sender phone, avoiding a redundant question. Pro
 - shared policy/core, Telegram, WebChat and C1B regression: PASS
 - Agent=false; MCP=false; Scheduler=false
 
-READY FOR deterministic harness testing. Real Meta Cloud API and Kapso accounts remain **NOT CERTIFIED**.
+## Current provider status
+
+The original C4 design above remains the common WhatsApp adapter contract.
+
+As of the 2026-09-22 pre-Agent campaign:
+
+~~~text
+Kapso Sandbox RegisterNewCustomer              ✅ PHYSICALLY VERIFIED
+Kapso native RegisterNewAppointment            ✅ PHYSICALLY VERIFIED
+Kapso CREATE_MANAGED_ENTITY                    ✅ PHYSICALLY VERIFIED
+Kapso SELECT_MANAGED_ENTITY                    ✅ PHYSICALLY VERIFIED
+Kapso × ManagedEntity                          ✅ SEALED
+Meta Cloud API transport                       ✅ DETERMINISTIC PASS
+direct Meta physical Appointment path          ⏳ NOT CLAIMED
+~~~
+
+See the Channel × ManagedEntity build note and the 2026-09-22 physical/final seal receipts.
+
+Production webhook hosting, dedicated production-number operations, Agent and MCP remain outside this bounded certification.

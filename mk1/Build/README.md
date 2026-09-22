@@ -10,30 +10,41 @@ Documentation commits after a successful run never replace the executed runtime 
 
 ## Current status
 
-```text
+~~~text
 G0 Foundation                         ✅ CLOSED
-
-G1 Services
-  S0–S7                               ✅ CERTIFIED
-  S8                                  ⏭ PENDING
-  G1 overall                          ❌ NOT YET FULLY CERTIFIED
+G1 Services S0–S8                     ✅ CERTIFIED
+G2 Scheduler S0–S9                    ✅ CERTIFIED
+G3 Integration                        ✅ CERTIFIED
+CTA + persistence                     ✅ CERTIFIED
+M5 destructive resilience             ✅ CERTIFIED
+OG0 observability/governance          ✅ CERTIFIED
 
 Customer / CTA channels
-  C0A Workflow-view projection        ✅ CERTIFIED
-  C1A WebChat                         ✅ CERTIFIED + HUMAN VERIFIED
-  C1B durable WebChat                 ✅ CERTIFIED + HUMAN RESTART VERIFIED
-  B2 Customer soft-duplicate resolve  ✅ CERTIFIED
-  C2/C4 local real-Temporal E2E       ✅ AUTOMATED + HUMAN VERIFIED
+  C1A/C1B WebChat                     ✅ CERTIFIED
+  B2 Customer duplicate resolution    ✅ CERTIFIED
   C2P Telegram official Bot API       ✅ PHYSICALLY VERIFIED / SEALED
-  C4P Meta Cloud API transport        ✅ DETERMINISTIC PASS / PHYSICAL OPEN
-  C4P Kapso transport                 ✅ DETERMINISTIC PASS
+  C4P Meta Cloud API transport        ✅ DETERMINISTIC PASS
   C4P Kapso Sandbox                   ✅ PHYSICALLY VERIFIED
-```
+  Kapso × ManagedEntity               ✅ SEALED
+  Telegram × ManagedEntity            ✅ SEALED
+  Channel × ManagedEntity             ✅ SEALED
+
+PRE-AGENT integrated platform         ✅ SEALED
+Agent / MCP                            ⏭ NEXT PHASE / OUT OF THIS SEAL
+~~~
+
+Canonical 2026-09-22 closure receipts:
+
+- [Channel × ManagedEntity physical seal](evidence/channel-managed-entity-provider-physical-seal-2026-09-22.md)
+- [PRE-AGENT final integrated seal](evidence/platform-pre-agent-final-seal-2026-09-22.md)
+- [Channel × ManagedEntity build note](channel-managed-entity-appointment.md)
 
 ## Evidence ledger
 
 | Gate | Source SHA | Run | Job | Artifact | SHA-256 | Receipt |
 |---|---|---:|---:|---:|---|---|
+| Channel × ManagedEntity physical seal | physical lineage cf9f8b8… → bd25a49… → 5561836… | — | — | — | — | [receipt](evidence/channel-managed-entity-provider-physical-seal-2026-09-22.md) |
+| PRE-AGENT integrated seal | 5561836de64b0e8dc3cd0c71b77316940affd337 | 35759357879 | terminal exact-head seal | platform-solidity-seal-35759357879 | dc0c267b96037169fbe62af02862ba3f9cdd5b2f1264679eff2908162958d4ef | [receipt](evidence/platform-pre-agent-final-seal-2026-09-22.md) |
 | G0 | audit closure | — | — | — | — | [`g0-core-126-audit-closure-2026-08-31.md`](evidence/g0-core-126-audit-closure-2026-08-31.md) |
 | S0 | `6dcafa0f5b5704cb9a3a9bcbdaef25fe368006b1` | `33461008031` | `99710964036` | `9783188036` | `69a895416918dfb163be680f55c9a6dae2bda35fa60a6dd5107c93e971045958` | [`s0-runtime-promotion-certification-2026-08-31.md`](evidence/s0-runtime-promotion-certification-2026-08-31.md) |
 | S1 | `550cdca619856fe246ab569588f9036a7025e7a7` | `33461510248` | `99712416091` | `9783331341` | `7f69bf9d33b2e854d5cc4941b41059dc358437675cf0bbb6d102c29f129b2097` | [`s1-services-contracts-certification-2026-08-31.md`](evidence/s1-services-contracts-certification-2026-08-31.md) |
@@ -143,9 +154,10 @@ production readiness                       ❌
 
 ## Current next work
 
-```text
-Channel track   real WhatsApp provider via Kapso Sandbox ✅ CLOSED
-Services track  S8 final G1 closure                         ← NEXT
-Scheduler       runtime later
-Agent / MCP     last
-```
+~~~text
+PRE-AGENT      ✅ SEALED
+PR #34         ✅ READY FOR MERGE REVIEW
+Agent / MCP    ⏭ NEXT PHASE AFTER OWNER INTEGRATION DECISION
+~~~
+
+The pre-Agent seal does not authorize production rollout and does not itself merge PR #34.
