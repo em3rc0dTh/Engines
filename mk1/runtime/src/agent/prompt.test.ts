@@ -38,12 +38,12 @@ test('A1 prompt carries resolved Soul/Personality while preserving Engine author
   });
 
   const prompt = buildAgentSystemPrompt(input);
-  assert.match(prompt, /Nora, Workshop Assistant/);
+  assert.match(prompt, /Name=Nora; role=Workshop Assistant/);
   assert.match(prompt, /warmth=warm/);
   assert.match(prompt, /formality=informal/);
   assert.match(prompt, /verbosity=terse/);
   assert.match(prompt, /Engines owns all business truth/);
-  assert.match(prompt, /Never claim that an action has executed/);
+  assert.match(prompt, /Never claim or imply that you executed/);
 });
 
 test('A1 response schema exposes only Engine-allowed actions', () => {
