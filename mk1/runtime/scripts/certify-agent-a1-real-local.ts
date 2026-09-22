@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks';
 
 import {
   resolveAgentProfile,
-  runAgentModelTurn,
+  validateAgentDecision,
   validateAgentModelInput,
   type AgentModelInput,
 } from '../src/contracts/agent-layer/index.js';
@@ -152,7 +152,9 @@ const latencies: number[] = [];
 for (const testCase of cases) {
   const input = buildInput(testCase);
   const started = performance.now();
-  const decision = await runAgentModelTurn(provider, input);
+  const rawDecision = await provider.generateTurn(input);
+  console.log(JSON.stringify({ case: testCase.id, rawDecision }));
+  const decision = validateAgentDecision(rawDecision, input);
   const elapsedMs = performance.now() - started;
   latencies.push(elapsedMs);
 
