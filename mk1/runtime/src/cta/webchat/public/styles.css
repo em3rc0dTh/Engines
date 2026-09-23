@@ -58,6 +58,7 @@ h2 { font-size: 20px; }
 }
 .message { max-width: 76%; padding: 12px 14px; border-radius: 14px; line-height: 1.45; font-size: 14px; white-space: pre-wrap; }
 .message.system { align-self: flex-start; background: #fff; border: 1px solid #e5e7eb; }
+.message.agent { align-self: flex-start; background: #f8fafc; border: 1px solid #dbeafe; }
 .message.user { align-self: flex-end; background: #171717; color: #fff; }
 .message.meta { align-self: center; max-width: 95%; background: transparent; color: #6b7280; font-size: 12px; padding: 4px; }
 
