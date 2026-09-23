@@ -30,6 +30,19 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 - Digest: sha256:9ca44bdd7dd67a860f6c101094b1ad515c5509ee49af449cde2421e4446302c3
 - Verdict: AGENT A0 SEALED
 
+### Agent Layer A1 real local inference
+
+- [agent-layer-a1-real-local-inference-certification-2026-09-22.md](agent-layer-a1-real-local-inference-certification-2026-09-22.md)
+- Executed exact-head authority: 2be1ad51456c7e511d180b7f562fcfc54b4bca63
+- Run: 35803641746
+- Real-model artifact: mk1-agent-a1-real-local-35803641746
+- Real-model digest: sha256:617fa5b22673cb11fdcc8183ed476d4111a0fb964508532119c2150df7e3c671
+- Seal artifact: mk1-agent-a1-seal-35803641746
+- Seal digest: sha256:085bbeb337df6a1d034c8d19402876df3d0359aa8c6a8544956c3bcdb6d3b4ee
+- Measured llama-server RSS: 1,942 MB
+- Median real-model latency: 5,916 ms
+- Verdict: AGENT A1 SEALED
+
 ## Historical receipts
 
 Older receipts in this directory remain valid only within their documented source, scope and truth boundaries. Do not reinterpret a historical ResourceReservation receipt as proof of the current SchedulerReservation topology.
