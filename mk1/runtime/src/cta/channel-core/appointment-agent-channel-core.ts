@@ -368,7 +368,8 @@ export function deterministicAppointmentDecision(
   }
 
   if (state.phase === 'WAITING_FOR_SLOT') {
-    const match = normalizedText(text).match(/^(?:a las? )?(\d{1,2}):([0-5]\d)$/);
+    const slotText = text.toLowerCase().replace(/[¿?¡!.,;]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const match = slotText.match(/^(?:a las? )?(\d{1,2}):([0-5]\d)$/);
     if (match) {
       const slotStart = match[1]!.padStart(2, '0') + ':' + match[2]!;
       if (state.availableSlots.some((slot) => slot.start === slotStart)) {
