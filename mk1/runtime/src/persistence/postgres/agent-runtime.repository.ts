@@ -56,7 +56,7 @@ export class AgentRuntimeTurnIdentityConflictError extends Error {
   readonly code = 'AGENT_RUNTIME_TURN_IDENTITY_CONFLICT';
 
   constructor(readonly externalMessageId: string) {
-    super(this.code + ':' + externalMessageId);
+    super('AGENT_RUNTIME_TURN_IDENTITY_CONFLICT:' + externalMessageId);
     this.name = 'AgentRuntimeTurnIdentityConflictError';
   }
 }
@@ -65,7 +65,7 @@ export class AgentRuntimeTurnInProgressError extends Error {
   readonly code = 'AGENT_RUNTIME_TURN_IN_PROGRESS';
 
   constructor(readonly externalMessageId: string) {
-    super(this.code + ':' + externalMessageId);
+    super('AGENT_RUNTIME_TURN_IN_PROGRESS:' + externalMessageId);
     this.name = 'AgentRuntimeTurnInProgressError';
   }
 }
