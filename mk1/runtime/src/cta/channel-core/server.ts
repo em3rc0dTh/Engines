@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createResilientPostgresPool } from '../../persistence/postgres/resilient-pool.js';
+import { resolveAgentProfile } from '../../contracts/agent-layer/index.js';
+import { LlamaCppAgentModelProvider } from '../../agent/index.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import { getAppointmentStateQuery } from '../../orchestration/temporal/workflows/register-new-appointment.workflow.js';
@@ -17,6 +19,7 @@ import { CanonicalCTADispatcher } from '../canonical/dispatcher.js';
 import { canonicalizeFacebookPageComments, parseMetaPageRoutes } from '../meta/meta-page-ingress.js';
 import { projectAppointmentWorkflow } from './appointment-workflow-view.js';
 import { AppointmentChannelExecutionCore } from './appointment-channel-execution.js';
+import { AgentAppointmentChannelCore } from './appointment-agent-channel-core.js';
 import { parseCanonicalChannelEnvelope } from './validation.js';
 import type { ChannelKind } from './types.js';
 
@@ -25,6 +28,16 @@ const HOST = process.env.ENGINES_CHANNEL_HOST?.trim() || '127.0.0.1';
 const MAX_BODY_BYTES = 1024 * 1024;
 
 type JsonRecord = Record<string, unknown>;
+
+function record(value: unknown): JsonRecord | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+function requiredString(source: JsonRecord, key: string): string {
+  const value = source[key];
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`AGENT_CHANNEL_MESSAGE_INVALID:${key}`);
+  return value.trim();
+}
 
 function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   const body = Buffer.from(JSON.stringify(value));
@@ -93,6 +106,30 @@ async function run(): Promise<void> {
   const servicesRepository = new PostgresServicesRepository(pool);
   const appointmentPort = await TemporalRegisterNewAppointmentPort.connect();
   const execution = new AppointmentChannelExecutionCore(repository, appointmentPort, servicesRepository);
+  const agentEnabled = (process.env.ENGINES_AGENT_ENABLED ?? '').trim().toLowerCase() === 'true';
+  const agentProvider = agentEnabled
+    ? new LlamaCppAgentModelProvider({
+        baseUrl: process.env.AGENT_LLAMA_BASE_URL?.trim() || 'http://host.docker.internal:8080',
+        model: process.env.AGENT_LLAMA_MODEL?.trim() || 'engines-agent-local',
+        timeoutMs: Number.parseInt(process.env.AGENT_MODEL_TIMEOUT_MS ?? '30000', 10),
+      })
+    : undefined;
+  const agentCore = agentProvider
+    ? new AgentAppointmentChannelCore(
+        {
+          async read(input) {
+            const binding = await repository.getConversationBinding(input);
+            if (!binding) throw new Error('CHANNEL_CONVERSATION_NOT_BOUND');
+            const handle = appointmentPort.client.workflow.getHandle(binding.workflowId);
+            const state = await handle.query(getAppointmentStateQuery) as AppointmentStateProjection;
+            return { workflowId: binding.workflowId, state };
+          },
+        },
+        execution,
+        agentProvider,
+        resolveAgentProfile(),
+      )
+    : undefined;
   const ctaDispatcher = new CanonicalCTADispatcher(
     ingressRepository,
     new ChannelCoreCTAOrchestrationPort(execution),
@@ -111,7 +148,7 @@ async function run(): Promise<void> {
           service: 'engines-channel-core',
           persistence: 'postgresql',
           orchestration: 'temporal',
-          agent: false,
+          agent: Boolean(agentCore),
           mcp: false,
         });
         return;
@@ -147,6 +184,33 @@ async function run(): Promise<void> {
           accepted: events.length,
           results,
         });
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/channel/agent/messages') {
+        if (!agentCore) {
+          sendJson(response, 503, { ok: false, code: 'AGENT_NOT_ENABLED' });
+          return;
+        }
+        const body = record(await readJson(request));
+        if (!body) {
+          sendJson(response, 400, { ok: false, code: 'AGENT_CHANNEL_MESSAGE_INVALID' });
+          return;
+        }
+        const channel = channelKind(typeof body.channel === 'string' ? body.channel : null);
+        if (!channel) {
+          sendJson(response, 400, { ok: false, code: 'AGENT_CHANNEL_MESSAGE_INVALID:channel' });
+          return;
+        }
+        const result = await agentCore.handle({
+          businessSlug: requiredString(body, 'businessSlug'),
+          channel,
+          externalConversationId: requiredString(body, 'externalConversationId'),
+          externalMessageId: requiredString(body, 'externalMessageId'),
+          externalSenderId: requiredString(body, 'externalSenderId'),
+          text: requiredString(body, 'text'),
+        });
+        sendJson(response, 200, result);
         return;
       }
 
@@ -255,6 +319,18 @@ async function run(): Promise<void> {
         sendJson(response, 400, { ok: false, code: 'META_PAYLOAD_INVALID', error: message });
         return;
       }
+      if (message.startsWith('AGENT_CHANNEL_MESSAGE_INVALID')) {
+        sendJson(response, 400, { ok: false, code: 'AGENT_CHANNEL_MESSAGE_INVALID', error: message });
+        return;
+      }
+      if (message.startsWith('Local Agent provider failed:')) {
+        sendJson(response, 503, { ok: false, code: 'AGENT_MODEL_UNAVAILABLE', error: message });
+        return;
+      }
+      if (message.startsWith('AGENT_ACTION_') || message.startsWith('AGENT_ENGINE_EXECUTION_FAILED')) {
+        sendJson(response, 422, { ok: false, code: message.split(':')[0], error: message });
+        return;
+      }
       if (message.startsWith('CHANNEL_EVENT_INVALID') || message === 'CHANNEL_OPERATION_NOT_SUPPORTED') {
         sendJson(response, 400, { ok: false, code: message.split(':')[0], error: message });
         return;
@@ -268,7 +344,7 @@ async function run(): Promise<void> {
     server.listen(PORT, HOST, () => resolve());
   });
 
-  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: false, mcp: false })}`);
+  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: Boolean(agentCore), mcp: false })}`);
 
   const shutdown = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
