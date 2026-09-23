@@ -63,6 +63,7 @@ export function buildAgentSystemPrompt(input: AgentModelInput): string {
     '- User says "Gracias!" with no allowed action -> "¡De nada! 😊"',
     '',
     'Output only the JSON object required by the response schema.',
+    'Do not output schemaVersion; Engines adds protocol metadata after inference.',
   ].join('\n');
 }
 

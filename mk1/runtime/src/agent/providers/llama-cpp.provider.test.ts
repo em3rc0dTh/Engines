@@ -104,6 +104,7 @@ test('A1 llama.cpp provider sends bounded schema-constrained deterministic reque
   const schemaText = JSON.stringify(wrapper.schema);
   assert.match(schemaText, /SET_DATE/);
   assert.doesNotMatch(schemaText, /FINALIZE_APPOINTMENT/);
+  assert.doesNotMatch(schemaText, /schemaVersion/);
 
   const messages = captured.messages as Array<Record<string, unknown>>;
   assert.equal(messages.length, 2);
