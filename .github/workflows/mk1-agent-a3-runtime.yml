@@ -17,6 +17,9 @@ on:
       - 'mk1/Design/20-agent-layer-a3-runtime.md'
       - 'mk1/Plan/19-agent-layer-a3-runtime.md'
       - 'mk1/Test/agent-layer-a3-runtime.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a3-runtime-certification-2026-09-23.md'
       - '.github/workflows/mk1-agent-a3-runtime.yml'
   pull_request:
     branches:
