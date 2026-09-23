@@ -185,7 +185,7 @@ export function projectAppointmentStateForAgent(state: AppointmentStateProjectio
     hints.push('For SELECT_OFFERING use arguments {"offeringId":"<exact offering id>"} copied from facts.');
   } else if (state.phase === 'WAITING_FOR_DATE') {
     allowedActions.push('SET_DATE');
-    hints.push('For SET_DATE use arguments {"naturalDate":"<date words from user>"}.');
+    hints.push('For SET_DATE use arguments {"naturalDate":"<date-only expression>"}. Strip time-of-day words such as "por la tarde" or "in the morning"; never invent a date.');
   } else if (state.phase === 'WAITING_FOR_SLOT') {
     allowedActions.push('SELECT_SLOT');
     hints.push('For SELECT_SLOT use arguments {"slotStart":"<exact slot start>"} copied from facts.');
@@ -413,6 +413,98 @@ export function deterministicAppointmentDecision(
   return undefined;
 }
 
+type AgentDateResolution =
+  | Readonly<{ ok: true; canonicalDate: string }>
+  | Readonly<{ ok: false }>;
+
+const DATE_WORDS = [
+  'sunday', 'domingo',
+  'monday', 'lunes',
+  'tuesday', 'martes',
+  'wednesday', 'miercoles',
+  'thursday', 'jueves',
+  'friday', 'viernes',
+  'saturday', 'sabado',
+  'today', 'hoy',
+  'tomorrow', 'manana',
+  'yesterday', 'ayer',
+] as const;
+
+function unambiguousDateFromNaturalText(rawText: string, referenceDate: string): AgentDateResolution {
+  const direct = normalizeAppointmentDateInput(rawText, referenceDate);
+  if (direct.ok) return { ok: true, canonicalDate: direct.appointmentDate };
+
+  const text = normalizedText(rawText);
+  const candidates: string[] = [];
+
+  const explicitPatterns = [
+    /\b\d{4}-\d{2}-\d{2}\b/g,
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
+    /\b\d{1,2}-\d{1,2}-\d{4}\b/g,
+  ];
+  for (const pattern of explicitPatterns) {
+    for (const match of text.matchAll(pattern)) candidates.push(match[0]);
+  }
+
+  for (const word of DATE_WORDS) {
+    const pattern = new RegExp('\\b' + word + '\\b', 'g');
+    for (const match of text.matchAll(pattern)) {
+      if (word === 'manana') {
+        const before = text.slice(Math.max(0, (match.index ?? 0) - 10), match.index ?? 0);
+        if (/(?:por|en|de) la\s*$/.test(before)) continue;
+      }
+      candidates.push(word);
+    }
+  }
+
+  const canonical = new Set<string>();
+  for (const candidate of candidates) {
+    const parsed = normalizeAppointmentDateInput(candidate, referenceDate);
+    if (parsed.ok) canonical.add(parsed.appointmentDate);
+  }
+
+  return canonical.size === 1
+    ? { ok: true, canonicalDate: [...canonical][0]! }
+    : { ok: false };
+}
+
+function normalizeModelDateDecision(
+  decision: AgentDecision,
+  userText: string,
+): AgentDecision {
+  if (decision.kind !== 'PROPOSE_ACTION' || decision.proposedAction.action !== 'SET_DATE') {
+    return decision;
+  }
+
+  const rawNaturalDate = decision.proposedAction.arguments.naturalDate;
+  const referenceDate = todayInTimeZone(BUSINESS_TIME_ZONE);
+  const fromModel = typeof rawNaturalDate === 'string'
+    ? unambiguousDateFromNaturalText(rawNaturalDate, referenceDate)
+    : { ok: false as const };
+  const resolved = fromModel.ok
+    ? fromModel
+    : unambiguousDateFromNaturalText(userText, referenceDate);
+
+  if (!resolved.ok) {
+    return {
+      schemaVersion: 1,
+      kind: 'CLARIFY',
+      reply: 'Entendí que quieres indicar una fecha, pero necesito una fecha inequívoca. Por ejemplo: mañana, este viernes o 2026-09-25.',
+    };
+  }
+
+  return {
+    ...decision,
+    proposedAction: {
+      ...decision.proposedAction,
+      arguments: {
+        ...decision.proposedAction.arguments,
+        naturalDate: resolved.canonicalDate,
+      },
+    },
+  };
+}
+
 function safeModelFallback(projection: AgentEngineProjection): AgentDecision {
   if (projection.allowedActions.length > 0) {
     return {
@@ -551,6 +643,7 @@ export class AgentAppointmentChannelCore {
             engine: projection,
           },
         });
+        interpretation = normalizeModelDateDecision(interpretation, input.text);
       } catch {
         route = 'SAFE_FALLBACK';
         interpretation = safeModelFallback(projection);
