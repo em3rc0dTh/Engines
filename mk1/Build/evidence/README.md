@@ -56,6 +56,18 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 - Headroom: 4,135 MB
 - Verdict: AGENT A2 SEALED
 
+### Agent Layer A3 durable runtime
+
+- [agent-layer-a3-runtime-certification-2026-09-23.md](agent-layer-a3-runtime-certification-2026-09-23.md)
+- Executed exact-head authority: 09ed58e2348bd850ef668fc08a0832cf41e8ae0c
+- Run: 35868850796
+- Runtime artifact: mk1-agent-a3-runtime-35868850796
+- Runtime digest: sha256:8b6081240af91c12da8e4f529ac07316474545facff44520c9ce51b7cd21f10a
+- Seal artifact: mk1-agent-a3-seal-35868850796
+- Seal digest: sha256:30af96511f6145472ba2e98e4077882f7eb9df62c434cfc02e004696bf290408
+- Corrective A2 integrated run: 35868856273
+- Verdict: AGENT A3 SEALED / READY FOR FIRST MANUAL AGENT TRIAL
+
 ## Historical receipts
 
 Older receipts in this directory remain valid only within their documented source, scope and truth boundaries. Do not reinterpret a historical ResourceReservation receipt as proof of the current SchedulerReservation topology.

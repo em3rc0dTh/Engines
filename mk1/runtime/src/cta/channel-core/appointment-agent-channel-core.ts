@@ -1,19 +1,30 @@
-import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import {
+  normalizeAppointmentDateInput,
+  todayInTimeZone,
+  type AppointmentStateProjection,
+} from '../../contracts/register-new-appointment/index.js';
 import {
   resolveAgentProfile,
   runAgentModelTurn,
+  type AgentConversationTurn,
   type AgentDecision,
   type AgentEngineProjection,
   type AgentJsonObject,
   type AgentModelProvider,
   type AgentResolvedProfile,
 } from '../../contracts/agent-layer/index.js';
+import {
+  AgentConversationRuntime,
+  type AgentRuntimeRoute,
+} from '../../agent/runtime/index.js';
 import type {
   CanonicalChannelAction,
   CanonicalChannelEnvelope,
   CanonicalChannelExecutionResponse,
   ChannelKind,
 } from './types.js';
+
+const BUSINESS_TIME_ZONE = 'America/Lima';
 
 export type AgentChannelMessageInput = Readonly<{
   businessSlug: string;
@@ -41,13 +52,22 @@ export interface AgentAppointmentActionExecutor {
   execute(envelope: CanonicalChannelEnvelope): Promise<CanonicalChannelExecutionResponse>;
 }
 
-export type AgentChannelMessageResponse = Readonly<{
+type AgentChannelMessageValue = Readonly<{
   ok: true;
   workflowId: string;
   reply: string;
   interpretation: AgentDecision;
   execution?: CanonicalChannelExecutionResponse;
   state: AppointmentStateProjection;
+}>;
+
+export type AgentChannelMessageResponse = AgentChannelMessageValue & Readonly<{
+  runtime: Readonly<{
+    replayed: boolean;
+    route: AgentRuntimeRoute;
+    modelInvoked: boolean;
+    contextTurnCount: number;
+  }>;
 }>;
 
 function stringArgument(args: AgentJsonObject, key: string): string {
@@ -247,6 +267,211 @@ function validateInput(input: AgentChannelMessageInput): void {
   if (input.text.length > 2000) throw new Error('AGENT_CHANNEL_MESSAGE_INVALID:text');
 }
 
+function normalizedText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¿?¡!.,;:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function exactNamedMatch(
+  text: string,
+  candidates: readonly Readonly<{ id: string; name: string; code?: string }>[],
+): string | undefined {
+  const normalized = normalizedText(text);
+  const matches = candidates.filter((item) =>
+    normalizedText(item.name) === normalized
+    || (item.code ? normalizedText(item.code) === normalized : false));
+  return matches.length === 1 ? matches[0]!.id : undefined;
+}
+
+export function deterministicAppointmentDecision(
+  state: AppointmentStateProjection,
+  rawText: string,
+): AgentDecision | undefined {
+  const text = rawText.trim();
+
+  if (state.phase === 'WAITING_FOR_MANAGED_ENTITY' && state.managedEntity.status === 'NEEDS_SELECTION') {
+    const managedEntityId = exactNamedMatch(
+      text,
+      state.managedEntity.candidates.map((item) => ({
+        id: item.managedEntityId,
+        name: item.displayName,
+      })),
+    );
+    if (managedEntityId) {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, seguimos con esa opción.',
+        proposedAction: {
+          action: 'SELECT_MANAGED_ENTITY',
+          arguments: { managedEntityId },
+        },
+      };
+    }
+  }
+
+  if (state.phase === 'WAITING_FOR_SERVICE') {
+    const serviceId = exactNamedMatch(
+      text,
+      state.services.map((item) => ({ id: item.serviceId, name: item.name, code: item.code })),
+    );
+    if (serviceId) {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, seguimos con ese servicio.',
+        proposedAction: {
+          action: 'SELECT_SERVICE',
+          arguments: { serviceId },
+        },
+      };
+    }
+  }
+
+  if (state.phase === 'WAITING_FOR_PRODUCT') {
+    const offeringId = exactNamedMatch(
+      text,
+      state.products.map((item) => ({ id: item.productId, name: item.name, code: item.code })),
+    );
+    if (offeringId) {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, seguimos con esa opción.',
+        proposedAction: {
+          action: 'SELECT_OFFERING',
+          arguments: { offeringId },
+        },
+      };
+    }
+  }
+
+  if (state.phase === 'WAITING_FOR_DATE') {
+    const parsed = normalizeAppointmentDateInput(text, todayInTimeZone(BUSINESS_TIME_ZONE));
+    if (parsed.ok) {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, revisemos esa fecha.',
+        proposedAction: {
+          action: 'SET_DATE',
+          arguments: { naturalDate: text },
+        },
+      };
+    }
+  }
+
+  if (state.phase === 'WAITING_FOR_SLOT') {
+    const slotText = text.toLowerCase().replace(/[¿?¡!.,;]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const match = slotText.match(/^(?:a las? )?(\d{1,2}):([0-5]\d)$/);
+    if (match) {
+      const slotStart = match[1]!.padStart(2, '0') + ':' + match[2]!;
+      if (state.availableSlots.some((slot) => slot.start === slotStart)) {
+        return {
+          schemaVersion: 1,
+          kind: 'PROPOSE_ACTION',
+          reply: 'Perfecto, seleccionemos ese horario.',
+          proposedAction: {
+            action: 'SELECT_SLOT',
+            arguments: { slotStart },
+          },
+        };
+      }
+    }
+  }
+
+  if (state.phase === 'READY_TO_FINALIZE') {
+    const normalized = normalizedText(text);
+    const confirmations = new Set([
+      'si',
+      'si confirma',
+      'confirma',
+      'confirmar',
+      'confirmo',
+      'ok',
+      'okay',
+    ]);
+    if (confirmations.has(normalized)) {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, confirmemos esa cita.',
+        proposedAction: {
+          action: 'FINALIZE_APPOINTMENT',
+          arguments: {},
+        },
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function safeModelFallback(projection: AgentEngineProjection): AgentDecision {
+  if (projection.allowedActions.length > 0) {
+    return {
+      schemaVersion: 1,
+      kind: 'CLARIFY',
+      reply: 'No pude interpretar ese mensaje ahora. Intenta escribir tu elección de forma más directa.',
+    };
+  }
+  return {
+    schemaVersion: 1,
+    kind: 'RESPOND',
+    reply: 'No pude generar una respuesta ahora. Intenta nuevamente en un momento.',
+  };
+}
+
+export function deterministicAppointmentNarration(state: AppointmentStateProjection): string {
+  if (state.phase === 'WAITING_FOR_MANAGED_ENTITY' && state.managedEntity.status === 'NEEDS_SELECTION') {
+    const names = state.managedEntity.candidates.slice(0, 4).map((item) => item.displayName);
+    return names.length > 0
+      ? '¿Con cuál continuamos: ' + names.join(', ') + '?'
+      : '¿Con cuál opción deseas continuar?';
+  }
+  if (state.phase === 'WAITING_FOR_SERVICE') {
+    const names = state.services.slice(0, 4).map((item) => item.name);
+    return names.length > 0
+      ? '¿Qué servicio prefieres: ' + names.join(', ') + '?'
+      : '¿Qué servicio prefieres?';
+  }
+  if (state.phase === 'WAITING_FOR_PRODUCT') {
+    const names = state.products.slice(0, 4).map((item) => item.name);
+    return names.length > 0
+      ? '¿Qué opción prefieres: ' + names.join(', ') + '?'
+      : '¿Qué opción prefieres?';
+  }
+  if (state.phase === 'WAITING_FOR_DATE') {
+    return 'Perfecto. ¿Qué fecha prefieres?';
+  }
+  if (state.phase === 'WAITING_FOR_SLOT') {
+    const date = state.appointmentDate ? ' para ' + state.appointmentDate : '';
+    return 'Tengo horarios disponibles' + date + '. ¿Cuál prefieres?';
+  }
+  if (state.phase === 'READY_TO_FINALIZE') {
+    const slot = state.selectedSlot?.start;
+    return slot
+      ? 'Perfecto, quedó seleccionado ' + slot + '. ¿Confirmamos la cita?'
+      : 'Perfecto. ¿Confirmamos la cita?';
+  }
+  if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
+    const date = state.result?.appointmentDate;
+    const start = state.result?.slot.start;
+    if (date && start) return 'Listo, la cita quedó confirmada para ' + date + ' a las ' + start + '.';
+    return 'Listo, la cita quedó confirmada.';
+  }
+  if (state.phase === 'FAILED' || state.workflowStatus === 'FAILED') {
+    return 'No pude completar ese paso. Revisa la información e inténtalo nuevamente.';
+  }
+  return 'Continuemos con el siguiente paso.';
+}
+
 const TRANSIENT_AGENT_PHASES = new Set<AppointmentStateProjection['phase']>([
   'RESOLVING_CUSTOMER',
   'LOADING_MANAGED_ENTITIES',
@@ -257,65 +482,9 @@ const TRANSIENT_AGENT_PHASES = new Set<AppointmentStateProjection['phase']>([
   'RESERVING_APPOINTMENT',
 ]);
 
-function narrationFacts(state: AppointmentStateProjection): AgentJsonObject {
-  if (state.phase === 'WAITING_FOR_SLOT') {
-    return {
-      appointmentDate: state.appointmentDate ?? '',
-      availableSlots: state.availableSlots.map((slot) => ({ start: slot.start, end: slot.end })),
-    };
-  }
-  if (state.phase === 'READY_TO_FINALIZE') {
-    return {
-      appointmentDate: state.appointmentDate ?? '',
-      ...(state.selectedSlot ? { selectedSlot: { start: state.selectedSlot.start, end: state.selectedSlot.end } } : {}),
-      ...(state.selectedProduct ? { selectedOfferingName: state.selectedProduct.name } : {}),
-      ...(state.managedEntity.selected ? { managedEntityName: state.managedEntity.selected.displayName } : {}),
-    };
-  }
-  if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
-    return {
-      appointmentCreated: true,
-      ...(state.result
-        ? {
-            appointmentDate: state.result.appointmentDate,
-            slot: { start: state.result.slot.start, end: state.result.slot.end },
-          }
-        : {}),
-    };
-  }
-  if (state.phase === 'WAITING_FOR_PRODUCT') {
-    return {
-      offerings: state.products.map((item) => ({ name: item.name })),
-    };
-  }
-  if (state.phase === 'WAITING_FOR_DATE') {
-    return {
-      ...(state.selectedProduct ? { selectedOfferingName: state.selectedProduct.name } : {}),
-    };
-  }
-  return {
-    phase: state.phase,
-    workflowStatus: state.workflowStatus,
-  };
-}
-
-function narrationInstruction(state: AppointmentStateProjection): string {
-  if (state.phase === 'WAITING_FOR_SLOT') {
-    return 'Reply in Spanish with one short sentence. State that the requested date is set and ask which horario the user prefers from the available slots. Do not mention vehicle, service, offering, or any already completed choice.';
-  }
-  if (state.phase === 'READY_TO_FINALIZE') {
-    return 'Reply in Spanish with one short sentence. Mention the selected time and ask to confirmar la cita. Do not ask about vehicle, service, offering, or any already completed choice.';
-  }
-  if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
-    return 'Reply in Spanish with one short sentence. Clearly state that la cita quedó confirmada and include the confirmed date/time. Do not ask another question.';
-  }
-  if (state.phase === 'WAITING_FOR_PRODUCT') {
-    return 'The Engine accepted the service. Ask the user to choose one of the confirmed offerings.';
-  }
-  if (state.phase === 'WAITING_FOR_DATE') {
-    return 'The Engine accepted the offering. Ask the user which date they prefer.';
-  }
-  return 'Describe only the confirmed Engine state and ask naturally for the next required user choice, if any.';
+function agentStateIsSettling(state: AppointmentStateProjection): boolean {
+  return TRANSIENT_AGENT_PHASES.has(state.phase)
+    || (state.phase === 'CREATED' && state.workflowStatus === 'RUNNING');
 }
 
 export class AgentAppointmentChannelCore {
@@ -325,6 +494,7 @@ export class AgentAppointmentChannelCore {
     private readonly stateReader: AgentAppointmentStateReader,
     private readonly actionExecutor: AgentAppointmentActionExecutor,
     private readonly modelProvider: AgentModelProvider,
+    private readonly runtime: AgentConversationRuntime,
     profile: AgentResolvedProfile = resolveAgentProfile(),
   ) {
     this.#profile = profile;
@@ -333,6 +503,26 @@ export class AgentAppointmentChannelCore {
   async handle(input: AgentChannelMessageInput): Promise<AgentChannelMessageResponse> {
     validateInput(input);
 
+    const execution = await this.runtime.execute<AgentChannelMessageValue>(
+      input,
+      async ({ recentTurns }) => this.handleFresh(input, recentTurns),
+    );
+
+    return {
+      ...execution.value,
+      runtime: {
+        replayed: execution.replayed,
+        route: execution.audit.route,
+        modelInvoked: execution.audit.modelInvoked,
+        contextTurnCount: execution.audit.contextTurnCount,
+      },
+    };
+  }
+
+  private async handleFresh(
+    input: AgentChannelMessageInput,
+    recentTurns: readonly AgentConversationTurn[],
+  ) {
     const before = await this.stateReader.read({
       businessSlug: input.businessSlug,
       channel: input.channel,
@@ -340,33 +530,58 @@ export class AgentAppointmentChannelCore {
     });
     const projection = projectAppointmentStateForAgent(before.state);
 
-    const interpretation = await runAgentModelTurn(this.modelProvider, {
-      schemaVersion: 1,
-      profile: this.#profile,
-      conversation: {
-        businessSlug: input.businessSlug,
-        conversationId: input.externalConversationId,
-        locale: this.#profile.voice.locale,
-        recentTurns: [],
-        currentMessage: input.text,
-        engine: projection,
-      },
-    });
+    let route: AgentRuntimeRoute = 'MODEL';
+    let modelInvoked = false;
+    let interpretation = deterministicAppointmentDecision(before.state, input.text);
+
+    if (interpretation) {
+      route = 'DETERMINISTIC_BYPASS';
+    } else {
+      modelInvoked = true;
+      try {
+        interpretation = await runAgentModelTurn(this.modelProvider, {
+          schemaVersion: 1,
+          profile: this.#profile,
+          conversation: {
+            businessSlug: input.businessSlug,
+            conversationId: input.externalConversationId,
+            locale: this.#profile.voice.locale,
+            recentTurns,
+            currentMessage: input.text,
+            engine: projection,
+          },
+        });
+      } catch {
+        route = 'SAFE_FALLBACK';
+        interpretation = safeModelFallback(projection);
+      }
+    }
 
     if (interpretation.kind !== 'PROPOSE_ACTION') {
-      return {
+      const value: AgentChannelMessageValue = {
         ok: true,
         workflowId: before.workflowId,
         reply: interpretation.reply,
         interpretation,
         state: before.state,
       };
+      return {
+        value,
+        reply: value.reply,
+        audit: {
+          route,
+          modelInvoked,
+          interpretation,
+          enginePhaseBefore: before.state.phase,
+          enginePhaseAfter: before.state.phase,
+        },
+      };
     }
 
     const envelope = agentDecisionToChannelEnvelope(interpretation, input);
-    const execution = await this.actionExecutor.execute(envelope);
-    if (!execution.ok) {
-      throw new Error('AGENT_ENGINE_EXECUTION_FAILED:' + (execution.code ?? 'UNKNOWN'));
+    const engineExecution = await this.actionExecutor.execute(envelope);
+    if (!engineExecution.ok) {
+      throw new Error('AGENT_ENGINE_EXECUTION_FAILED:' + (engineExecution.code ?? 'UNKNOWN'));
     }
 
     let after = await this.stateReader.read({
@@ -374,7 +589,7 @@ export class AgentAppointmentChannelCore {
       channel: input.channel,
       externalConversationId: input.externalConversationId,
     });
-    for (let attempt = 0; attempt < 50 && TRANSIENT_AGENT_PHASES.has(after.state.phase); attempt += 1) {
+    for (let attempt = 0; attempt < 50 && agentStateIsSettling(after.state); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 40));
       after = await this.stateReader.read({
         businessSlug: input.businessSlug,
@@ -383,36 +598,26 @@ export class AgentAppointmentChannelCore {
       });
     }
 
-    const confirmed = projectAppointmentStateForAgent(after.state);
-    const narration = await runAgentModelTurn(this.modelProvider, {
-      schemaVersion: 1,
-      profile: this.#profile,
-      conversation: {
-        businessSlug: input.businessSlug,
-        conversationId: input.externalConversationId,
-        locale: this.#profile.voice.locale,
-        recentTurns: [],
-        currentMessage: narrationInstruction(after.state),
-        engine: {
-          phase: confirmed.phase,
-          facts: narrationFacts(after.state),
-          allowedActions: [],
-          hints: [
-            'Narration only. Do not propose or execute another action.',
-            'State only confirmed facts.',
-            narrationInstruction(after.state),
-          ],
-        },
-      },
-    });
-
-    return {
+    const reply = deterministicAppointmentNarration(after.state);
+    const value: AgentChannelMessageValue = {
       ok: true,
       workflowId: after.workflowId,
-      reply: narration.reply,
+      reply,
       interpretation,
-      execution,
+      execution: engineExecution,
       state: after.state,
+    };
+
+    return {
+      value,
+      reply,
+      audit: {
+        route,
+        modelInvoked,
+        interpretation,
+        enginePhaseBefore: before.state.phase,
+        enginePhaseAfter: after.state.phase,
+      },
     };
   }
 }

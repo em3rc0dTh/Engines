@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createResilientPostgresPool } from '../../persistence/postgres/resilient-pool.js';
 import { resolveAgentProfile } from '../../contracts/agent-layer/index.js';
 import { LlamaCppAgentModelProvider } from '../../agent/index.js';
+import { AgentConversationRuntime } from '../../agent/runtime/index.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
 import { getAppointmentStateQuery } from '../../orchestration/temporal/workflows/register-new-appointment.workflow.js';
@@ -12,6 +13,7 @@ import {
   PostgresChannelRepository,
 } from '../../persistence/postgres/channel.repository.js';
 import { PostgresCTAIngressRepository } from '../../persistence/postgres/cta-ingress.repository.js';
+import { PostgresAgentRuntimeRepository } from '../../persistence/postgres/agent-runtime.repository.js';
 import { PostgresServicesRepository } from '../../persistence/postgres/services.repository.js';
 import { ChannelCoreCTAOrchestrationPort } from '../canonical/channel-orchestration.port.js';
 import { toCanonicalCTAEvent } from '../canonical/compatibility.js';
@@ -103,6 +105,8 @@ async function run(): Promise<void> {
   const pool = createResilientPostgresPool({ connectionString: config.postgresUrl, max: 8 }, 'channel-core');
   const repository = new PostgresChannelRepository(pool);
   const ingressRepository = new PostgresCTAIngressRepository(pool);
+  const agentRuntimeRepository = new PostgresAgentRuntimeRepository(pool);
+  const agentRuntime = new AgentConversationRuntime(agentRuntimeRepository);
   const servicesRepository = new PostgresServicesRepository(pool);
   const appointmentPort = await TemporalRegisterNewAppointmentPort.connect();
   const execution = new AppointmentChannelExecutionCore(repository, appointmentPort, servicesRepository);
@@ -127,6 +131,7 @@ async function run(): Promise<void> {
         },
         execution,
         agentProvider,
+        agentRuntime,
         resolveAgentProfile(),
       )
     : undefined;
@@ -149,6 +154,8 @@ async function run(): Promise<void> {
           persistence: 'postgresql',
           orchestration: 'temporal',
           agent: Boolean(agentCore),
+          agentRuntime: Boolean(agentCore),
+          agentContext: agentCore ? 'postgresql' : 'disabled',
           mcp: false,
         });
         return;
@@ -344,7 +351,7 @@ async function run(): Promise<void> {
     server.listen(PORT, HOST, () => resolve());
   });
 
-  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: Boolean(agentCore), mcp: false })}`);
+  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: Boolean(agentCore), agentRuntime: Boolean(agentCore), mcp: false })}`);
 
   const shutdown = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
