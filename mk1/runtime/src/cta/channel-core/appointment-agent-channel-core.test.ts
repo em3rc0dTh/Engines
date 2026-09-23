@@ -295,3 +295,74 @@ test('A3 reconstructed history reaches the model on the next non-deterministic t
     { role: 'AGENT', text: '¿Prefieres viernes o sábado?' },
   ]);
 });
+
+
+test('A3 waits for CREATED/RUNNING to become terminal before confirmed narration', async () => {
+  let finalized = false;
+  let postFinalizeReads = 0;
+  let modelCalls = 0;
+
+  const ready: AppointmentStateProjection = {
+    ...state('READY_TO_FINALIZE'),
+    appointmentDate: '2026-09-25',
+    selectedSlot: { start: '06:30', end: '07:00', durationMinutes: 30 },
+  };
+  const createdRunning: AppointmentStateProjection = {
+    ...ready,
+    phase: 'CREATED',
+    workflowStatus: 'RUNNING',
+    nextAction: 'NONE',
+    result: {
+      appointmentId: 'apt_a3_terminal',
+      customerId: 'cus_001',
+      managedEntityId: 'men_logan',
+      schedulerReservationId: 'schedres_a3_terminal',
+      serviceId: 'svc_wash',
+      productId: 'off_exec',
+      appointmentDate: '2026-09-25',
+      slot: { start: '06:30', end: '07:00', durationMinutes: 30 },
+    },
+  };
+  const createdCompleted: AppointmentStateProjection = {
+    ...createdRunning,
+    workflowStatus: 'COMPLETED',
+  };
+
+  const provider: AgentModelProvider = {
+    providerId: 'must-not-run-terminal',
+    async generateTurn() {
+      modelCalls += 1;
+      throw new Error('model should be bypassed');
+    },
+  };
+  const reader = {
+    async read(): Promise<AgentConversationState> {
+      if (!finalized) return { workflowId: 'wf_a3_terminal', state: ready };
+      postFinalizeReads += 1;
+      return {
+        workflowId: 'wf_a3_terminal',
+        state: postFinalizeReads === 1 ? createdRunning : createdCompleted,
+      };
+    },
+  };
+  const executor = {
+    async execute() {
+      finalized = true;
+      return { ok: true as const, replayed: false, workflowId: 'wf_a3_terminal' };
+    },
+  };
+
+  const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
+  const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
+
+  const result = await core.handle(message('msg-terminal', 'Sí, confirma.'));
+
+  assert.equal(result.runtime.route, 'DETERMINISTIC_BYPASS');
+  assert.equal(result.runtime.modelInvoked, false);
+  assert.equal(modelCalls, 0);
+  assert.ok(postFinalizeReads >= 2);
+  assert.equal(result.state.workflowStatus, 'COMPLETED');
+  assert.match(result.reply, /confirmada/i);
+  assert.match(result.reply, /2026-09-25/);
+  assert.match(result.reply, /06:30/);
+});

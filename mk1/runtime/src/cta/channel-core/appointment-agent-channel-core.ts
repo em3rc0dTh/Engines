@@ -482,6 +482,11 @@ const TRANSIENT_AGENT_PHASES = new Set<AppointmentStateProjection['phase']>([
   'RESERVING_APPOINTMENT',
 ]);
 
+function agentStateIsSettling(state: AppointmentStateProjection): boolean {
+  return TRANSIENT_AGENT_PHASES.has(state.phase)
+    || (state.phase === 'CREATED' && state.workflowStatus === 'RUNNING');
+}
+
 export class AgentAppointmentChannelCore {
   readonly #profile: AgentResolvedProfile;
 
@@ -584,7 +589,7 @@ export class AgentAppointmentChannelCore {
       channel: input.channel,
       externalConversationId: input.externalConversationId,
     });
-    for (let attempt = 0; attempt < 50 && TRANSIENT_AGENT_PHASES.has(after.state.phase); attempt += 1) {
+    for (let attempt = 0; attempt < 50 && agentStateIsSettling(after.state); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 40));
       after = await this.stateReader.read({
         businessSlug: input.businessSlug,
