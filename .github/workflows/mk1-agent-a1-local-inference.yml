@@ -13,6 +13,9 @@ on:
       - 'mk1/Design/18-agent-layer-a1-local-inference.md'
       - 'mk1/Plan/17-agent-layer-a1-local-inference.md'
       - 'mk1/Test/agent-layer-a1-local-inference.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a1-real-local-inference-certification-2026-09-22.md'
       - '.github/workflows/mk1-agent-a1-local-inference.yml'
   pull_request:
     branches:
