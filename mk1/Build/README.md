@@ -32,7 +32,8 @@ Customer / CTA channels
 PRE-AGENT integrated platform         ✅ SEALED
 Agent A0 conversational contract       ✅ SEALED
 Agent A1 local inference               ✅ SEALED
-Agent A2 integrated journey             ⏭ NEXT
+Agent A2 integrated journey             ✅ SEALED
+Agent A3 runtime continuity             ⏭ NEXT
 MCP                                    ⏸ LATER
 ~~~
 
@@ -43,11 +44,13 @@ Canonical 2026-09-22 closure receipts:
 - [Channel × ManagedEntity build note](channel-managed-entity-appointment.md)
 - [Agent Layer A0 certification](evidence/agent-layer-a0-certification-2026-09-22.md)
 - [Agent Layer A1 real local inference](evidence/agent-layer-a1-real-local-inference-certification-2026-09-22.md)
+- [Agent Layer A2 integrated journey](evidence/agent-layer-a2-integrated-journey-certification-2026-09-22.md)
 
 ## Evidence ledger
 
 | Gate | Source SHA | Run | Job | Artifact | SHA-256 | Receipt |
 |---|---|---:|---:|---:|---|---|
+| Agent A2 integrated journey | `9438e5eb85fab866d437effe7063b18afdff500e` | `35807358759` | `agent-a2-seal` | `mk1-agent-a2-seal-35807358759` | `c5724e5ab08002a40cc9620929ba8aa95502550da59d69a8fe5cc33e96c62e0d` | [receipt](evidence/agent-layer-a2-integrated-journey-certification-2026-09-22.md) |
 | Agent A1 real local inference | `2be1ad51456c7e511d180b7f562fcfc54b4bca63` | `35803641746` | `agent-a1-seal` | `mk1-agent-a1-seal-35803641746` | `085bbeb337df6a1d034c8d19402876df3d0359aa8c6a8544956c3bcdb6d3b4ee` | [receipt](evidence/agent-layer-a1-real-local-inference-certification-2026-09-22.md) |
 | Agent A0 conversational contract | `3b53202b55e2c7309ea2bea7fc0dfb481329d0ab` | `35784801132` | `agent-a0-seal` | `mk1-agent-a0-seal-35784801132` | `9ca44bdd7dd67a860f6c101094b1ad515c5509ee49af449cde2421e4446302c3` | [receipt](evidence/agent-layer-a0-certification-2026-09-22.md) |
 | Channel × ManagedEntity physical seal | physical lineage cf9f8b8… → bd25a49… → 5561836… | — | — | — | — | [receipt](evidence/channel-managed-entity-provider-physical-seal-2026-09-22.md) |
@@ -164,9 +167,10 @@ production readiness                       ❌
 ~~~text
 PRE-AGENT      ✅ SEALED + MERGED
 Agent A0       ✅ SEALED + MERGED
-Agent A1       ✅ SEALED
-Agent A2       ⏭ INTEGRATED CHANNEL → AGENT → ENGINE JOURNEY + 8 GB NODE PROOF
+Agent A1       ✅ SEALED + MERGED
+Agent A2       ✅ SEALED
+Agent A3       ⏭ RUNTIME CONTINUITY / REPLAY / BYPASS
 MCP            ⏸ LATER
 ~~~
 
-A2 must preserve A0/A1 authority boundaries while proving a complete operational journey and whole-node resource envelope.
+A3 must preserve A0–A2 authority boundaries while proving durable conversational runtime behavior.

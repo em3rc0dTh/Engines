@@ -17,6 +17,9 @@ on:
       - 'mk1/Design/19-agent-layer-a2-integrated-journey.md'
       - 'mk1/Plan/18-agent-layer-a2-integrated-journey.md'
       - 'mk1/Test/agent-layer-a2-integrated-journey.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a2-integrated-journey-certification-2026-09-22.md'
       - '.github/workflows/mk1-agent-a2-integrated-journey.yml'
   pull_request:
     branches:
