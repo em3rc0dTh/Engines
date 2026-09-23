@@ -1,0 +1,106 @@
+name: MK1 Agent Docker Local Inference
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'mk1/runtime/Dockerfile.agent-llama'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/runtime/docker-compose.agent.yml'
+      - 'mk1/runtime/scripts/run-agent-llama.sh'
+      - 'mk1/runtime/src/agent/runtime/agent-docker-compose.test.ts'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/agent-layer-a4-docker-local-inference.md'
+      - '.github/workflows/mk1-agent-docker-local-inference.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-local-inference:
+    name: docker-local-inference
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: Docker Agent contract
+        run: npm run test:agent:docker
+
+      - name: Resolve composed Agent stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent config > /tmp/agent-docker-compose.txt
+          grep -F 'http://agent-llama:8080' /tmp/agent-docker-compose.txt
+
+      - name: Build pinned llama.cpp Agent image
+        run: docker compose --profile agent build agent-llama
+
+      - name: Start Dockerized Qwen Agent
+        run: |
+          docker compose --profile agent up -d agent-llama
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/health > /tmp/agent-docker-health.json 2>/dev/null; then
+              cat /tmp/agent-docker-health.json
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Status}}' runtime-agent-llama-1 2>/dev/null || true)" = "exited" ]; then
+              docker compose --profile agent logs --no-color agent-llama
+              exit 1
+            fi
+            sleep 2
+          done
+          docker compose --profile agent logs --no-color agent-llama
+          exit 1
+
+      - name: Verify certified model inside container
+        run: |
+          docker compose --profile agent exec -T agent-llama sh -lc 'echo "$AGENT_MODEL_SHA256  $AGENT_MODEL_PATH" | sha256sum -c -' | tee /tmp/agent-docker-model-sha.txt
+          grep -F ': OK' /tmp/agent-docker-model-sha.txt
+          docker compose --profile agent logs --no-color agent-llama | tee /tmp/agent-docker-llama.log
+          grep -F 'AGENT_LLAMA_MODEL_READY' /tmp/agent-docker-llama.log
+          grep -F 'AGENT_LLAMA_SERVER_START' /tmp/agent-docker-llama.log
+
+      - name: Capture evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-docker-evidence
+          git rev-parse HEAD > /tmp/agent-docker-evidence/git-sha.txt
+          cp /tmp/agent-docker-* /tmp/agent-docker-evidence/ 2>/dev/null || true
+          docker compose --profile agent ps > /tmp/agent-docker-evidence/compose-ps.txt 2>&1 || true
+          docker stats --no-stream > /tmp/agent-docker-evidence/docker-stats.txt 2>&1 || true
+          echo 'AGENT_DOCKER_LOCAL_INFERENCE_PASS' > /tmp/agent-docker-evidence/terminal-marker.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-agent-docker-local-inference-${{ github.run_id }}
+          path: /tmp/agent-docker-evidence
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose --profile agent down -v --remove-orphans || true
+
+      - run: echo 'AGENT_DOCKER_LOCAL_INFERENCE_PASS'

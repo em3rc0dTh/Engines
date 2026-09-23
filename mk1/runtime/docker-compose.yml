@@ -114,6 +114,37 @@ services:
       retries: 30
       start_period: 2s
 
+  agent-llama:
+    profiles: ["agent"]
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-llama
+      args:
+        LLAMA_CPP_COMMIT: ${LLAMA_CPP_COMMIT:-b29c606e28a01b1bc8c1351026a0fa6e616bf6c4}
+    environment:
+      AGENT_MODEL_ALIAS: ${AGENT_LLAMA_MODEL:-engines-agent-local}
+      AGENT_MODEL_PATH: /models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+      AGENT_MODEL_URL: ${AGENT_MODEL_URL:-https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf}
+      AGENT_MODEL_SHA256: ${AGENT_MODEL_SHA256:-6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e}
+      AGENT_THREADS: ${AGENT_THREADS:-4}
+      AGENT_THREADS_BATCH: ${AGENT_THREADS_BATCH:-4}
+      AGENT_CTX_SIZE: ${AGENT_CTX_SIZE:-4096}
+      AGENT_PARALLEL: ${AGENT_PARALLEL:-1}
+      AGENT_PREDICT: ${AGENT_PREDICT:-128}
+      AGENT_BATCH_SIZE: ${AGENT_BATCH_SIZE:-256}
+      AGENT_UBATCH_SIZE: ${AGENT_UBATCH_SIZE:-128}
+    volumes:
+      - engines_agent_models:/models
+    ports:
+      - "127.0.0.1:${AGENT_LLAMA_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 120
+      start_period: 5s
+    restart: unless-stopped
+
   channel-core:
     build:
       context: .
@@ -125,7 +156,7 @@ services:
       ENGINES_CHANNEL_HOST: 0.0.0.0
       ENGINES_CHANNEL_PORT: "8788"
       ENGINES_AGENT_ENABLED: ${ENGINES_AGENT_ENABLED:-false}
-      AGENT_LLAMA_BASE_URL: ${AGENT_LLAMA_BASE_URL:-http://host.docker.internal:8080}
+      AGENT_LLAMA_BASE_URL: ${AGENT_LLAMA_BASE_URL:-http://agent-llama:8080}
       AGENT_LLAMA_MODEL: ${AGENT_LLAMA_MODEL:-engines-agent-local}
       AGENT_MODEL_TIMEOUT_MS: ${AGENT_MODEL_TIMEOUT_MS:-30000}
       META_APP_SECRET: ${META_APP_SECRET:-}
@@ -281,3 +312,4 @@ volumes:
   engines_mk0_mongo:
   engines_mk0_attachments:
   engines_mk0_temporal:
+  engines_agent_models:

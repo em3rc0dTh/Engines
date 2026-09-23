@@ -1,0 +1,9 @@
+services:
+  channel-core:
+    environment:
+      ENGINES_AGENT_ENABLED: "true"
+      AGENT_LLAMA_BASE_URL: http://agent-llama:8080
+      AGENT_LLAMA_MODEL: engines-agent-local
+    depends_on:
+      agent-llama:
+        condition: service_healthy

@@ -114,7 +114,12 @@
     "probe:agent:a2:resources": "tsx scripts/measure-agent-a2-node-budget.ts",
     "migrate:agent-runtime": "tsx scripts/migrate-postgres-agent-runtime.ts",
     "test:agent:a3": "tsx --test src/agent/runtime/*.test.ts src/cta/channel-core/appointment-agent-channel-core.test.ts",
-    "probe:agent:a3:durability": "tsx scripts/certify-agent-a3-runtime-durability.ts"
+    "probe:agent:a3:durability": "tsx scripts/certify-agent-a3-runtime-durability.ts",
+    "lab:agent:up": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent up --build -d",
+    "lab:agent:down": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent down --remove-orphans",
+    "lab:agent:status": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent ps",
+    "lab:agent:logs": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent logs -f agent-llama channel-core webchat",
+    "test:agent:docker": "tsx --test src/agent/runtime/agent-docker-compose.test.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
