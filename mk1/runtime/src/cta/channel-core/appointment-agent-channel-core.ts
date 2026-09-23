@@ -257,15 +257,57 @@ const TRANSIENT_AGENT_PHASES = new Set<AppointmentStateProjection['phase']>([
   'RESERVING_APPOINTMENT',
 ]);
 
-function narrationInstruction(state: AppointmentStateProjection): string {
+function narrationFacts(state: AppointmentStateProjection): AgentJsonObject {
   if (state.phase === 'WAITING_FOR_SLOT') {
-    return 'The Engine accepted the requested date. Tell the user the date is set and ask them to choose one of the available time slots. Do not ask about vehicle, service, or offering again.';
+    return {
+      appointmentDate: state.appointmentDate ?? '',
+      availableSlots: state.availableSlots.map((slot) => ({ start: slot.start, end: slot.end })),
+    };
   }
   if (state.phase === 'READY_TO_FINALIZE') {
-    return 'The Engine accepted the selected time slot. Briefly acknowledge the selected date/time and ask the user to confirm the appointment. Do not ask about vehicle, service, or offering again.';
+    return {
+      appointmentDate: state.appointmentDate ?? '',
+      ...(state.selectedSlot ? { selectedSlot: { start: state.selectedSlot.start, end: state.selectedSlot.end } } : {}),
+      ...(state.selectedProduct ? { selectedOfferingName: state.selectedProduct.name } : {}),
+      ...(state.managedEntity.selected ? { managedEntityName: state.managedEntity.selected.displayName } : {}),
+    };
   }
   if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
-    return 'The Engine has created the appointment successfully. Tell the user the appointment is confirmed using the confirmed date/time. Do not ask for confirmation again.';
+    return {
+      appointmentCreated: true,
+      ...(state.result
+        ? {
+            appointmentDate: state.result.appointmentDate,
+            slot: { start: state.result.slot.start, end: state.result.slot.end },
+          }
+        : {}),
+    };
+  }
+  if (state.phase === 'WAITING_FOR_PRODUCT') {
+    return {
+      offerings: state.products.map((item) => ({ name: item.name })),
+    };
+  }
+  if (state.phase === 'WAITING_FOR_DATE') {
+    return {
+      ...(state.selectedProduct ? { selectedOfferingName: state.selectedProduct.name } : {}),
+    };
+  }
+  return {
+    phase: state.phase,
+    workflowStatus: state.workflowStatus,
+  };
+}
+
+function narrationInstruction(state: AppointmentStateProjection): string {
+  if (state.phase === 'WAITING_FOR_SLOT') {
+    return 'Reply in Spanish with one short sentence. State that the requested date is set and ask which horario the user prefers from the available slots. Do not mention vehicle, service, offering, or any already completed choice.';
+  }
+  if (state.phase === 'READY_TO_FINALIZE') {
+    return 'Reply in Spanish with one short sentence. Mention the selected time and ask to confirmar la cita. Do not ask about vehicle, service, offering, or any already completed choice.';
+  }
+  if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
+    return 'Reply in Spanish with one short sentence. Clearly state that la cita quedó confirmada and include the confirmed date/time. Do not ask another question.';
   }
   if (state.phase === 'WAITING_FOR_PRODUCT') {
     return 'The Engine accepted the service. Ask the user to choose one of the confirmed offerings.';
@@ -353,10 +395,7 @@ export class AgentAppointmentChannelCore {
         currentMessage: narrationInstruction(after.state),
         engine: {
           phase: confirmed.phase,
-          facts: {
-            ...confirmed.facts,
-            nextAllowedActions: confirmed.allowedActions,
-          },
+          facts: narrationFacts(after.state),
           allowedActions: [],
           hints: [
             'Narration only. Do not propose or execute another action.',
