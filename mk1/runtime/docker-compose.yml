@@ -56,7 +56,7 @@ services:
     command:
       - sh
       - -lc
-      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run migrate:services && npm run migrate:channel && npm run migrate:cta-orchestration && npm run migrate:managed-entity && npm run migrate:scheduler && npm run migrate:scheduler:g2:s6 && npm run migrate:scheduler:g2:s7 && npm run mongo:init:b6
+      - npm run migrate:b5 && npm run migrate:b6 && npm run migrate:b7 && npm run migrate:appointment && npm run migrate:services && npm run migrate:channel && npm run migrate:cta-orchestration && npm run migrate:managed-entity && npm run migrate:scheduler && npm run migrate:scheduler:g2:s6 && npm run migrate:scheduler:g2:s7 && npm run migrate:agent-runtime && npm run mongo:init:b6
     restart: "no"
 
   worker:

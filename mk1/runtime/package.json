@@ -111,7 +111,10 @@
     "probe:agent:a1:local": "tsx scripts/certify-agent-a1-real-local.ts",
     "test:agent:a2": "tsx --test src/cta/channel-core/appointment-agent-channel-core.test.ts",
     "probe:agent:a2": "tsx scripts/certify-agent-a2-integrated-webchat.ts",
-    "probe:agent:a2:resources": "tsx scripts/measure-agent-a2-node-budget.ts"
+    "probe:agent:a2:resources": "tsx scripts/measure-agent-a2-node-budget.ts",
+    "migrate:agent-runtime": "tsx scripts/migrate-postgres-agent-runtime.ts",
+    "test:agent:a3": "tsx --test src/agent/runtime/*.test.ts src/cta/channel-core/appointment-agent-channel-core.test.ts",
+    "probe:agent:a3:durability": "tsx scripts/certify-agent-a3-runtime-durability.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
