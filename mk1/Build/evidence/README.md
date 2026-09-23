@@ -43,6 +43,19 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 - Median real-model latency: 5,916 ms
 - Verdict: AGENT A1 SEALED
 
+### Agent Layer A2 integrated journey
+
+- [agent-layer-a2-integrated-journey-certification-2026-09-22.md](agent-layer-a2-integrated-journey-certification-2026-09-22.md)
+- Executed exact-head authority: 9438e5eb85fab866d437effe7063b18afdff500e
+- Run: 35807358759
+- Integrated artifact: mk1-agent-a2-integrated-35807358759
+- Integrated digest: sha256:10db90e06c6a5354a82ba9dc3cb3788449cc17deb0151e89c1c688a26d7b26bc
+- Seal artifact: mk1-agent-a2-seal-35807358759
+- Seal digest: sha256:c5724e5ab08002a40cc9620929ba8aa95502550da59d69a8fe5cc33e96c62e0d
+- Accounted node memory: 4,057 MB / 8,192 MB
+- Headroom: 4,135 MB
+- Verdict: AGENT A2 SEALED
+
 ## Historical receipts
 
 Older receipts in this directory remain valid only within their documented source, scope and truth boundaries. Do not reinterpret a historical ResourceReservation receipt as proof of the current SchedulerReservation topology.

@@ -1,0 +1,333 @@
+name: MK1 Agent Layer A2 Integrated Journey
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/agent-layer-a2-integrated-journey
+    paths:
+      - 'mk1/runtime/src/agent/**'
+      - 'mk1/runtime/src/contracts/agent-layer/**'
+      - 'mk1/runtime/src/cta/channel-core/**'
+      - 'mk1/runtime/src/cta/webchat/**'
+      - 'mk1/runtime/scripts/certify-agent-a2-integrated-webchat.ts'
+      - 'mk1/runtime/scripts/measure-agent-a2-node-budget.ts'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Design/19-agent-layer-a2-integrated-journey.md'
+      - 'mk1/Plan/18-agent-layer-a2-integrated-journey.md'
+      - 'mk1/Test/agent-layer-a2-integrated-journey.md'
+      - 'mk1/Build/README.md'
+      - 'mk1/Build/evidence/README.md'
+      - 'mk1/Build/evidence/agent-layer-a2-integrated-journey-certification-2026-09-22.md'
+      - '.github/workflows/mk1-agent-a2-integrated-journey.yml'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-a2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic-a2-contract:
+    name: deterministic-a2-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check | tee /tmp/agent-a2-typescript.log
+
+      - name: A0 contract regression
+        run: npm run test:agent:a0 | tee /tmp/agent-a2-a0.log
+
+      - name: A1 provider regression
+        run: npm run test:agent:a1 | tee /tmp/agent-a2-a1.log
+
+      - name: A2 deterministic contract
+        run: npm run test:agent:a2 | tee /tmp/agent-a2-contract.log
+
+      - name: Channel contract regression
+        run: npm run test:channel:c0 | tee /tmp/agent-a2-channel.log
+
+      - name: Capture deterministic evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-a2-deterministic
+          git rev-parse HEAD > /tmp/agent-a2-deterministic/git-sha.txt
+          cp /tmp/agent-a2-*.log /tmp/agent-a2-deterministic/ 2>/dev/null || true
+
+      - name: Upload deterministic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a2-deterministic-${{ github.run_id }}
+          path: /tmp/agent-a2-deterministic
+          if-no-files-found: error
+
+  real-integrated-journey:
+    name: real-integrated-journey
+    needs: deterministic-a2-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    env:
+      ENGINES_AGENT_ENABLED: 'true'
+      AGENT_LLAMA_BASE_URL: http://host.docker.internal:8080
+      AGENT_LLAMA_MODEL: engines-agent-local
+      AGENT_MODEL_TIMEOUT_MS: '30000'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked Node dependencies
+        run: npm ci
+
+      - name: Require four CPU lanes
+        run: |
+          echo "host_nproc=$(nproc)"
+          test "$(nproc)" -ge 4
+
+      - name: Install llama.cpp build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libcurl4-openssl-dev
+
+      - name: Build pinned llama.cpp CPU server
+        run: |
+          rm -rf /tmp/llama.cpp
+          git clone --filter=blob:none --no-checkout https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp
+          git -C /tmp/llama.cpp fetch --depth 1 origin b29c606e28a01b1bc8c1351026a0fa6e616bf6c4
+          git -C /tmp/llama.cpp checkout --detach b29c606e28a01b1bc8c1351026a0fa6e616bf6c4
+          cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -G Ninja             -DGGML_NATIVE=OFF             -DGGML_OPENMP=ON             -DGGML_CUDA=OFF             -DLLAMA_CURL=ON
+          cmake --build /tmp/llama.cpp/build --target llama-server -j 2
+          /tmp/llama.cpp/build/bin/llama-server --version | tee /tmp/agent-a2-llama-version.log
+
+      - name: Download certified Qwen 1.5B Q4_K_M model
+        run: |
+          mkdir -p /tmp/agent-model
+          curl -L --fail --retry 5 --retry-delay 2             -o /tmp/agent-model/qwen2.5-1.5b-instruct-q4_k_m.gguf             https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
+          sha256sum /tmp/agent-model/qwen2.5-1.5b-instruct-q4_k_m.gguf | tee /tmp/agent-a2-model-sha256.txt
+          grep -F '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e' /tmp/agent-a2-model-sha256.txt
+
+      - name: Start four-CPU local model server
+        run: |
+          taskset -c 0-3 /tmp/llama.cpp/build/bin/llama-server             -m /tmp/agent-model/qwen2.5-1.5b-instruct-q4_k_m.gguf             --alias engines-agent-local             --host 0.0.0.0             --port 8080             --threads 4             --threads-batch 4             --ctx-size 4096             --parallel 1             --predict 128             --batch-size 256             --ubatch-size 128             --no-mmproj             > /tmp/agent-a2-llama-server.log 2>&1 &
+          echo $! > /tmp/agent-a2-llama.pid
+
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/health > /tmp/agent-a2-llama-health.json 2>/dev/null; then
+              cat /tmp/agent-a2-llama-health.json
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/agent-a2-llama.pid)" 2>/dev/null; then
+              cat /tmp/agent-a2-llama-server.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/agent-a2-llama-server.log
+          exit 1
+
+      - name: Start clean Agent-enabled Engines stack
+        run: |
+          docker compose --profile webchat down -v --remove-orphans || true
+          docker compose --profile webchat up --build -d
+
+          ids=$(docker compose --profile webchat ps -q)
+          test -n "$ids"
+          for id in $ids; do
+            docker update --cpuset-cpus=0-3 "$id" >/dev/null
+          done
+
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8790/health > /tmp/agent-a2-webchat-health.json 2>/dev/null; then
+              cat /tmp/agent-a2-webchat-health.json
+              grep -F '"agent":true' /tmp/agent-a2-webchat-health.json
+              exit 0
+            fi
+            docker compose --profile webchat ps
+            sleep 1
+          done
+          docker compose --profile webchat logs --no-color
+          exit 1
+
+      - name: Prepare ManagedEntity physical fixture
+        run: |
+          docker compose run --rm --no-deps -T             -e POSTGRES_URL=postgresql://engines:engines@postgres:5432/engines_mk0             cta npm run fixture:me1:physical | tee /tmp/agent-a2-fixture.log
+          grep -F 'ME1_PHYSICAL_FIXTURES_READY' /tmp/agent-a2-fixture.log
+
+      - name: Execute real WebChat Agent journey
+        run: |
+          npm run probe:agent:a2 | tee /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_WEBCHAT_CHANNEL_PASS' /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_LOCAL_MODEL_ENGINE_ACTION_PASS' /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_TEMPORAL_DURABLE_STATE_PASS' /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_SCHEDULER_RESERVATION_PASS' /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_NATURAL_REPLY_PASS' /tmp/agent-a2-journey.log
+          grep -F 'AGENT_A2_INTEGRATED_JOURNEY_PASS' /tmp/agent-a2-journey.log
+
+      - name: Verify Scheduler-backed durable SQL truth
+        run: |
+          docker compose exec -T postgres psql -U engines -d engines_mk0 -AtF '|' -c "
+            SELECT
+              a.appointment_id,
+              a.managed_entity_id,
+              a.scheduler_reservation_id,
+              (a.resource_reservation_id IS NULL),
+              sr.status,
+              COUNT(sra.resource_id)
+            FROM appointments a
+            JOIN scheduler_reservations sr
+              ON sr.reservation_id = a.scheduler_reservation_id
+             AND sr.business_slug = a.business_slug
+            LEFT JOIN scheduler_reservation_assignments sra
+              ON sra.reservation_id = sr.reservation_id
+             AND sra.business_slug = sr.business_slug
+            WHERE a.business_slug = 'golden-business'
+            GROUP BY
+              a.appointment_id,
+              a.managed_entity_id,
+              a.scheduler_reservation_id,
+              a.resource_reservation_id,
+              sr.status,
+              a.created_at
+            ORDER BY a.created_at DESC
+            LIMIT 1;
+          " | tee /tmp/agent-a2-sql.txt
+          grep -F '|men_me1_phys_logan|' /tmp/agent-a2-sql.txt
+          grep -E '\|schedres_[^|]+\|t\|RESERVED\|1$' /tmp/agent-a2-sql.txt
+          echo 'AGENT_A2_SQL_DURABILITY_PASS' | tee -a /tmp/agent-a2-sql.txt
+
+      - name: Enforce complete-node resource budget
+        env:
+          AGENT_LLAMA_PID_FILE: /tmp/agent-a2-llama.pid
+        run: |
+          npm run probe:agent:a2:resources | tee /tmp/agent-a2-resources.log
+          grep -F 'AGENT_A2_FOUR_VCPU_AFFINITY_PROFILE_PASS' /tmp/agent-a2-resources.log
+          grep -F 'AGENT_A2_TOTAL_NODE_MEMORY_BUDGET_PASS' /tmp/agent-a2-resources.log
+
+      - name: Capture A2 evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-a2-evidence
+          git rev-parse HEAD > /tmp/agent-a2-evidence/git-sha.txt
+          git -C /tmp/llama.cpp rev-parse HEAD > /tmp/agent-a2-evidence/llama-cpp-sha.txt 2>/dev/null || true
+          nproc > /tmp/agent-a2-evidence/host-nproc.txt
+          cp /tmp/agent-a2-*.log /tmp/agent-a2-evidence/ 2>/dev/null || true
+          cp /tmp/agent-a2-*.txt /tmp/agent-a2-evidence/ 2>/dev/null || true
+          cp /tmp/agent-a2-*.json /tmp/agent-a2-evidence/ 2>/dev/null || true
+          docker compose --profile webchat ps > /tmp/agent-a2-evidence/compose-ps.txt 2>&1 || true
+          docker stats --no-stream > /tmp/agent-a2-evidence/docker-stats.txt 2>&1 || true
+          docker compose --profile webchat logs --no-color > /tmp/agent-a2-evidence/compose.log 2>&1 || true
+          taskset -pc "$(cat /tmp/agent-a2-llama.pid)" > /tmp/agent-a2-evidence/llama-affinity.txt 2>&1 || true
+          for id in $(docker compose --profile webchat ps -q 2>/dev/null); do
+            docker inspect -f '{{.Name}} cpuset={{.HostConfig.CpusetCpus}}' "$id"
+          done > /tmp/agent-a2-evidence/container-affinity.txt 2>&1 || true
+
+      - name: Upload A2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a2-integrated-${{ github.run_id }}
+          path: /tmp/agent-a2-evidence
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose --profile webchat down -v --remove-orphans || true
+          if [ -f /tmp/agent-a2-llama.pid ]; then
+            kill "$(cat /tmp/agent-a2-llama.pid)" 2>/dev/null || true
+          fi
+
+  protected-pre-agent-regressions:
+    name: protected-pre-agent-regressions
+    needs: deterministic-a2-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - run: npm run test:appointment
+      - run: npm run test:channel:c0
+      - run: npm run test:scheduler:g2:s0
+      - run: npm run test:integration:g3:i0
+      - run: echo 'AGENT_A2_PRE_AGENT_REGRESSIONS_PASS'
+
+  agent-a2-seal:
+    name: agent-a2-seal
+    needs:
+      - real-integrated-journey
+      - protected-pre-agent-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact-head A2 seal
+        shell: bash
+        run: |
+          mkdir -p /tmp/agent-a2-seal
+          git rev-parse HEAD | tee /tmp/agent-a2-seal/git-sha.txt
+          cat > /tmp/agent-a2-seal/certification.txt <<'EOF'
+          A0 contract preserved                            PASS
+          A1 real local provider preserved                 PASS
+          real WebChat natural-message route               PASS
+          Qwen2.5 1.5B local inference                     PASS
+          validated AgentDecision to canonical action      PASS
+          AppointmentChannelExecutionCore authority        PASS
+          Temporal durable workflow                        PASS
+          Scheduler-backed Appointment                     PASS
+          post-action confirmed-state narration            PASS
+          visible reply internal-leak exclusion            PASS
+          4-vCPU product affinity profile                  PASS
+          accounted node footprint <= 8192 MB              PASS
+          protected PRE-AGENT regressions                  PASS
+          EOF
+          echo 'AGENT_A2_SEAL_PASS' | tee /tmp/agent-a2-seal/terminal-marker.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a2-seal-${{ github.run_id }}
+          path: /tmp/agent-a2-seal
+          if-no-files-found: error
+
+      - name: Terminal A2 marker
+        run: echo 'AGENT_A2_SEAL_PASS'
