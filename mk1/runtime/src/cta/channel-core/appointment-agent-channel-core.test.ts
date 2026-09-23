@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
+import {
+  normalizeAppointmentDateInput,
+  todayInTimeZone,
+  type AppointmentStateProjection,
+} from '../../contracts/register-new-appointment/index.js';
 import {
   resolveAgentProfile,
   type AgentModelProvider,
@@ -211,6 +215,135 @@ test('A3 deterministic bypass executes with zero model calls and replays without
   assert.equal(modelCalls, 0);
   assert.equal(engineCalls, 1);
   assert.match(first.reply, /confirmamos/i);
+});
+
+test('A4 normalizes an unambiguous model date phrase before Engine execution', async () => {
+  let current = state('WAITING_FOR_DATE');
+  let capturedDateInput: unknown;
+  const expected = normalizeAppointmentDateInput(
+    'mañana',
+    todayInTimeZone('America/Lima'),
+  );
+  assert.equal(expected.ok, true);
+  if (!expected.ok) throw new Error('expected tomorrow to parse');
+
+  const provider: AgentModelProvider = {
+    providerId: 'natural-date-proof',
+    async generateTurn() {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'Perfecto, mañana por la tarde.',
+        proposedAction: {
+          action: 'SET_DATE',
+          arguments: { naturalDate: 'mañana por la tarde' },
+        },
+      };
+    },
+  };
+  const reader = {
+    async read(): Promise<AgentConversationState> {
+      return { workflowId: 'wf_a4_date', state: current };
+    },
+  };
+  const executor = {
+    async execute(envelope: any) {
+      capturedDateInput = envelope.payload.dateInput;
+      current = {
+        ...current,
+        phase: 'WAITING_FOR_SLOT',
+        appointmentDate: expected.appointmentDate,
+        nextAction: 'SELECT_SLOT',
+        availableSlots: [{ start: '15:00', end: '15:30', durationMinutes: 30 }],
+      };
+      return { ok: true as const, replayed: false, workflowId: 'wf_a4_date' };
+    },
+  };
+
+  const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
+  const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
+  const result = await core.handle(message('msg-natural-date', 'Quiero hacerlo mañana por la tarde.'));
+
+  assert.equal(result.runtime.route, 'MODEL');
+  assert.equal(result.runtime.modelInvoked, true);
+  assert.equal(capturedDateInput, expected.appointmentDate);
+  assert.equal(result.state.phase, 'WAITING_FOR_SLOT');
+  assert.equal(result.state.appointmentDate, expected.appointmentDate);
+});
+
+test('A4 refuses ambiguous model date text without touching the Engine', async () => {
+  let engineCalls = 0;
+  const provider: AgentModelProvider = {
+    providerId: 'ambiguous-date-proof',
+    async generateTurn() {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'De acuerdo.',
+        proposedAction: {
+          action: 'SET_DATE',
+          arguments: { naturalDate: 'viernes o sábado' },
+        },
+      };
+    },
+  };
+  const reader = {
+    async read(): Promise<AgentConversationState> {
+      return { workflowId: 'wf_a4_ambiguous', state: state('WAITING_FOR_DATE') };
+    },
+  };
+  const executor = {
+    async execute() {
+      engineCalls += 1;
+      return { ok: true as const, replayed: false, workflowId: 'wf_a4_ambiguous' };
+    },
+  };
+
+  const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
+  const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
+  const result = await core.handle(message('msg-ambiguous-date', 'viernes o sábado'));
+
+  assert.equal(result.runtime.route, 'MODEL');
+  assert.equal(result.runtime.modelInvoked, true);
+  assert.equal(result.interpretation.kind, 'CLARIFY');
+  assert.equal(engineCalls, 0);
+  assert.match(result.reply, /fecha inequívoca/i);
+});
+
+test('A4 does not misread Spanish morning daypart as tomorrow', async () => {
+  let engineCalls = 0;
+  const provider: AgentModelProvider = {
+    providerId: 'morning-daypart-proof',
+    async generateTurn() {
+      return {
+        schemaVersion: 1,
+        kind: 'PROPOSE_ACTION',
+        reply: 'De acuerdo.',
+        proposedAction: {
+          action: 'SET_DATE',
+          arguments: { naturalDate: 'por la mañana' },
+        },
+      };
+    },
+  };
+  const reader = {
+    async read(): Promise<AgentConversationState> {
+      return { workflowId: 'wf_a4_morning', state: state('WAITING_FOR_DATE') };
+    },
+  };
+  const executor = {
+    async execute() {
+      engineCalls += 1;
+      return { ok: true as const, replayed: false, workflowId: 'wf_a4_morning' };
+    },
+  };
+
+  const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
+  const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
+  const result = await core.handle(message('msg-morning-only', 'por la mañana'));
+
+  assert.equal(result.interpretation.kind, 'CLARIFY');
+  assert.equal(engineCalls, 0);
 });
 
 test('A3 model-unavailable fallback performs no Engine action and is durable', async () => {
