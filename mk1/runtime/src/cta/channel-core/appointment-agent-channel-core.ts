@@ -257,6 +257,25 @@ const TRANSIENT_AGENT_PHASES = new Set<AppointmentStateProjection['phase']>([
   'RESERVING_APPOINTMENT',
 ]);
 
+function narrationInstruction(state: AppointmentStateProjection): string {
+  if (state.phase === 'WAITING_FOR_SLOT') {
+    return 'The Engine accepted the requested date. Tell the user the date is set and ask them to choose one of the available time slots. Do not ask about vehicle, service, or offering again.';
+  }
+  if (state.phase === 'READY_TO_FINALIZE') {
+    return 'The Engine accepted the selected time slot. Briefly acknowledge the selected date/time and ask the user to confirm the appointment. Do not ask about vehicle, service, or offering again.';
+  }
+  if (state.phase === 'CREATED' && state.workflowStatus === 'COMPLETED') {
+    return 'The Engine has created the appointment successfully. Tell the user the appointment is confirmed using the confirmed date/time. Do not ask for confirmation again.';
+  }
+  if (state.phase === 'WAITING_FOR_PRODUCT') {
+    return 'The Engine accepted the service. Ask the user to choose one of the confirmed offerings.';
+  }
+  if (state.phase === 'WAITING_FOR_DATE') {
+    return 'The Engine accepted the offering. Ask the user which date they prefer.';
+  }
+  return 'Describe only the confirmed Engine state and ask naturally for the next required user choice, if any.';
+}
+
 export class AgentAppointmentChannelCore {
   readonly #profile: AgentResolvedProfile;
 
@@ -330,11 +349,8 @@ export class AgentAppointmentChannelCore {
         businessSlug: input.businessSlug,
         conversationId: input.externalConversationId,
         locale: this.#profile.voice.locale,
-        recentTurns: [
-          { role: 'USER', text: input.text },
-          { role: 'AGENT', text: interpretation.reply },
-        ],
-        currentMessage: 'Engines applied the previous validated action. Reply using only the confirmed Engine state now provided.',
+        recentTurns: [],
+        currentMessage: narrationInstruction(after.state),
         engine: {
           phase: confirmed.phase,
           facts: {
@@ -344,7 +360,8 @@ export class AgentAppointmentChannelCore {
           allowedActions: [],
           hints: [
             'Narration only. Do not propose or execute another action.',
-            'State only confirmed facts. If another user choice is needed, ask for it naturally.',
+            'State only confirmed facts.',
+            narrationInstruction(after.state),
           ],
         },
       },
