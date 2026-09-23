@@ -32,6 +32,7 @@ type GoldenCase = Readonly<{
   expectedKind: 'RESPOND' | 'CLARIFY' | 'PROPOSE_ACTION';
   expectedAction?: string;
   expectedArgumentContains?: string;
+  expectedReplyPattern: RegExp;
 }>;
 
 const cases: readonly GoldenCase[] = [
@@ -48,6 +49,7 @@ const cases: readonly GoldenCase[] = [
     expectedKind: 'PROPOSE_ACTION',
     expectedAction: 'SET_DATE',
     expectedArgumentContains: 'viernes',
+    expectedReplyPattern: /viernes|perfecto|revis/i,
   },
   {
     id: 'A1-GOLDEN-ENTITY',
@@ -66,6 +68,7 @@ const cases: readonly GoldenCase[] = [
     expectedKind: 'PROPOSE_ACTION',
     expectedAction: 'SELECT_MANAGED_ENTITY',
     expectedArgumentContains: 'men_logan',
+    expectedReplyPattern: /logan|perfecto|seguimos/i,
   },
   {
     id: 'A1-GOLDEN-OFFERING',
@@ -84,6 +87,7 @@ const cases: readonly GoldenCase[] = [
     expectedKind: 'PROPOSE_ACTION',
     expectedAction: 'SELECT_OFFERING',
     expectedArgumentContains: 'off_executive',
+    expectedReplyPattern: /ejecutiv|perfecto|opci[oó]n/i,
   },
   {
     id: 'A1-GOLDEN-FINALIZE',
@@ -102,6 +106,7 @@ const cases: readonly GoldenCase[] = [
     hints: ['For FINALIZE_APPOINTMENT use empty arguments {}.'],
     expectedKind: 'PROPOSE_ACTION',
     expectedAction: 'FINALIZE_APPOINTMENT',
+    expectedReplyPattern: /confirm|perfecto|cita/i,
   },
   {
     id: 'A1-GOLDEN-CONVERSATION',
@@ -112,6 +117,7 @@ const cases: readonly GoldenCase[] = [
     },
     allowedActions: [],
     expectedKind: 'RESPOND',
+    expectedReplyPattern: /de nada|gracias|ayud|encantad/i,
   },
 ];
 
@@ -175,7 +181,18 @@ for (const testCase of cases) {
   }
 
   assert.ok(decision.reply.trim().length > 0, testCase.id + ' reply must not be empty');
-  assert.ok(decision.reply.length <= 1000, testCase.id + ' reply exceeded A0 bound');
+  const reply = decision.reply.trim();
+  const internalPattern = /\b(?:SET_DATE|SELECT_[A-Z_]+|FINALIZE_[A-Z_]+)\b|\b(?:men|off|svc|apt|schedres)_[A-Za-z0-9_-]+\b/i;
+  const englishOperationalPattern = /\b(?:please|provide|current|message|exact|managed|entity|finalize|appointment|offering id)\b/i;
+  const falseExecutionPattern = /\b(?:he|hemos)\s+(?:reservado|confirmado|agendado)|\b(?:cita|reserva)\s+(?:confirmada|creada|agendada)|\bya\s+(?:qued[oó]|est[aá])\b/i;
+
+  assert.doesNotMatch(reply, internalPattern, testCase.id + ' leaked an internal action or canonical id');
+  assert.doesNotMatch(reply, englishOperationalPattern, testCase.id + ' produced an English/internal operational reply');
+  assert.doesNotMatch(reply, falseExecutionPattern, testCase.id + ' claimed execution before Engine confirmation');
+  assert.match(reply, testCase.expectedReplyPattern, testCase.id + ' reply did not preserve a natural user-facing semantic signal');
+  assert.ok(reply.length <= 220, testCase.id + ' reply exceeded 220 visible characters');
+  assert.ok(reply.split(/\s+/).length <= 24, testCase.id + ' reply exceeded 24 words');
+
   assert.ok(elapsedMs < 30_000, testCase.id + ' exceeded 30s latency guard');
 
   console.log(
@@ -205,6 +222,8 @@ console.log(
 console.log('AGENT_A1_REAL_LOCAL_MODEL_PASS');
 console.log('AGENT_A1_SCHEMA_CONSTRAINED_OUTPUT_PASS');
 console.log('AGENT_A1_GOLDEN_CONVERSATION_PASS');
+console.log('AGENT_A1_NATURAL_SPANISH_REPLY_PASS');
+console.log('AGENT_A1_NO_INTERNAL_LEAKAGE_PASS');
 console.log('AGENT_A1_ENGINE_ACTION_MAPPING_PASS');
 console.log('AGENT_A1_LATENCY_MEASURED_PASS');
 console.log('AGENT_A1_CERTIFICATION_PASS');
