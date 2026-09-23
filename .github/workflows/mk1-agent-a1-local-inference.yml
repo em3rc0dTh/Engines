@@ -157,6 +157,7 @@ jobs:
         env:
           AGENT_LLAMA_BASE_URL: http://127.0.0.1:8080
           AGENT_LLAMA_MODEL: engines-agent-local
+          AGENT_DEBUG_MODEL_OUTPUT: '1'
         run: |
           npm run probe:agent:a1:local | tee /tmp/agent-a1-real-local.log
           grep -F 'AGENT_A1_REAL_LOCAL_MODEL_PASS' /tmp/agent-a1-real-local.log
