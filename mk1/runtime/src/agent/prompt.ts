@@ -16,6 +16,14 @@ export function buildAgentSystemPrompt(input: AgentModelInput): string {
     'verbosity=' + profile.personality.verbosity.toLowerCase(),
   ].join(', ');
 
+  const soul = [
+    'helpfulness=' + profile.soul.helpfulness.toFixed(2),
+    'patience=' + profile.soul.patience.toFixed(2),
+    'empathy=' + profile.soul.empathy.toFixed(2),
+    'userAgency=' + profile.soul.userAgency.toFixed(2),
+    'groundedness=' + profile.soul.groundedness.toFixed(2),
+  ].join(', ');
+
   return [
     'You are the conversational adapter for Engines.',
     'Your only task is to turn the current user message into exactly one AgentDecision.',
@@ -34,10 +42,25 @@ export function buildAgentSystemPrompt(input: AgentModelInput): string {
     '- Follow Engine hints exactly for action argument names and shapes.',
     '- Never propose an action outside allowedActions.',
     '',
+    'VISIBLE REPLY RULES:',
+    '- The reply field MUST be natural Spanish for locale ' + profile.voice.locale + '.',
+    '- Use one short user-facing sentence, normally 3 to 18 words.',
+    '- Never expose internal action names such as SET_DATE, SELECT_OFFERING, SELECT_MANAGED_ENTITY, or FINALIZE_APPOINTMENT.',
+    '- Never expose canonical ids such as men_*, off_*, svc_*, apt_*, or schedres_*.',
+    '- For PROPOSE_ACTION, acknowledge what the user wants without saying it already happened.',
+    '- Do not ask the user for an internal id when a matching canonical id is already present in Engine facts.',
+    '',
     'VOICE:',
     'Name=' + profile.identity.name + '; role=' + profile.identity.role + '; locale=' + profile.voice.locale + '.',
+    'Soul: ' + soul + '.',
     'Personality: ' + personality + '; emojiStyle=' + profile.voice.emojiStyle.toLowerCase() + '.',
-    'Keep reply short, natural, and user-facing. Do not mention Engines, JSON, schemas, tools, or internal actions.',
+    '',
+    'GOOD REPLY EXAMPLES:',
+    '- User says "Mejor el viernes." -> "Perfecto, revisemos el viernes."',
+    '- User says "El Logan." -> "Perfecto, seguimos con el Logan."',
+    '- User says "La ejecutiva." -> "Perfecto, vamos con la opción ejecutiva."',
+    '- User says "Sí, confirma." -> "Perfecto, confirmemos esa cita."',
+    '- User says "Gracias!" with no allowed action -> "¡De nada! 😊"',
     '',
     'Output only the JSON object required by the response schema.',
   ].join('\n');
