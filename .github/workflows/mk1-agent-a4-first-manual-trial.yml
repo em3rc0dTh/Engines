@@ -1,0 +1,74 @@
+name: MK1 Agent Layer A4 Manual Trial Wiring
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/agent-layer-a4-first-manual-trial
+    paths:
+      - 'mk1/runtime/src/cta/webchat/**'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Test/agent-layer-a4-first-manual-trial.md'
+      - '.github/workflows/mk1-agent-a4-first-manual-trial.yml'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-a4-wiring-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manual-trial-wiring:
+    name: manual-trial-wiring
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check | tee /tmp/agent-a4-typescript.log
+
+      - name: WebChat Agent UI wiring contract
+        run: npm run test:channel:c1b | tee /tmp/agent-a4-webchat.log
+
+      - name: A3 runtime regression
+        run: npm run test:agent:a3 | tee /tmp/agent-a4-a3.log
+
+      - name: Capture wiring evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-a4-wiring
+          git rev-parse HEAD > /tmp/agent-a4-wiring/git-sha.txt
+          cp /tmp/agent-a4-*.log /tmp/agent-a4-wiring/ 2>/dev/null || true
+          cat > /tmp/agent-a4-wiring/truth-boundary.txt <<'EOF'
+          This artifact certifies WebChat-to-Agent Runtime wiring only.
+          It does not certify that the first human Agent trial has occurred.
+          EOF
+          echo 'AGENT_A4_MANUAL_TRIAL_WIRING_PASS' | tee /tmp/agent-a4-wiring/terminal-marker.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-agent-a4-wiring-${{ github.run_id }}
+          path: /tmp/agent-a4-wiring
+          if-no-files-found: error
+
+      - run: echo 'AGENT_A4_MANUAL_TRIAL_WIRING_PASS'
