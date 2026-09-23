@@ -151,6 +151,7 @@ async function main(): Promise<void> {
   assert.equal(interpretation(date).kind, 'PROPOSE_ACTION');
   assert.equal(proposedAction(date).action, 'SET_DATE');
   const dateReply = reply(date);
+  console.log('AGENT_A2_DATE_REPLY ' + JSON.stringify(dateReply));
   assert.match(dateReply, /horario|hora|disponib|elige|prefier/i, 'date narration must move conversation to slot choice');
   assert.doesNotMatch(dateReply, /basic clean|executive clean|limpieza/i, 'date narration reopened an already selected offering');
 
@@ -171,6 +172,7 @@ async function main(): Promise<void> {
   assert.equal(proposedAction(slot).action, 'SELECT_SLOT');
   assert.equal(record(proposedAction(slot).arguments)?.slotStart, chosen.start);
   const slotReply = reply(slot);
+  console.log('AGENT_A2_SLOT_REPLY ' + JSON.stringify(slotReply));
   assert.match(slotReply, /confirm|cita|reserva/i, 'slot narration must move conversation to confirmation');
   assert.doesNotMatch(slotReply, /basic clean|executive clean|limpieza/i, 'slot narration reopened an already selected offering');
 
@@ -180,6 +182,7 @@ async function main(): Promise<void> {
   assert.equal(interpretation(finalize).kind, 'PROPOSE_ACTION');
   assert.equal(proposedAction(finalize).action, 'FINALIZE_APPOINTMENT');
   const finalReply = reply(finalize);
+  console.log('AGENT_A2_FINAL_REPLY ' + JSON.stringify(finalReply));
   assert.match(finalReply, /confirmad|reservad|agendad|cread|lista/i, 'terminal narration must state confirmed completion');
   assert.doesNotMatch(finalReply, /confirmemos|quieres confirmar|deseas confirmar/i, 'terminal narration asked to confirm an already created appointment');
 
