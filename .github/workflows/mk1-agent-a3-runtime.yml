@@ -1,0 +1,178 @@
+name: MK1 Agent Layer A3 Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/agent-layer-a3-runtime
+    paths:
+      - 'mk1/runtime/src/agent/runtime/**'
+      - 'mk1/runtime/src/persistence/postgres/agent-runtime.repository.ts'
+      - 'mk1/runtime/src/cta/channel-core/**'
+      - 'mk1/runtime/migrations/015_agent_runtime_conversation.sql'
+      - 'mk1/runtime/scripts/migrate-postgres-agent-runtime.ts'
+      - 'mk1/runtime/scripts/certify-agent-a3-runtime-durability.ts'
+      - 'mk1/runtime/docker-compose.yml'
+      - 'mk1/runtime/package.json'
+      - 'mk1/Design/20-agent-layer-a3-runtime.md'
+      - 'mk1/Plan/19-agent-layer-a3-runtime.md'
+      - 'mk1/Test/agent-layer-a3-runtime.md'
+      - '.github/workflows/mk1-agent-a3-runtime.yml'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-a3-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-contract:
+    name: runtime-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: TypeScript
+        run: npm run check
+      - name: A0 regression
+        run: npm run test:agent:a0
+      - name: A1 regression
+        run: npm run test:agent:a1
+      - name: A3 runtime and Appointment tests
+        run: npm run test:agent:a3
+
+  postgres-durability:
+    name: postgres-durability
+    needs: runtime-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.8-alpine
+        env:
+          POSTGRES_USER: engines
+          POSTGRES_PASSWORD: engines
+          POSTGRES_DB: engines_mk0
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U engines -d engines_mk0"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      POSTGRES_URL: postgresql://engines:engines@127.0.0.1:5432/engines_mk0
+      MONGO_URL: mongodb://127.0.0.1:27017
+      MONGO_DB: engines_mk0
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - name: Apply Agent runtime migration
+        run: npm run migrate:agent-runtime
+      - name: Prove restart/replay/audit durability
+        run: |
+          npm run probe:agent:a3:durability | tee /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_DURABLE_FIRST_TURN_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_CONTEXT_RECONSTRUCTION_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_DURABLE_REPLAY_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_IDENTITY_CONFLICT_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_STALE_CLAIM_RECOVERY_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_AUDIT_LEDGER_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_CHANNEL_INDEPENDENT_RUNTIME_PASS' /tmp/agent-a3-durability.log
+          grep -F 'AGENT_A3_RUNTIME_DURABILITY_CERTIFICATION_PASS' /tmp/agent-a3-durability.log
+      - name: Capture durability evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/agent-a3-evidence
+          git rev-parse HEAD > /tmp/agent-a3-evidence/git-sha.txt
+          cp /tmp/agent-a3-durability.log /tmp/agent-a3-evidence/ 2>/dev/null || true
+          PGPASSWORD=engines psql -h 127.0.0.1 -U engines -d engines_mk0 -AtF '|' -c "SELECT external_message_id,status,route,model_invoked,context_turn_count,engine_phase_before,engine_phase_after,attempt_count FROM agent_runtime_turns WHERE external_conversation_id='a3-runtime-cert-conversation' ORDER BY turn_seq" > /tmp/agent-a3-evidence/agent-runtime-ledger.txt 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-agent-a3-runtime-${{ github.run_id }}
+          path: /tmp/agent-a3-evidence
+          if-no-files-found: error
+
+  protected-regressions:
+    name: protected-regressions
+    needs: runtime-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+      - run: npm ci
+      - run: npm run test:appointment
+      - run: npm run test:channel:c0
+      - run: npm run test:scheduler:g2:s0
+      - run: npm run test:integration:g3:i0
+      - run: echo 'AGENT_A3_PROTECTED_REGRESSIONS_PASS'
+
+  agent-a3-seal:
+    name: agent-a3-seal
+    needs:
+      - postgres-durability
+      - protected-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact-head A3 seal
+        shell: bash
+        run: |
+          mkdir -p /tmp/agent-a3-seal
+          git rev-parse HEAD | tee /tmp/agent-a3-seal/git-sha.txt
+          cat > /tmp/agent-a3-seal/certification.txt <<'EOF'
+          channel-independent runtime                 PASS
+          PostgreSQL conversation durability         PASS
+          bounded multi-turn reconstruction          PASS
+          durable replay without re-execution        PASS
+          message identity conflict rejection        PASS
+          stale PROCESSING recovery                  PASS
+          deterministic LLM bypass                   PASS
+          safe no-action model fallback              PASS
+          Agent runtime audit ledger                 PASS
+          A0/A1 boundaries preserved                 PASS
+          protected Engine regressions               PASS
+          EOF
+          echo 'AGENT_A3_SEAL_PASS' | tee /tmp/agent-a3-seal/terminal-marker.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mk1-agent-a3-seal-${{ github.run_id }}
+          path: /tmp/agent-a3-seal
+          if-no-files-found: error
+      - run: echo 'AGENT_A3_SEAL_PASS'
