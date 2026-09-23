@@ -5,11 +5,10 @@ function responseBranch(kind: 'RESPOND' | 'CLARIFY'): Record<string, unknown> {
     type: 'object',
     additionalProperties: false,
     properties: {
-      schemaVersion: { type: 'integer', const: 1 },
       kind: { type: 'string', const: kind },
       reply: { type: 'string', minLength: 1, maxLength: 1000 },
     },
-    required: ['schemaVersion', 'kind', 'reply'],
+    required: ['kind', 'reply'],
   };
 }
 
@@ -18,7 +17,6 @@ function actionBranch(allowedActions: readonly string[]): Record<string, unknown
     type: 'object',
     additionalProperties: false,
     properties: {
-      schemaVersion: { type: 'integer', const: 1 },
       kind: { type: 'string', const: 'PROPOSE_ACTION' },
       reply: { type: 'string', minLength: 1, maxLength: 1000 },
       proposedAction: {
@@ -37,7 +35,7 @@ function actionBranch(allowedActions: readonly string[]): Record<string, unknown
         required: ['action', 'arguments'],
       },
     },
-    required: ['schemaVersion', 'kind', 'reply', 'proposedAction'],
+    required: ['kind', 'reply', 'proposedAction'],
   };
 }
 

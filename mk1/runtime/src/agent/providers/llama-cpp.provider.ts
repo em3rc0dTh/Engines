@@ -52,8 +52,19 @@ function parseCompletionContent(value: unknown): unknown {
   }
 
   try {
-    return JSON.parse(content);
-  } catch {
+    const parsed: unknown = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      fail('completion content must decode to a JSON object');
+    }
+
+    return {
+      ...(parsed as Record<string, unknown>),
+      schemaVersion: 1,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Local Agent provider failed:')) {
+      throw error;
+    }
     fail('completion content is not valid JSON');
   }
 }

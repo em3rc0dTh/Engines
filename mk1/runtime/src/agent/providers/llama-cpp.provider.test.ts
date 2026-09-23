@@ -71,7 +71,6 @@ test('A1 llama.cpp provider sends bounded schema-constrained deterministic reque
             {
               message: {
                 content: JSON.stringify({
-                  schemaVersion: 1,
                   kind: 'PROPOSE_ACTION',
                   reply: 'Perfecto, revisemos el viernes.',
                   proposedAction: {
@@ -90,6 +89,7 @@ test('A1 llama.cpp provider sends bounded schema-constrained deterministic reque
   }, async (baseUrl) => {
     const provider = new LlamaCppAgentModelProvider({ baseUrl, model: 'engines-agent-local' });
     const decision = await runAgentModelTurn(provider, input());
+    assert.equal(decision.schemaVersion, 1);
     assert.equal(decision.kind, 'PROPOSE_ACTION');
   });
 
@@ -144,7 +144,6 @@ test('A1 provider output still crosses A0 capability validation', async () => {
           {
             message: {
               content: JSON.stringify({
-                schemaVersion: 1,
                 kind: 'PROPOSE_ACTION',
                 reply: 'Listo.',
                 proposedAction: {

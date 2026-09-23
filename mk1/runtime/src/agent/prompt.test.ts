@@ -65,6 +65,7 @@ test('A1 response schema exposes only Engine-allowed actions', () => {
   });
 
   const schema = JSON.stringify(buildAgentDecisionJsonSchema(input));
+  assert.doesNotMatch(schema, /schemaVersion/);
   assert.match(schema, /SELECT_MANAGED_ENTITY/);
   assert.doesNotMatch(schema, /CREATE_MANAGED_ENTITY/);
   assert.doesNotMatch(schema, /FINALIZE_APPOINTMENT/);
