@@ -124,6 +124,10 @@ services:
       POSTGRES_URL: postgresql://engines:engines@postgres:5432/engines_mk0
       ENGINES_CHANNEL_HOST: 0.0.0.0
       ENGINES_CHANNEL_PORT: "8788"
+      ENGINES_AGENT_ENABLED: ${ENGINES_AGENT_ENABLED:-false}
+      AGENT_LLAMA_BASE_URL: ${AGENT_LLAMA_BASE_URL:-http://host.docker.internal:8080}
+      AGENT_LLAMA_MODEL: ${AGENT_LLAMA_MODEL:-engines-agent-local}
+      AGENT_MODEL_TIMEOUT_MS: ${AGENT_MODEL_TIMEOUT_MS:-30000}
       META_APP_SECRET: ${META_APP_SECRET:-}
       ENGINES_META_PAGE_ROUTES_JSON: ${ENGINES_META_PAGE_ROUTES_JSON:-}
     depends_on:
@@ -133,6 +137,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "8788:8788"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["npm", "run", "channel:server"]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8788/health >/dev/null"]
