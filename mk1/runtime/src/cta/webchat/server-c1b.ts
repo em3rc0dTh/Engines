@@ -134,6 +134,37 @@ async function conversationView(response: ServerResponse, externalConversationId
   sendBuffer(response, upstream.status, upstream.headers.get('content-type') ?? 'application/json; charset=utf-8', payload);
 }
 
+async function agentMessage(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const raw = record(await readJson(request));
+  if (!raw) {
+    sendJson(response, 400, { ok: false, code: 'WEBCHAT_AGENT_MESSAGE_INVALID' });
+    return;
+  }
+  const conversationId = typeof raw.conversationId === 'string' ? raw.conversationId.trim() : '';
+  const messageId = typeof raw.messageId === 'string' ? raw.messageId.trim() : '';
+  const senderId = typeof raw.senderId === 'string' ? raw.senderId.trim() : '';
+  const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+  if (!conversationId || !messageId || !senderId || !text) {
+    sendJson(response, 400, { ok: false, code: 'WEBCHAT_AGENT_MESSAGE_INVALID' });
+    return;
+  }
+
+  const upstream = await fetch(`${CHANNEL_BASE_URL}/channel/agent/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      businessSlug: TRUSTED_BUSINESS_SLUG,
+      channel: 'WEBCHAT',
+      externalConversationId: conversationId,
+      externalMessageId: messageId,
+      externalSenderId: senderId,
+      text,
+    }),
+  });
+  const payload = Buffer.from(await upstream.arrayBuffer());
+  sendBuffer(response, upstream.status, upstream.headers.get('content-type') ?? 'application/json; charset=utf-8', payload);
+}
+
 async function channelEvent(request: IncomingMessage, response: ServerResponse, registry: ChannelAdapterRegistry): Promise<void> {
   const raw = await readJson(request);
   const adapter = registry.get('WEBCHAT');
@@ -165,13 +196,14 @@ async function run(): Promise<void> {
 
       if (request.method === 'GET' && url.pathname === '/health') {
         const [cta, channel] = await Promise.all([fetch(`${CTA_BASE_URL}/health`), fetch(`${CHANNEL_BASE_URL}/health`)]);
+        const channelHealth = channel.ok ? record(await channel.clone().json()) ?? {} : {};
         sendJson(response, cta.ok && channel.ok ? 200 : 503, {
           ok: cta.ok && channel.ok,
           service: 'engines-webchat-c1b',
           cta: cta.ok,
           channelCore: channel.ok,
           trustedBusinessSlug: TRUSTED_BUSINESS_SLUG,
-          agent: false,
+          agent: channelHealth.agent === true,
           mcp: false,
         });
         return;
@@ -181,6 +213,11 @@ async function run(): Promise<void> {
 
       if (request.method === 'POST' && url.pathname === '/api/channel/events') {
         await channelEvent(request, response, registry);
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/agent/messages') {
+        await agentMessage(request, response);
         return;
       }
 
