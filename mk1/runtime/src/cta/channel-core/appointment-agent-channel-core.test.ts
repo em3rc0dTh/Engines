@@ -94,7 +94,7 @@ test('A2 translator converts Agent arguments into the existing Channel envelope'
 
 test('A2 integrated core executes only a validated proposal and narrates confirmed post-state', async () => {
   let current = state('WAITING_FOR_DATE');
-  const decisions = [
+  const decisions: unknown[] = [
     {
       schemaVersion: 1,
       kind: 'PROPOSE_ACTION',
@@ -109,7 +109,7 @@ test('A2 integrated core executes only a validated proposal and narrates confirm
       kind: 'RESPOND',
       reply: 'Perfecto. Ya tengo horarios para el viernes; ¿cuál prefieres?',
     },
-  ] as const;
+  ];
 
   const provider: AgentModelProvider = {
     providerId: 'a2-fake',
