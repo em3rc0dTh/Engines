@@ -59,12 +59,13 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 ### Agent Layer A3 durable runtime
 
 - [agent-layer-a3-runtime-certification-2026-09-23.md](agent-layer-a3-runtime-certification-2026-09-23.md)
-- Executed exact-head authority: 9e22f3a58c06a24627302f03856adfe4c62c36df
-- Run: 35867288650
-- Runtime artifact: mk1-agent-a3-runtime-35867288650
-- Runtime digest: sha256:bfa01ba7e58c42f5d992a629b7f942a4a30488aea6875be7d7d9ba526a56b951
-- Seal artifact: mk1-agent-a3-seal-35867288650
-- Seal digest: sha256:f1eadf01c5349f32b8f263006d6c75561c33e921fe6841e6d00c60413b225837
+- Executed exact-head authority: 09ed58e2348bd850ef668fc08a0832cf41e8ae0c
+- Run: 35868850796
+- Runtime artifact: mk1-agent-a3-runtime-35868850796
+- Runtime digest: sha256:8b6081240af91c12da8e4f529ac07316474545facff44520c9ce51b7cd21f10a
+- Seal artifact: mk1-agent-a3-seal-35868850796
+- Seal digest: sha256:30af96511f6145472ba2e98e4077882f7eb9df62c434cfc02e004696bf290408
+- Corrective A2 integrated run: 35868856273
 - Verdict: AGENT A3 SEALED / READY FOR FIRST MANUAL AGENT TRIAL
 
 ## Historical receipts

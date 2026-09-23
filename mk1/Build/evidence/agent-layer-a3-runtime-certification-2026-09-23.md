@@ -10,7 +10,7 @@ A3 is sealed as the durable conversational runtime gate immediately before the f
 Executed exact-head authority:
 
 ~~~text
-9e22f3a58c06a24627302f03856adfe4c62c36df
+09ed58e2348bd850ef668fc08a0832cf41e8ae0c
 ~~~
 
 GitHub Actions:
@@ -20,7 +20,7 @@ workflow:
 MK1 Agent Layer A3 Runtime
 
 run:
-35867288650
+35868850796
 
 result:
 PASS
@@ -35,11 +35,11 @@ agent-a3-seal           PASS
 Artifacts:
 
 ~~~text
-mk1-agent-a3-runtime-35867288650
-sha256:bfa01ba7e58c42f5d992a629b7f942a4a30488aea6875be7d7d9ba526a56b951
+mk1-agent-a3-runtime-35868850796
+sha256:8b6081240af91c12da8e4f529ac07316474545facff44520c9ce51b7cd21f10a
 
-mk1-agent-a3-seal-35867288650
-sha256:f1eadf01c5349f32b8f263006d6c75561c33e921fe6841e6d00c60413b225837
+mk1-agent-a3-seal-35868850796
+sha256:30af96511f6145472ba2e98e4077882f7eb9df62c434cfc02e004696bf290408
 ~~~
 
 ## Certified runtime
@@ -196,6 +196,42 @@ unambiguous turn            0 model calls
 natural/ambiguous turn      normally 1 model call
 post-action narration       0 model calls
 ~~~
+
+## Corrective integrated proof
+
+The first A3 PR-head integration attempt exposed one terminal projection race:
+
+~~~text
+phase = CREATED
+workflowStatus = RUNNING
+~~~
+
+A3 initially treated CREATED as settled and narrated before Temporal had published COMPLETED.
+
+Corrective commit:
+
+~~~text
+09ed58e2348bd850ef668fc08a0832cf41e8ae0c
+fix(agent): wait for terminal completion before A3 narration
+~~~
+
+The corrected head passed the complete A2 integrated journey:
+
+~~~text
+run:
+35868856273
+
+real-integrated-journey      PASS
+agent-a2-seal                PASS
+
+mk1-agent-a2-integrated-35868856273
+sha256:0cdcb8f27ed0f6b895426572d794415e6fbe1b3e4115d6302b34575202c79c0d
+
+mk1-agent-a2-seal-35868856273
+sha256:2285cbc5b299b52e4f321afcd845306990c528e47b48d156fa0620e3e741611d
+~~~
+
+Observed corrected terminal behavior is therefore backed by the same real local-model / WebChat / Temporal / Scheduler / PostgreSQL path used by A2.
 
 ## Protected boundaries
 
