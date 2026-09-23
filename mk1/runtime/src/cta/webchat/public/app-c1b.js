@@ -20,6 +20,7 @@ const state = {
   polling: false,
   submitting: false,
   transcriptHydrated: false,
+  agentEnabled: false,
 };
 
 function randomId(prefix) {
@@ -54,6 +55,122 @@ function post(path, body) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+function appendAgentAudit(runtime = {}) {
+  if (!runtime.route) return;
+  const model = runtime.modelInvoked === true ? 'model=yes' : 'model=no';
+  const context = Number.isInteger(runtime.contextTurnCount) ? `context=${runtime.contextTurnCount}` : 'context=?';
+  const replay = runtime.replayed === true ? ' · replayed' : '';
+  appendMessage('meta', `Agent ${runtime.route} · ${model} · ${context}${replay}`);
+}
+
+async function sendAgentText(text, displayText = text) {
+  const clean = String(text ?? '').trim();
+  if (!clean || !state.conversationId) return;
+
+  await withSubmission(async () => {
+    appendMessage('user', displayText);
+    const result = await post('/api/agent/messages', {
+      conversationId: state.conversationId,
+      messageId: transportMessageId('agent'),
+      senderId: 'webchat-browser',
+      text: clean,
+    });
+
+    if (typeof result.reply === 'string' && result.reply.trim()) {
+      appendMessage('agent', result.reply.trim());
+    }
+    appendAgentAudit(result.runtime);
+    await refresh();
+  });
+}
+
+function renderAgentInteraction(durable) {
+  if (!state.agentEnabled) return false;
+
+  const fail = (error) => appendMessage('system', `AGENT ERROR: ${error.message}`);
+
+  if (durable.phase === 'WAITING_FOR_MANAGED_ENTITY') {
+    const label = managedEntityLabel(durable);
+    if (durable.managedEntity?.status === 'NEEDS_SELECTION') {
+      const names = (durable.managedEntity?.candidates ?? []).map((item) => item.displayName);
+      promptOnce(
+        'agent-managed-entity-select',
+        names.length > 0
+          ? `Agent — ¿Con cuál ${label.toLowerCase()} continuamos? Puedes escribirlo con tus palabras o elegir una sugerencia.`
+          : `Agent — Indica con cuál ${label.toLowerCase()} deseas continuar.`,
+      );
+      setInput('agent', `Escribe el ${label.toLowerCase()} que prefieres`);
+      for (const entity of durable.managedEntity?.candidates ?? []) {
+        choice(entity.displayName, () => sendAgentText(entity.displayName).catch(fail));
+      }
+      return true;
+    }
+
+    if (durable.managedEntity?.status === 'NEEDS_CREATION') {
+      promptOnce(
+        'agent-managed-entity-create',
+        `Agent — No hay un ${label.toLowerCase()} compatible todavía. Descríbelo e incluye una referencia estable si aplica.`,
+      );
+      setInput('agent', `Describe tu ${label.toLowerCase()} con referencia/placa si aplica`);
+      return true;
+    }
+  }
+
+  if (durable.phase === 'WAITING_FOR_SERVICE') {
+    const names = (durable.services ?? []).map((item) => item.name);
+    promptOnce(
+      'agent-service',
+      names.length > 0
+        ? `Agent — ¿Qué servicio prefieres? Opciones actuales: ${names.join(', ')}.`
+        : 'Agent — ¿Qué servicio prefieres?',
+    );
+    setInput('agent', 'Escribe el servicio que quieres');
+    for (const service of durable.services ?? []) {
+      choice(service.name, () => sendAgentText(service.name).catch(fail));
+    }
+    return true;
+  }
+
+  if (durable.phase === 'WAITING_FOR_PRODUCT') {
+    const names = (durable.products ?? []).map((item) => item.name);
+    promptOnce(
+      'agent-offering',
+      names.length > 0
+        ? `Agent — ¿Qué opción prefieres? Opciones actuales: ${names.join(', ')}.`
+        : 'Agent — ¿Qué opción prefieres?',
+    );
+    setInput('agent', 'Escribe la opción que prefieres');
+    for (const product of durable.products ?? []) {
+      choice(product.name, () => sendAgentText(product.name).catch(fail));
+    }
+    return true;
+  }
+
+  if (durable.phase === 'WAITING_FOR_DATE') {
+    promptOnce('agent-date', 'Agent — ¿Qué fecha prefieres? Escríbela de forma natural.');
+    setInput('agent', 'Ej.: este viernes / mañana / 2026-09-25');
+    return true;
+  }
+
+  if (durable.phase === 'WAITING_FOR_SLOT') {
+    promptOnce('agent-slot', 'Agent — Ya tengo horarios disponibles. Escríbeme cuál prefieres.');
+    setInput('agent', 'Ej.: a las 10:30');
+    for (const slot of durable.availableSlots ?? []) {
+      choice(`${slot.start}–${slot.end}`, () => sendAgentText(`A las ${slot.start}.`, slot.start).catch(fail));
+    }
+    return true;
+  }
+
+  if (durable.phase === 'READY_TO_FINALIZE') {
+    promptOnce('agent-finalize', 'Agent — La cita está lista para confirmar. Puedes responder de forma natural.');
+    setInput('agent', 'Ej.: sí, confirma');
+    choice('Sí, confirma.', () => sendAgentText('Sí, confirma.').catch(fail));
+    return true;
+  }
+
+  return false;
 }
 
 function appendMessage(kind, text) {
@@ -224,6 +341,8 @@ function renderInteraction() {
       return;
     }
   }
+
+  if (renderAgentInteraction(durable)) return;
 
   if (durable.nextAction === 'SELECT_MANAGED_ENTITY') {
     const label = managedEntityLabel(durable);
@@ -446,6 +565,12 @@ async function sendInput() {
   const value = $('messageInput').value.trim();
   if (!value || !state.inputMode || !state.conversationId) return;
   $('messageInput').value = '';
+
+  if (state.inputMode === 'agent') {
+    await sendAgentText(value);
+    return;
+  }
+
   appendMessage('user', value);
 
   if (state.inputMode === 'managed-entity-name') {
@@ -490,7 +615,10 @@ $('messageInput').addEventListener('keydown', (event) => {
 async function boot() {
   try {
     const health = await json('/health');
-    $('connectionStatus').textContent = health.ok ? 'CTA + channel ready' : 'CTA unavailable';
+    state.agentEnabled = health.agent === true;
+    $('connectionStatus').textContent = health.ok
+      ? (state.agentEnabled ? 'CTA + channel + Agent ready' : 'CTA + channel ready · Agent disabled')
+      : 'CTA unavailable';
     if (health.trustedBusinessSlug) $('businessSlug').value = health.trustedBusinessSlug;
   } catch {
     $('connectionStatus').textContent = 'CTA unavailable';
@@ -501,7 +629,12 @@ async function boot() {
     $('businessSlug').disabled = true;
     await refresh();
   } else {
-    appendMessage('system', 'No Agent. No MCP. Durable WebChat channel → Temporal. Start the Workflow to begin.');
+    appendMessage(
+      'system',
+      state.agentEnabled
+        ? 'Agent A3 ready. Start the Workflow; identity intake stays deterministic, then the conversation moves through Agent Runtime → Temporal.'
+        : 'Agent disabled. Durable WebChat channel → Temporal is available, but this is not a manual Agent trial until ENGINES_AGENT_ENABLED=true.',
+    );
   }
 
   setInterval(refresh, 750);
