@@ -253,6 +253,16 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
     },
   };
 
+  const store = new MemoryStore();
+  store.rows.set('prior-problem', {
+    response: { ok: true },
+    reply: 'Cuéntame un poco más sobre el problema.',
+    route: 'DETERMINISTIC_BYPASS',
+    modelInvoked: false,
+    contextTurnCount: 0,
+    userText: 'Tengo un problema con mi carro',
+  });
+
   const experience = new A5ConversationalAppointmentExperience(
     {
       async tryRead() {
@@ -266,7 +276,7 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
       },
     },
     provider,
-    new AgentConversationRuntime(new MemoryStore()),
+    new AgentConversationRuntime(store),
     resolveAgentProfile(),
     'Golden Business',
   );
@@ -301,6 +311,16 @@ test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the al
     },
   };
 
+  const store = new MemoryStore();
+  store.rows.set('prior-problem', {
+    response: { ok: true },
+    reply: 'Cuéntame un poco más sobre el problema.',
+    route: 'DETERMINISTIC_BYPASS',
+    modelInvoked: false,
+    contextTurnCount: 0,
+    userText: 'Tengo un problema con la suspensión de mi carro',
+  });
+
   const experience = new A5ConversationalAppointmentExperience(
     {
       async tryRead() {
@@ -314,12 +334,12 @@ test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the al
       },
     },
     provider,
-    new AgentConversationRuntime(new MemoryStore()),
+    new AgentConversationRuntime(store),
     resolveAgentProfile(),
     'Golden Business',
   );
 
-  const result = await experience.handle(input('msg-invented-customer', 'Tengo un problema con la suspensión de mi carro'));
+  const result = await experience.handle(input('msg-invented-customer', 'Sigue sonando al pasar por baches'));
 
   assert.equal(result.runtime.route, 'SAFE_FALLBACK');
   assert.equal(engineCalls, 0);
