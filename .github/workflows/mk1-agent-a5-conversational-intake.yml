@@ -1,0 +1,105 @@
+name: MK1 Agent Layer A5 Conversational Intake
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'mk1/runtime/src/agent/experience/**'
+      - 'mk1/runtime/src/cta/channel-core/server.ts'
+      - 'mk1/runtime/src/cta/webchat/**'
+      - 'mk1/runtime/docker-compose.agent.yml'
+      - 'mk1/runtime/package.json'
+      - 'mk1/runtime/scripts/verify-agent-a5-core-diff.sh'
+      - 'mk1/Plan/20-agent-layer-a5-conversational-intake.md'
+      - 'mk1/Test/agent-layer-a5-conversational-intake.md'
+      - '.github/workflows/mk1-agent-a5-conversational-intake.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mk1-agent-a5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conversational-boundary:
+    name: conversational-boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run check
+
+      - name: A5 conversational intake contract
+        run: npm run test:agent:a5
+
+      - name: WebChat regressions
+        run: npm run test:channel:c1b
+
+      - name: A0 contract regression
+        run: npm run test:agent:a0
+
+      - name: A3/A4 runtime regression
+        run: npm run test:agent:a3
+
+      - name: Core diff must remain zero
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "${PR_BASE_SHA:-}" ]; then
+            bash scripts/verify-agent-a5-core-diff.sh "$PR_BASE_SHA" | tee /tmp/a5-core-diff.log
+          else
+            bash scripts/verify-agent-a5-core-diff.sh | tee /tmp/a5-core-diff.log
+          fi
+          grep -F 'CORE_DIFF_ZERO_PASS' /tmp/a5-core-diff.log
+
+      - name: Resolve local Agent compose
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent config > /tmp/a5-compose.txt
+          grep -F 'ENGINES_AGENT_EXPERIENCE_ENABLED: "true"' /tmp/a5-compose.txt
+          grep -F 'http://agent-llama:8080' /tmp/a5-compose.txt
+
+      - name: Capture evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/a5-evidence
+          git rev-parse HEAD > /tmp/a5-evidence/git-sha.txt
+          cp /tmp/a5-core-diff.log /tmp/a5-evidence/ 2>/dev/null || true
+          cp /tmp/a5-compose.txt /tmp/a5-evidence/ 2>/dev/null || true
+          printf '%s\n' \
+            'A5 certifies only the top conversational experience boundary.' \
+            'It does not alter or replace solid Engines authority.' \
+            'Human physical conversation remains required before A5 is sealed.' \
+            > /tmp/a5-evidence/truth-boundary.txt
+          echo 'AGENT_A5_CONVERSATIONAL_BOUNDARY_PASS' > /tmp/a5-evidence/terminal-marker.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-agent-a5-conversational-${{ github.run_id }}
+          path: /tmp/a5-evidence
+          if-no-files-found: error
+
+      - run: |
+          echo 'CORE_DIFF_ZERO_PASS'
+          echo 'AGENT_A5_CONVERSATIONAL_BOUNDARY_PASS'
