@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -119,4 +119,17 @@ test('A5 inline business profile overrides the same business from file configura
   const profile = await resolver.resolve('tenant');
   assert.equal(profile.businessDisplayName, 'Override Business');
   assert.equal(profile.agentProfile.identity.name, 'Override');
+});
+
+
+test('A5 Docker lab uses a business-scoped profile source instead of process-global agent identity', async () => {
+  const overlay = await readFile(
+    new URL('../../../docker-compose.agent.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(overlay, /ENGINES_AGENT_BUSINESS_PROFILES_FILE:/);
+  assert.doesNotMatch(overlay, /ENGINES_AGENT_NAME:/);
+  assert.doesNotMatch(overlay, /ENGINES_AGENT_ROLE:/);
+  assert.doesNotMatch(overlay, /ENGINES_AGENT_BUSINESS_NAME:/);
 });
