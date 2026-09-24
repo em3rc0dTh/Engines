@@ -211,41 +211,47 @@ function baseProperties(): Record<string, unknown> {
 
 export function buildA5ExperienceJsonSchema(input: A5ExperienceModelInput): Record<string, unknown> {
   const base = baseProperties();
-  const branches: Record<string, unknown>[] = [{
+  const responseOnly = {
     type: 'object',
     additionalProperties: false,
     properties: base,
     required: ['reply', 'distillation'],
-  }];
+  };
 
-  if (input.conversation.engine.allowedActions.length > 0) {
-    branches.push({
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        ...base,
-        proposedAction: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            action: {
-              type: 'string',
-              enum: [...input.conversation.engine.allowedActions],
-            },
-            arguments: {
-              type: 'object',
-              additionalProperties: true,
-            },
-          },
-          required: ['action', 'arguments'],
-        },
-      },
-      required: ['reply', 'distillation', 'proposedAction'],
-    });
+  if (input.conversation.engine.allowedActions.length === 0) {
+    return {
+      title: 'EnginesA5ProgressiveConversation',
+      ...responseOnly,
+    };
   }
 
   return {
     title: 'EnginesA5ProgressiveConversation',
-    oneOf: branches,
+    oneOf: [
+      responseOnly,
+      {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ...base,
+          proposedAction: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              action: {
+                type: 'string',
+                enum: [...input.conversation.engine.allowedActions],
+              },
+              arguments: {
+                type: 'object',
+                additionalProperties: true,
+              },
+            },
+            required: ['action', 'arguments'],
+          },
+        },
+        required: ['reply', 'distillation', 'proposedAction'],
+      },
+    ],
   };
 }

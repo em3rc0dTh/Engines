@@ -97,6 +97,7 @@ Only the Engine may create CONFIRMED operational truth.
 8. A3 durable turn ledger remains the conversation/replay authority.
 9. No new business persistence table is introduced.
 10. WebChat uses one natural composer for the whole journey.
+11. A5 owns a layer-specific 192-token response budget so a natural reply plus bounded distillation is not truncated; the A0 action-adapter budget remains unchanged.
 
 ## Initial proof
 
@@ -117,6 +118,7 @@ suspension/vehicle context may be inferred but is not Engine-confirmed
 no unrelated Service selected
 no Engine action invented
 subsequent turns remain one natural conversation
+exact first-turn phrase passes against the real Dockerized Qwen model
 existing A0-A4 and solid-core regressions remain green
 CORE_DIFF_ZERO_PASS
 ~~~

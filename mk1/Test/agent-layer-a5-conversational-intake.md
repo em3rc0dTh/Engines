@@ -91,6 +91,18 @@ CORE_DIFF_ZERO_PASS
 
 Forbidden change classes include Customer/ManagedEntity/Appointment contracts, Services, Scheduler, Temporal, Integration, persistence repositories/migrations, and canonical AppointmentChannelExecutionCore semantics.
 
+## Real-model regression gate
+
+The exact first physical-trial phrase must also pass against the certified Dockerized Qwen runtime:
+
+~~~text
+Tengo un problema con la suspensión de mi carro.
+~~~
+
+The real-model probe must produce valid structured A5 output before the human retry. A mocked provider is not sufficient evidence.
+
+A5 has a dedicated 192-token output cap for the combined natural reply + progressive distillation. This does not alter the existing A0 action-adapter budget.
+
 ## S0 PASS
 
 ~~~text
@@ -104,6 +116,7 @@ A0 validates any proposed action
 A3 durable runtime remains turn/replay authority
 A4 deterministic bypass remains usable
 CORE_DIFF_ZERO_PASS
+real Qwen first-turn probe green
 A0-A4 regressions green
 ~~~
 

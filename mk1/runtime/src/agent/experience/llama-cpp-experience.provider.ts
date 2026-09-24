@@ -10,6 +10,8 @@ import type {
   A5ExperienceModelProvider,
 } from './types.js';
 
+export const A5_MAX_OUTPUT_TOKENS = 192;
+
 export type LlamaCppA5ExperienceProviderConfig = Readonly<{
   baseUrl: string;
   model?: string;
@@ -37,6 +39,9 @@ function parseContent(value: unknown): unknown {
   if (!message || typeof message !== 'object') fail('completion message is malformed');
   const content = (message as Record<string, unknown>).content;
   if (typeof content !== 'string' || !content.trim()) fail('completion content must be a non-empty JSON string');
+  const finishReason = typeof (first as Record<string, unknown>).finish_reason === 'string'
+    ? String((first as Record<string, unknown>).finish_reason)
+    : 'unknown';
 
   try {
     const parsed = JSON.parse(content) as unknown;
@@ -49,7 +54,8 @@ function parseContent(value: unknown): unknown {
     };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('A5 local experience provider failed:')) throw error;
-    fail('completion content is not valid JSON');
+    fail('completion content is not valid JSON'
+      + ' (finish_reason=' + finishReason + '; chars=' + content.length + ')');
   }
 }
 
@@ -88,7 +94,7 @@ export class LlamaCppA5ExperienceProvider implements A5ExperienceModelProvider {
           temperature: 0,
           top_p: 1,
           seed: this.#seed,
-          max_tokens: AGENT_A0_RESOURCE_BUDGET.maxOutputTokens,
+          max_tokens: Math.max(AGENT_A0_RESOURCE_BUDGET.maxOutputTokens, A5_MAX_OUTPUT_TOKENS),
           reasoning_effort: 'none',
           stream: false,
           response_format: {
