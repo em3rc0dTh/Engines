@@ -1,0 +1,15 @@
+{
+  "golden-business": {
+    "businessDisplayName": "Gallo Autos",
+    "agentProfile": {
+      "identity": {
+        "name": "Jett",
+        "role": "Staff Assistant"
+      },
+      "voice": {
+        "locale": "es-PE",
+        "emojiStyle": "LIGHT"
+      }
+    }
+  }
+}

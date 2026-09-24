@@ -44,6 +44,27 @@ canonical Channel execution semantics
 
 A5 may change only the conversational/Agent experience and transport-facing wiring required to invoke already-existing canonical operations.
 
+## Business-scoped experience profile
+
+Agent identity and business presentation are tenant/customer configuration, not process-global runtime settings.
+
+~~~text
+businessSlug
+    ↓
+A5BusinessExperienceProfileResolver
+    ↓
+businessDisplayName
+agentProfile.identity
+agentProfile.personality
+agentProfile.voice
+~~~
+
+A single A5 process may serve multiple business customers with different agent identities and branding. No `ENGINES_AGENT_NAME`, `ENGINES_AGENT_ROLE`, or `ENGINES_AGENT_BUSINESS_NAME` process-global authority is allowed.
+
+The current lab adapter reads a business-keyed configuration file/JSON. That adapter is intentionally replaceable by Ground Control or onboarding configuration later without changing the solid Engines core or the A5 conversation contract.
+
+Unknown/unconfigured businesses receive an isolated generic profile using their own `businessSlug`; they must never inherit another tenant's profile.
+
 ## Architecture
 
 ~~~text

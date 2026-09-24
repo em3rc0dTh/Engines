@@ -217,8 +217,9 @@ async function run(): Promise<void> {
           trustedBusinessSlug: TRUSTED_BUSINESS_SLUG,
           agent: channelHealth.agent === true,
           agentExperience: channelHealth.agentExperience === true,
-          agentName: typeof channelHealth.agentName === 'string' ? channelHealth.agentName : undefined,
-          agentBusinessName: typeof channelHealth.agentBusinessName === 'string' ? channelHealth.agentBusinessName : undefined,
+          agentExperienceProfileScope: channelHealth.agentExperienceProfileScope === 'business'
+            ? 'business'
+            : 'disabled',
           mcp: false,
         });
         return;
