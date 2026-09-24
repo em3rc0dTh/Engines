@@ -119,24 +119,16 @@ function input(id: string, text: string) {
   };
 }
 
-test('A5 first free-form message silently starts the existing Appointment workflow and only distills conversational context', async () => {
+test('A5 first free-form message uses deterministic conversational bootstrap and never depends on model success', async () => {
   let current: AppointmentStateProjection | undefined;
   const envelopes: CanonicalChannelEnvelope[] = [];
+  let modelCalls = 0;
 
   const provider: A5ExperienceModelProvider = {
-    providerId: 'a5-first-turn',
+    providerId: 'must-not-run-first-turn',
     async generateTurn() {
-      return {
-        schemaVersion: 1,
-        reply: 'Hola, soy Jett, parte del staff de Gallo Autos. Cuéntame un poco más sobre el problema.',
-        distillation: {
-          observed: [{ field: 'problem_statement', value: 'problema con la suspensión de mi carro' }],
-          inferred: [
-            { field: 'managed_entity_type', value: 'vehicle' },
-            { field: 'service_intent', value: 'suspension' },
-          ],
-        },
-      };
+      modelCalls += 1;
+      throw new Error('first-turn bootstrap must not depend on the model');
     },
   };
 
@@ -166,14 +158,23 @@ test('A5 first free-form message silently starts the existing Appointment workfl
 
   assert.equal(envelopes.length, 1);
   assert.equal(envelopes[0]?.action, 'START_APPOINTMENT');
-  assert.equal(result.runtime.route, 'MODEL');
-  assert.equal(result.runtime.modelInvoked, true);
-  assert.match(result.reply, /Jett/);
+  assert.equal(modelCalls, 0);
+  assert.equal(result.runtime.route, 'DETERMINISTIC_BYPASS');
+  assert.equal(result.runtime.modelInvoked, false);
+  assert.match(result.reply, /Hola, soy Jett/);
   assert.match(result.reply, /Gallo Autos/);
+  assert.match(result.reply, /Cuéntame un poco más/);
   assert.deepEqual(result.distillation.observed, [
-    { field: 'problem_statement', value: 'problema con la suspensión de mi carro' },
+    { field: 'problem_statement', value: 'Tengo un problema con la suspensión de mi carro' },
   ]);
+  assert.deepEqual(result.distillation.inferred, [
+    { field: 'managed_entity_type', value: 'vehicle' },
+    { field: 'service_intent', value: 'suspension' },
+  ]);
+  assert.equal(result.interpretation.kind, 'RESPOND');
   assert.equal(result.confirmed.customerId, undefined);
+  assert.equal(result.confirmed.managedEntityId, undefined);
+  assert.equal(result.confirmed.serviceId, undefined);
   assert.equal(result.state.phase, 'WAITING_FOR_CUSTOMER');
 });
 
@@ -223,6 +224,8 @@ test('A5 customer name distillation crosses A0 validation before existing PROVID
   const result = await experience.handle(input('msg-2', 'Soy Eduardo'));
 
   assert.equal(envelopes.length, 1);
+  assert.equal(result.runtime.route, 'MODEL');
+  assert.equal(result.runtime.modelInvoked, true);
   assert.equal(result.interpretation.kind, 'PROPOSE_ACTION');
   assert.equal(result.confirmed.customerId, 'cus_a5');
   assert.equal(result.state.phase, 'WAITING_FOR_MANAGED_ENTITY');
@@ -250,6 +253,16 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
     },
   };
 
+  const store = new MemoryStore();
+  store.rows.set('prior-problem', {
+    response: { ok: true },
+    reply: 'Cuéntame un poco más sobre el problema.',
+    route: 'DETERMINISTIC_BYPASS',
+    modelInvoked: false,
+    contextTurnCount: 0,
+    userText: 'Tengo un problema con mi carro',
+  });
+
   const experience = new A5ConversationalAppointmentExperience(
     {
       async tryRead() {
@@ -263,7 +276,7 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
       },
     },
     provider,
-    new AgentConversationRuntime(new MemoryStore()),
+    new AgentConversationRuntime(store),
     resolveAgentProfile(),
     'Golden Business',
   );
@@ -298,6 +311,16 @@ test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the al
     },
   };
 
+  const store = new MemoryStore();
+  store.rows.set('prior-problem', {
+    response: { ok: true },
+    reply: 'Cuéntame un poco más sobre el problema.',
+    route: 'DETERMINISTIC_BYPASS',
+    modelInvoked: false,
+    contextTurnCount: 0,
+    userText: 'Tengo un problema con la suspensión de mi carro',
+  });
+
   const experience = new A5ConversationalAppointmentExperience(
     {
       async tryRead() {
@@ -311,12 +334,12 @@ test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the al
       },
     },
     provider,
-    new AgentConversationRuntime(new MemoryStore()),
+    new AgentConversationRuntime(store),
     resolveAgentProfile(),
     'Golden Business',
   );
 
-  const result = await experience.handle(input('msg-invented-customer', 'Tengo un problema con la suspensión de mi carro'));
+  const result = await experience.handle(input('msg-invented-customer', 'Sigue sonando al pasar por baches'));
 
   assert.equal(result.runtime.route, 'SAFE_FALLBACK');
   assert.equal(engineCalls, 0);
