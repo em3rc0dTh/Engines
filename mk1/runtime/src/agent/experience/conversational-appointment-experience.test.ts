@@ -276,6 +276,53 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
   assert.equal(result.state.phase, 'WAITING_FOR_CUSTOMER');
 });
 
+test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the allowed action', async () => {
+  let current: AppointmentStateProjection | undefined = waitingCustomer();
+  let engineCalls = 0;
+
+  const provider: A5ExperienceModelProvider = {
+    providerId: 'a5-invented-customer',
+    async generateTurn() {
+      return {
+        schemaVersion: 1,
+        reply: 'Gracias, Carlos.',
+        distillation: {
+          observed: [{ field: 'problem_statement', value: 'problema con la suspensión' }],
+          inferred: [{ field: 'customer_name', value: 'Carlos' }],
+        },
+        proposedAction: {
+          action: 'PROVIDE_CUSTOMER',
+          arguments: { customerName: 'Carlos' },
+        },
+      };
+    },
+  };
+
+  const experience = new A5ConversationalAppointmentExperience(
+    {
+      async tryRead() {
+        return current ? { workflowId: current.workflowId, state: current } : undefined;
+      },
+    },
+    {
+      async execute() {
+        engineCalls += 1;
+        return { ok: true, replayed: false, workflowId: 'wf_a5' };
+      },
+    },
+    provider,
+    new AgentConversationRuntime(new MemoryStore()),
+    resolveAgentProfile(),
+    'Golden Business',
+  );
+
+  const result = await experience.handle(input('msg-invented-customer', 'Tengo un problema con la suspensión de mi carro'));
+
+  assert.equal(result.runtime.route, 'SAFE_FALLBACK');
+  assert.equal(engineCalls, 0);
+  assert.equal(result.confirmed.customerId, undefined);
+});
+
 test('A5 preserves A4 deterministic bypass once Engine state makes the user intent unambiguous', async () => {
   let current: AppointmentStateProjection | undefined = waitingVehicle();
   let modelCalls = 0;
