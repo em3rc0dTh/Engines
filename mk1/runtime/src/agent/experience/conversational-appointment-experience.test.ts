@@ -125,7 +125,8 @@ test('A5 first free-form message silently starts the existing Appointment workfl
 
   const provider: A5ExperienceModelProvider = {
     providerId: 'a5-first-turn',
-    async generateTurn() {
+    async generateTurn(modelInput) {
+      assert.deepEqual(modelInput.conversation.engine.allowedActions, []);
       return {
         schemaVersion: 1,
         reply: 'Hola, soy Jett, parte del staff de Gallo Autos. Cuéntame un poco más sobre el problema.',
@@ -183,7 +184,8 @@ test('A5 customer name distillation crosses A0 validation before existing PROVID
 
   const provider: A5ExperienceModelProvider = {
     providerId: 'a5-customer-turn',
-    async generateTurn() {
+    async generateTurn(modelInput) {
+      assert.deepEqual(modelInput.conversation.engine.allowedActions, ['PROVIDE_CUSTOMER']);
       return {
         schemaVersion: 1,
         reply: 'Gracias, Eduardo. Seguimos con tu caso.',
@@ -226,6 +228,48 @@ test('A5 customer name distillation crosses A0 validation before existing PROVID
   assert.equal(result.interpretation.kind, 'PROPOSE_ACTION');
   assert.equal(result.confirmed.customerId, 'cus_a5');
   assert.equal(result.state.phase, 'WAITING_FOR_MANAGED_ENTITY');
+});
+
+test('A5 does not expose customer execution capability for a problem statement without identity', async () => {
+  let current: AppointmentStateProjection | undefined = waitingCustomer();
+
+  const provider: A5ExperienceModelProvider = {
+    providerId: 'a5-problem-only',
+    async generateTurn(modelInput) {
+      assert.deepEqual(modelInput.conversation.engine.allowedActions, []);
+      return {
+        schemaVersion: 1,
+        reply: 'Entiendo. Cuéntame un poco más sobre cuándo ocurre el problema.',
+        distillation: {
+          observed: [{ field: 'problem_statement', value: 'golpe en la suspensión' }],
+          inferred: [{ field: 'managed_entity_type', value: 'vehicle' }],
+        },
+      };
+    },
+  };
+
+  const experience = new A5ConversationalAppointmentExperience(
+    {
+      async tryRead() {
+        return current ? { workflowId: current.workflowId, state: current } : undefined;
+      },
+    },
+    {
+      async execute() {
+        throw new Error('Engine must not receive a customer action');
+      },
+    },
+    provider,
+    new AgentConversationRuntime(new MemoryStore()),
+    resolveAgentProfile(),
+    'Golden Business',
+  );
+
+  const result = await experience.handle(input('msg-problem-only', 'Tengo un problema con la suspensión de mi carro'));
+
+  assert.equal(result.runtime.route, 'MODEL');
+  assert.equal(result.interpretation.kind, 'RESPOND');
+  assert.equal(result.confirmed.customerId, undefined);
 });
 
 test('A5 rejects model attempts to jump outside the current Engine capability boundary', async () => {
