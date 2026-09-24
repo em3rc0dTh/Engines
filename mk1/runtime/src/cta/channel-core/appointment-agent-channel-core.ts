@@ -289,6 +289,32 @@ function exactNamedMatch(
   return matches.length === 1 ? matches[0]!.id : undefined;
 }
 
+function ordinalCandidateMatch(
+  text: string,
+  candidates: readonly Readonly<{ id: string; name: string }>[],
+): string | undefined {
+  if (candidates.length === 0) return undefined;
+
+  const normalized = normalizedText(text);
+  const indices = new Set<number>();
+  const add = (index: number) => {
+    if (index >= 0 && index < candidates.length) indices.add(index);
+  };
+
+  if (/\b(?:first|primero|primera)\b/.test(normalized)) add(0);
+  if (/\b(?:second|segundo|segunda)\b/.test(normalized)) add(1);
+  if (/\b(?:third|tercero|tercera)\b/.test(normalized)) add(2);
+  if (/\b(?:last|ultimo|ultima)\b/.test(normalized)) add(candidates.length - 1);
+
+  if (/\b(?:middle|intermedio|intermedia)\b/.test(normalized) && candidates.length % 2 === 1) {
+    add(Math.floor(candidates.length / 2));
+  }
+
+  if (indices.size !== 1) return undefined;
+  const [index] = indices;
+  return candidates[index!]?.id;
+}
+
 export function deterministicAppointmentDecision(
   state: AppointmentStateProjection,
   rawText: string,
@@ -335,10 +361,13 @@ export function deterministicAppointmentDecision(
   }
 
   if (state.phase === 'WAITING_FOR_PRODUCT') {
-    const offeringId = exactNamedMatch(
-      text,
-      state.products.map((item) => ({ id: item.productId, name: item.name, code: item.code })),
-    );
+    const offeringCandidates = state.products.map((item) => ({
+      id: item.productId,
+      name: item.name,
+      code: item.code,
+    }));
+    const offeringId = exactNamedMatch(text, offeringCandidates)
+      ?? ordinalCandidateMatch(text, offeringCandidates);
     if (offeringId) {
       return {
         schemaVersion: 1,
@@ -353,15 +382,18 @@ export function deterministicAppointmentDecision(
   }
 
   if (state.phase === 'WAITING_FOR_DATE') {
-    const parsed = normalizeAppointmentDateInput(text, todayInTimeZone(BUSINESS_TIME_ZONE));
-    if (parsed.ok) {
+    const resolved = unambiguousDateFromNaturalText(
+      text,
+      todayInTimeZone(BUSINESS_TIME_ZONE),
+    );
+    if (resolved.ok) {
       return {
         schemaVersion: 1,
         kind: 'PROPOSE_ACTION',
         reply: 'Perfecto, revisemos esa fecha.',
         proposedAction: {
           action: 'SET_DATE',
-          arguments: { naturalDate: text },
+          arguments: { naturalDate: resolved.canonicalDate },
         },
       };
     }

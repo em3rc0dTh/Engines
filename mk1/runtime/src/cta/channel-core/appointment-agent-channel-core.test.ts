@@ -153,6 +153,76 @@ test('A3 translator still converts validated Agent arguments into canonical Chan
   assert.deepEqual(envelope.payload, { dateInput: 'viernes' });
 });
 
+test('A4 deterministically resolves a unique ordinal offering phrase before model execution', () => {
+  const current = {
+    ...state('WAITING_FOR_PRODUCT'),
+    products: [
+      {
+        productId: 'prd_basic',
+        serviceId: 'svc_wash',
+        code: 'basic',
+        name: 'Basic Clean',
+        durationMinutes: 30,
+      },
+      {
+        productId: 'prd_exec',
+        serviceId: 'svc_wash',
+        code: 'executive',
+        name: 'Executive Clean',
+        durationMinutes: 30,
+      },
+      {
+        productId: 'prd_salon',
+        serviceId: 'svc_wash',
+        code: 'salon',
+        name: 'Salon Clean',
+        durationMinutes: 30,
+      },
+    ],
+  } as AppointmentStateProjection;
+
+  const decision = deterministicAppointmentDecision(
+    current,
+    'Me quedo con la opción intermedia, la ejecutiva.',
+  );
+
+  assert.equal(decision?.kind, 'PROPOSE_ACTION');
+  if (decision?.kind === 'PROPOSE_ACTION') {
+    assert.equal(decision.proposedAction.action, 'SELECT_OFFERING');
+    assert.deepEqual(decision.proposedAction.arguments, { offeringId: 'prd_exec' });
+  }
+});
+
+test('A4 deterministically extracts one unambiguous date embedded in natural text', () => {
+  const expected = normalizeAppointmentDateInput(
+    'mañana',
+    todayInTimeZone('America/Lima'),
+  );
+  assert.equal(expected.ok, true);
+  if (!expected.ok) throw new Error('expected tomorrow to parse');
+
+  const decision = deterministicAppointmentDecision(
+    state('WAITING_FOR_DATE'),
+    'Quiero hacerlo mañana por la tarde.',
+  );
+
+  assert.equal(decision?.kind, 'PROPOSE_ACTION');
+  if (decision?.kind === 'PROPOSE_ACTION') {
+    assert.equal(decision.proposedAction.action, 'SET_DATE');
+    assert.deepEqual(decision.proposedAction.arguments, {
+      naturalDate: expected.appointmentDate,
+    });
+  }
+});
+
+test('A4 does not deterministic-bypass a daypart-only Spanish phrase', () => {
+  const decision = deterministicAppointmentDecision(
+    state('WAITING_FOR_DATE'),
+    'por la mañana',
+  );
+  assert.equal(decision, undefined);
+});
+
 test('A3 bypasses the model for an exact available slot', () => {
   const current = {
     ...state('WAITING_FOR_SLOT'),
@@ -262,7 +332,7 @@ test('A4 normalizes an unambiguous model date phrase before Engine execution', a
 
   const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
   const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
-  const result = await core.handle(message('msg-natural-date', 'Quiero hacerlo mañana por la tarde.'));
+  const result = await core.handle(message('msg-natural-date', 'cuando tenga tiempo'));
 
   assert.equal(result.runtime.route, 'MODEL');
   assert.equal(result.runtime.modelInvoked, true);
