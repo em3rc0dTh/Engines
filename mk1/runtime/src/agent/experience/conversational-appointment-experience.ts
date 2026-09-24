@@ -188,6 +188,51 @@ function normalizedEvidence(value: string): string {
     .trim();
 }
 
+function hasExplicitCustomerIdentity(text: string): boolean {
+  const raw = text.trim();
+  if (!raw) return false;
+  if (/\b[^\s@]+@[^\s@]+\.[^\s@]+\b/.test(raw)) return true;
+
+  const normalized = normalizedEvidence(raw);
+  return /^(?:soy|me llamo|mi nombre es)\s+[a-z0-9][a-z0-9 '\-]{0,120}$/.test(normalized);
+}
+
+function initialConversationalBootstrap(
+  text: string,
+  profile: AgentResolvedProfile,
+  businessDisplayName: string,
+): Readonly<{
+  decision: AgentDecision;
+  distillation: A5ProgressiveDistillation;
+}> {
+  const value = text.trim();
+  const normalized = normalizedEvidence(value);
+  const inferred: A5ProgressiveDistillation['inferred'][number][] = [];
+
+  if (/\b(?:carro|auto|automovil|vehiculo|coche)\b/.test(normalized)) {
+    inferred.push({ field: 'managed_entity_type', value: 'vehicle' });
+  }
+  if (/\b(?:suspension|amortiguador|amortiguadores)\b/.test(normalized)) {
+    inferred.push({ field: 'service_intent', value: 'suspension' });
+  }
+
+  const reply = `Hola, soy ${profile.identity.name}, parte del staff de ${businessDisplayName}. Cuéntame un poco más sobre el problema.`;
+
+  return {
+    decision: {
+      schemaVersion: 1,
+      kind: 'RESPOND',
+      reply,
+    },
+    distillation: {
+      observed: value
+        ? [{ field: 'problem_statement', value }]
+        : [],
+      inferred,
+    },
+  };
+}
+
 function userTexts(
   recentTurns: readonly AgentConversationTurn[],
   currentMessage: string,
@@ -351,7 +396,20 @@ export class A5ConversationalAppointmentExperience {
     let decision = deterministicAppointmentDecision(before.state, input.text);
     let distillation: A5ProgressiveDistillation;
 
-    if (decision) {
+    const firstTurnBootstrap = before.state.phase === 'WAITING_FOR_CUSTOMER'
+      && recentTurns.length === 0
+      && !hasExplicitCustomerIdentity(input.text);
+
+    if (firstTurnBootstrap) {
+      route = 'DETERMINISTIC_BYPASS';
+      const bootstrap = initialConversationalBootstrap(
+        input.text,
+        this.profile,
+        this.businessDisplayName,
+      );
+      decision = bootstrap.decision;
+      distillation = bootstrap.distillation;
+    } else if (decision) {
       route = 'DETERMINISTIC_BYPASS';
       distillation = deterministicDistillation(before.state, input.text);
     } else {
@@ -404,6 +462,7 @@ export class A5ConversationalAppointmentExperience {
           enginePhaseAfter: before.state.phase,
           detail: {
             a5Experience: true,
+            ...(firstTurnBootstrap ? { conversationalBootstrap: true } : {}),
             observedCount: distillation.observed.length,
             inferredCount: distillation.inferred.length,
           },
