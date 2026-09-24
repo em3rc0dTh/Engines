@@ -119,6 +119,24 @@ function input(id: string, text: string) {
   };
 }
 
+function businessProfileResolver(
+  businessDisplayName = 'Golden Business',
+  name = 'Assistant',
+  role = 'Customer Assistant',
+) {
+  return {
+    async resolve(businessSlug: string) {
+      return {
+        businessSlug,
+        businessDisplayName,
+        agentProfile: resolveAgentProfile({
+          identity: { name, role },
+        }),
+      };
+    },
+  };
+}
+
 test('A5 first free-form message uses deterministic conversational bootstrap and never depends on model success', async () => {
   let current: AppointmentStateProjection | undefined;
   const envelopes: CanonicalChannelEnvelope[] = [];
@@ -150,8 +168,7 @@ test('A5 first free-form message uses deterministic conversational bootstrap and
     },
     provider,
     new AgentConversationRuntime(new MemoryStore()),
-    resolveAgentProfile({ identity: { name: 'Jett', role: 'Staff Assistant' } }),
-    'Gallo Autos',
+    businessProfileResolver('Gallo Autos', 'Jett', 'Staff Assistant'),
   );
 
   const result = await experience.handle(input('msg-1', 'Tengo un problema con la suspensión de mi carro'));
@@ -217,8 +234,7 @@ test('A5 customer name distillation crosses A0 validation before existing PROVID
     },
     provider,
     new AgentConversationRuntime(new MemoryStore()),
-    resolveAgentProfile(),
-    'Golden Business',
+    businessProfileResolver(),
   );
 
   const result = await experience.handle(input('msg-2', 'Soy Eduardo'));
@@ -277,8 +293,7 @@ test('A5 rejects model attempts to jump outside the current Engine capability bo
     },
     provider,
     new AgentConversationRuntime(store),
-    resolveAgentProfile(),
-    'Golden Business',
+    businessProfileResolver(),
   );
 
   const result = await experience.handle(input('msg-3', 'Creo que es la suspensión'));
@@ -335,8 +350,7 @@ test('A5 refuses invented customer identity even when PROVIDE_CUSTOMER is the al
     },
     provider,
     new AgentConversationRuntime(store),
-    resolveAgentProfile(),
-    'Golden Business',
+    businessProfileResolver(),
   );
 
   const result = await experience.handle(input('msg-invented-customer', 'Sigue sonando al pasar por baches'));
@@ -384,8 +398,7 @@ test('A5 preserves A4 deterministic bypass once Engine state makes the user inte
     },
     provider,
     new AgentConversationRuntime(new MemoryStore()),
-    resolveAgentProfile(),
-    'Golden Business',
+    businessProfileResolver(),
   );
 
   const result = await experience.handle(input('msg-4', 'Renault Logan 2018'));
