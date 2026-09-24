@@ -5,6 +5,7 @@ import { LlamaCppAgentModelProvider } from '../../agent/index.js';
 import {
   A5ConversationalAppointmentExperience,
   LlamaCppA5ExperienceProvider,
+  loadA5BusinessExperienceProfileResolver,
 } from '../../agent/experience/index.js';
 import { AgentConversationRuntime } from '../../agent/runtime/index.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
@@ -120,15 +121,8 @@ async function run(): Promise<void> {
   const agentBaseUrl = process.env.AGENT_LLAMA_BASE_URL?.trim() || 'http://host.docker.internal:8080';
   const agentModel = process.env.AGENT_LLAMA_MODEL?.trim() || 'engines-agent-local';
   const agentTimeoutMs = Number.parseInt(process.env.AGENT_MODEL_TIMEOUT_MS ?? '30000', 10);
-  const agentName = process.env.ENGINES_AGENT_NAME?.trim() || 'Assistant';
-  const agentRole = process.env.ENGINES_AGENT_ROLE?.trim() || 'Customer Assistant';
-  const agentBusinessName = process.env.ENGINES_AGENT_BUSINESS_NAME?.trim() || 'Golden Business';
-  const agentProfile = resolveAgentProfile({
-    identity: {
-      name: agentName,
-      role: agentRole,
-    },
-  });
+  const agentProfile = resolveAgentProfile();
+  const a5BusinessProfileResolver = loadA5BusinessExperienceProfileResolver(process.env);
 
   const readBoundConversation = async (input: Readonly<{
     businessSlug: string;
@@ -180,8 +174,7 @@ async function run(): Promise<void> {
         execution,
         a5Provider,
         agentRuntime,
-        agentProfile,
-        agentBusinessName,
+        a5BusinessProfileResolver,
       )
     : undefined;
   const ctaDispatcher = new CanonicalCTADispatcher(
@@ -206,8 +199,7 @@ async function run(): Promise<void> {
           agentRuntime: Boolean(agentCore),
           agentContext: agentCore ? 'postgresql' : 'disabled',
           agentExperience: Boolean(a5Experience),
-          agentName: agentProfile.identity.name,
-          agentBusinessName,
+          agentExperienceProfileScope: a5Experience ? 'business' : 'disabled',
           mcp: false,
         });
         return;
