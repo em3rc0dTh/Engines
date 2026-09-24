@@ -70,15 +70,16 @@ sha256:
 6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
 ~~~
 
-The Agent stack must be started with:
+The preferred local Agent stack is Docker-native:
 
-~~~text
-ENGINES_AGENT_ENABLED=true
-AGENT_LLAMA_BASE_URL=http://host.docker.internal:8080
-AGENT_LLAMA_MODEL=engines-agent-local
+~~~bash
+cd mk1/runtime
+npm run lab:agent:up
 ~~~
 
-and WebChat profile enabled.
+The Agent overlay enables the Agent, starts the pinned local `agent-llama` service, and binds `channel-core` to `http://agent-llama:8080`.
+
+A1/A2 CI may still use an externally managed llama.cpp process when required by their resource-measurement proof.
 
 ## Physical fixture
 
@@ -139,3 +140,48 @@ final Agent narration described confirmed state
 CI may certify the wiring and regressions, but CI does **not** certify that the first human trial happened.
 
 The first human trial is only complete after a person actually uses this WebChat surface against the real local Qwen/llama.cpp stack and records the resulting durable conversation / Appointment evidence.
+
+
+## Human trial result — 2026-09-24
+
+~~~text
+FIRST_HUMAN_AGENT_TRIAL_PASS
+AGENT_A4_HUMAN_TRIAL_SEALED
+~~~
+
+Final human workflow:
+
+~~~text
+register-appointment:golden-business:04a232b4721fc6d775b0f763e30a303c
+~~~
+
+Final durable truth:
+
+~~~text
+workflowStatus = COMPLETED
+phase = CREATED
+managedEntity = Renault Logan 2018
+service = Car Wash
+offering = Executive Clean
+appointmentDate = 2026-09-25
+slot = 07:00–07:30
+appointmentId = apt_c802e7adef088ec07c8a1449f2dd1ead
+schedulerReservationId = schedres_ec771ad2329977b562014865654a273e
+~~~
+
+Human natural-language turns exercised both routes:
+
+~~~text
+ManagedEntity → MODEL · model=yes
+Service       → MODEL · model=yes
+Offering      → DETERMINISTIC_BYPASS
+Date          → DETERMINISTIC_BYPASS
+Slot          → DETERMINISTIC_BYPASS
+Finalize      → DETERMINISTIC_BYPASS
+~~~
+
+The trial found real offering/date defects before the final PASS. Those defects were corrected in PR #50/#51. The final clean journey is the certified human receipt; prior failed/intermediate workflows are debugging evidence only.
+
+Canonical receipt:
+
+- [../Build/evidence/agent-layer-a4-first-human-trial-certification-2026-09-24.md](../Build/evidence/agent-layer-a4-first-human-trial-certification-2026-09-24.md)
