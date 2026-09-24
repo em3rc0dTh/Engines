@@ -68,6 +68,17 @@ Runtime-bound receipts must name the source that was actually executed. A later 
 - Corrective A2 integrated run: 35868856273
 - Verdict: AGENT A3 SEALED / READY FOR FIRST MANUAL AGENT TRIAL
 
+### Agent Layer A4 first human Agent trial
+
+- [agent-layer-a4-first-human-trial-certification-2026-09-24.md](agent-layer-a4-first-human-trial-certification-2026-09-24.md)
+- Final corrective main lineage: 0cab5c1f09a269bd178cd8eaa0bd38e207578600
+- Human workflow: register-appointment:golden-business:04a232b4721fc6d775b0f763e30a303c
+- Appointment: apt_c802e7adef088ec07c8a1449f2dd1ead
+- SchedulerReservation: schedres_ec771ad2329977b562014865654a273e
+- Offering/date/slot: Executive Clean · 2026-09-25 · 07:00–07:30
+- Corrective protected runs: A0 36016086017 · A1 36016086163 · A2 36016086145 · A3 36016086121 · A4 36016086232
+- Verdict: FIRST_HUMAN_AGENT_TRIAL_PASS / AGENT A4 HUMAN TRIAL SEALED
+
 ## Historical receipts
 
 Older receipts in this directory remain valid only within their documented source, scope and truth boundaries. Do not reinterpret a historical ResourceReservation receipt as proof of the current SchedulerReservation topology.
