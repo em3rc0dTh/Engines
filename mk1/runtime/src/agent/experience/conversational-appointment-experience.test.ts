@@ -304,7 +304,7 @@ test('A5 preserves A4 deterministic bypass once Engine state makes the user inte
           managedEntity: {
             ...waitingVehicle().managedEntity,
             status: 'SELECTED',
-            selected: waitingVehicle().managedEntity.candidates[0],
+            selected: waitingVehicle().managedEntity.candidates[0]!,
           },
           services: [{ serviceId: 'svc_wash', code: 'wash', name: 'Car Wash' }],
           nextAction: 'SELECT_SERVICE',
