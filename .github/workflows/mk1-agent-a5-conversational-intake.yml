@@ -12,6 +12,7 @@ on:
       - 'mk1/runtime/docker-compose.agent.yml'
       - 'mk1/runtime/package.json'
       - 'mk1/runtime/scripts/verify-agent-a5-core-diff.sh'
+      - 'mk1/runtime/scripts/certify-agent-a5-real-first-turn.ts'
       - 'mk1/Plan/20-agent-layer-a5-conversational-intake.md'
       - 'mk1/Test/agent-layer-a5-conversational-intake.md'
       - '.github/workflows/mk1-agent-a5-conversational-intake.yml'
@@ -103,3 +104,73 @@ jobs:
       - run: |
           echo 'CORE_DIFF_ZERO_PASS'
           echo 'AGENT_A5_CONVERSATIONAL_BOUNDARY_PASS'
+
+  real-first-turn:
+    name: real-first-turn
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mk1/runtime
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: mk1/runtime/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build pinned llama.cpp Agent image
+        run: docker compose --profile agent build agent-llama
+
+      - name: Start Dockerized Qwen Agent
+        run: |
+          docker compose --profile agent up -d agent-llama
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/health > /tmp/a5-real-health.json 2>/dev/null; then
+              cat /tmp/a5-real-health.json
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Status}}' runtime-agent-llama-1 2>/dev/null || true)" = "exited" ]; then
+              docker compose --profile agent logs --no-color agent-llama
+              exit 1
+            fi
+            sleep 2
+          done
+          docker compose --profile agent logs --no-color agent-llama
+          exit 1
+
+      - name: Execute exact human first turn against real Qwen
+        env:
+          AGENT_LLAMA_BASE_URL: http://127.0.0.1:8080
+          AGENT_LLAMA_MODEL: engines-agent-local
+        run: npm run probe:agent:a5:real-first-turn | tee /tmp/a5-real-first-turn.log
+
+      - name: Capture real first-turn evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/a5-real-evidence
+          git rev-parse HEAD > /tmp/a5-real-evidence/git-sha.txt
+          cp /tmp/a5-real-health.json /tmp/a5-real-evidence/ 2>/dev/null || true
+          cp /tmp/a5-real-first-turn.log /tmp/a5-real-evidence/ 2>/dev/null || true
+          docker compose --profile agent logs --no-color agent-llama > /tmp/a5-real-evidence/agent-llama.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mk1-agent-a5-real-first-turn-${{ github.run_id }}
+          path: /tmp/a5-real-evidence
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker compose --profile agent down -v --remove-orphans || true
+
+      - run: echo 'A5_REAL_FIRST_TURN_PASS'
+
