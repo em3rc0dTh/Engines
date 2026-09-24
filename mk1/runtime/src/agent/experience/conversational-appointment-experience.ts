@@ -126,7 +126,34 @@ function confirmedContext(state: AppointmentStateProjection): A5ConfirmedContext
   };
 }
 
-function projectionForA5(state: AppointmentStateProjection): AgentEngineProjection {
+function explicitCustomerIdentityEvidence(
+  recentTurns: readonly AgentConversationTurn[],
+  currentMessage: string,
+): boolean {
+  const texts = userTexts(recentTurns, currentMessage);
+  const explicitEmail = /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/;
+
+  if (texts.some((raw) => explicitEmail.test(raw))) return true;
+
+  if (texts.some((raw) => {
+    const text = normalizedEvidence(raw);
+    return /\b(?:soy|me llamo|mi nombre es)\s+[a-z0-9][a-z0-9 '\-]{1,79}$/.test(text);
+  })) return true;
+
+  const lastAgent = [...recentTurns].reverse().find((turn) => turn.role === 'AGENT')?.text ?? '';
+  const agentAskedIdentity = /\b(?:nombre|llamas|quien eres|quién eres)\b/i.test(lastAgent);
+  if (!agentAskedIdentity) return false;
+
+  const shortAnswer = normalizedEvidence(currentMessage);
+  return /^[a-z][a-z '\-]{1,79}$/.test(shortAnswer)
+    && shortAnswer.split(' ').filter(Boolean).length <= 4;
+}
+
+function projectionForA5(
+  state: AppointmentStateProjection,
+  recentTurns: readonly AgentConversationTurn[],
+  currentMessage: string,
+): AgentEngineProjection {
   const base = projectAppointmentStateForAgent(state);
   if (state.phase !== 'WAITING_FOR_CUSTOMER') return base;
 
@@ -138,14 +165,19 @@ function projectionForA5(state: AppointmentStateProjection): AgentEngineProjecti
     },
   };
 
+  const identityAvailable = explicitCustomerIdentityEvidence(recentTurns, currentMessage);
   return {
     phase: state.phase,
     facts,
-    allowedActions: ['PROVIDE_CUSTOMER'],
-    hints: [
-      'PROVIDE_CUSTOMER accepts {"customerName":"<explicit name>"} and/or {"customerEmail":"<explicit email>"}.',
-      'Only include customer identity fields explicitly supplied by the user.',
-    ],
+    allowedActions: identityAvailable ? ['PROVIDE_CUSTOMER'] : [],
+    hints: identityAvailable
+      ? [
+          'PROVIDE_CUSTOMER accepts {"customerName":"<explicit name>"} and/or {"customerEmail":"<explicit email>"}.',
+          'Only include customer identity fields explicitly supplied by the user.',
+        ]
+      : [
+          'No customer identity action is available yet. Continue the conversation naturally until the user explicitly supplies identity.',
+        ],
   };
 }
 
@@ -344,7 +376,7 @@ export class A5ConversationalAppointmentExperience {
     recentTurns: readonly AgentConversationTurn[],
   ) {
     const before = await this.readSettled(input);
-    const projection = projectionForA5(before.state);
+    const projection = projectionForA5(before.state, recentTurns, input.text);
 
     let route: AgentRuntimeRoute = 'MODEL';
     let modelInvoked = false;
@@ -375,8 +407,15 @@ export class A5ConversationalAppointmentExperience {
         assertExplicitCustomerIdentity(validated.decision, recentTurns, input.text);
         decision = validated.decision;
         distillation = validated.output.distillation;
-      } catch {
+      } catch (error) {
         route = 'SAFE_FALLBACK';
+        const code = error instanceof Error && error.message
+          ? error.message.split(':')[0]
+          : 'A5_UNKNOWN_MODEL_FAILURE';
+        console.warn('A5_SAFE_FALLBACK ' + JSON.stringify({
+          providerId: this.modelProvider.providerId,
+          code,
+        }));
         const fallback = safeFallback();
         decision = fallback.decision;
         distillation = fallback.distillation;
