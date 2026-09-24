@@ -103,9 +103,10 @@ function customerName(state: AppointmentStateProjection): string | undefined {
 }
 
 function confirmedContext(state: AppointmentStateProjection): A5ConfirmedContext {
+  const resolvedCustomerName = customerName(state);
   return {
     ...(state.customer.customerId ? { customerId: state.customer.customerId } : {}),
-    ...(customerName(state) ? { customerName: customerName(state) } : {}),
+    ...(resolvedCustomerName ? { customerName: resolvedCustomerName } : {}),
     ...(state.managedEntity.selected?.managedEntityId
       ? { managedEntityId: state.managedEntity.selected.managedEntityId }
       : {}),
