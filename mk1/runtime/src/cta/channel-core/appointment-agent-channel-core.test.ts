@@ -332,7 +332,7 @@ test('A4 normalizes an unambiguous model date phrase before Engine execution', a
 
   const runtime = new AgentConversationRuntime(new RuntimeMemoryStore());
   const core = new AgentAppointmentChannelCore(reader, executor, provider, runtime, resolveAgentProfile());
-  const result = await core.handle(message('msg-natural-date', 'Quiero hacerlo mañana por la tarde.'));
+  const result = await core.handle(message('msg-natural-date', 'cuando tenga tiempo'));
 
   assert.equal(result.runtime.route, 'MODEL');
   assert.equal(result.runtime.modelInvoked, true);
