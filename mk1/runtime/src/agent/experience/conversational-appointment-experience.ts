@@ -142,8 +142,8 @@ function projectionForA5(state: AppointmentStateProjection): AgentEngineProjecti
     facts,
     allowedActions: ['PROVIDE_CUSTOMER'],
     hints: [
-      'PROVIDE_CUSTOMER requires arguments {"customerName":"<name explicitly supplied by user>"}.',
-      'Do not propose PROVIDE_CUSTOMER until the user has explicitly supplied their name.',
+      'PROVIDE_CUSTOMER accepts {"customerName":"<explicit name>"} and/or {"customerEmail":"<explicit email>"}.',
+      'Only include customer identity fields explicitly supplied by the user.',
     ],
   };
 }
@@ -184,8 +184,11 @@ function customerDecisionEnvelope(
     return agentDecisionToChannelEnvelope(decision, input);
   }
   const rawName = decision.proposedAction.arguments.customerName;
-  if (typeof rawName !== 'string' || !rawName.trim()) {
-    throw new Error('A5_CUSTOMER_NAME_INVALID');
+  const rawEmail = decision.proposedAction.arguments.customerEmail;
+  const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : undefined;
+  const email = typeof rawEmail === 'string' && rawEmail.trim() ? rawEmail.trim() : undefined;
+  if (!name && !email) {
+    throw new Error('A5_CUSTOMER_IDENTITY_INVALID');
   }
 
   return {
@@ -198,7 +201,8 @@ function customerDecisionEnvelope(
     action: 'PROVIDE_CUSTOMER',
     payload: {
       customerPatch: {
-        name: rawName.trim(),
+        ...(name ? { name } : {}),
+        ...(email ? { contact: { email } } : {}),
       },
     },
   };
