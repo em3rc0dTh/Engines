@@ -31,6 +31,9 @@ import type {
   A5ExperienceModelProvider,
   A5ProgressiveDistillation,
 } from './types.js';
+import type {
+  A5BusinessExperienceProfileResolver,
+} from './business-experience-profile.js';
 
 export interface A5AppointmentStateReader {
   tryRead(input: Readonly<{
@@ -325,11 +328,8 @@ export class A5ConversationalAppointmentExperience {
     private readonly actionExecutor: A5AppointmentActionExecutor,
     private readonly modelProvider: A5ExperienceModelProvider,
     private readonly runtime: AgentConversationRuntime,
-    private readonly profile: AgentResolvedProfile,
-    private readonly businessDisplayName: string,
-  ) {
-    if (!businessDisplayName.trim()) throw new Error('A5_BUSINESS_DISPLAY_NAME_REQUIRED');
-  }
+    private readonly businessProfileResolver: A5BusinessExperienceProfileResolver,
+  ) {}
 
   async handle(input: AgentChannelMessageInput): Promise<A5ExperienceResponse> {
     await this.ensureStarted(input);
@@ -390,6 +390,9 @@ export class A5ConversationalAppointmentExperience {
   ) {
     const before = await this.readSettled(input);
     const projection = projectionForA5(before.state);
+    const businessExperience = await this.businessProfileResolver.resolve(input.businessSlug);
+    const profile = businessExperience.agentProfile;
+    const businessDisplayName = businessExperience.businessDisplayName;
 
     let route: AgentRuntimeRoute = 'MODEL';
     let modelInvoked = false;
@@ -404,8 +407,8 @@ export class A5ConversationalAppointmentExperience {
       route = 'DETERMINISTIC_BYPASS';
       const bootstrap = initialConversationalBootstrap(
         input.text,
-        this.profile,
-        this.businessDisplayName,
+        profile,
+        businessDisplayName,
       );
       decision = bootstrap.decision;
       distillation = bootstrap.distillation;
@@ -417,12 +420,12 @@ export class A5ConversationalAppointmentExperience {
       try {
         const modelInput = {
           schemaVersion: 1 as const,
-          profile: this.profile,
-          businessDisplayName: this.businessDisplayName,
+          profile,
+          businessDisplayName,
           conversation: {
             businessSlug: input.businessSlug,
             conversationId: input.externalConversationId,
-            locale: this.profile.voice.locale,
+            locale: profile.voice.locale,
             recentTurns,
             currentMessage: input.text,
             engine: projection,
