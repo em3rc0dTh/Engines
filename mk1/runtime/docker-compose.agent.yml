@@ -3,9 +3,8 @@ services:
     environment:
       ENGINES_AGENT_ENABLED: "true"
       ENGINES_AGENT_EXPERIENCE_ENABLED: "true"
-      ENGINES_AGENT_NAME: ${ENGINES_AGENT_NAME:-Assistant}
-      ENGINES_AGENT_ROLE: ${ENGINES_AGENT_ROLE:-Customer Assistant}
-      ENGINES_AGENT_BUSINESS_NAME: ${ENGINES_AGENT_BUSINESS_NAME:-Golden Business}
+      ENGINES_AGENT_BUSINESS_PROFILES_FILE: /app/config/agent-business-profiles.lab.json
+      ENGINES_AGENT_BUSINESS_PROFILES_JSON: ${ENGINES_AGENT_BUSINESS_PROFILES_JSON:-}
       AGENT_LLAMA_BASE_URL: http://agent-llama:8080
       AGENT_LLAMA_MODEL: engines-agent-local
     depends_on:
