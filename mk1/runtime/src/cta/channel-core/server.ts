@@ -417,7 +417,7 @@ async function run(): Promise<void> {
         message.startsWith('AGENT_ACTION_')
         || message.startsWith('AGENT_ENGINE_EXECUTION_FAILED')
         || message.startsWith('A5_ENGINE_EXECUTION_FAILED')
-        || message.startsWith('A5_CUSTOMER_NAME_INVALID')
+        || message.startsWith('A5_CUSTOMER_IDENTITY_INVALID')
       ) {
         sendJson(response, 422, { ok: false, code: message.split(':')[0], error: message });
         return;
