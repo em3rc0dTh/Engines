@@ -21,6 +21,10 @@ const state = {
   submitting: false,
   transcriptHydrated: false,
   agentEnabled: false,
+  agentExperienceEnabled: false,
+  agentName: '',
+  agentBusinessName: '',
+  lastDistillation: null,
 };
 
 function randomId(prefix) {
@@ -30,6 +34,18 @@ function randomId(prefix) {
 
 function transportMessageId(label) {
   return randomId(`webchat-${label}`);
+}
+
+function ensureConversationSession() {
+  if (state.conversationId) return state.conversationId;
+  state.conversationId = randomId('webchat-conversation');
+  localStorage.setItem(WEBCHAT_CONVERSATION_STORAGE_KEY, state.conversationId);
+  const url = new URL(location.href);
+  url.searchParams.set('conversationId', state.conversationId);
+  history.replaceState({}, '', url);
+  $('startButton').disabled = true;
+  $('businessSlug').disabled = true;
+  return state.conversationId;
 }
 
 async function json(path, init = {}) {
@@ -82,6 +98,41 @@ async function sendAgentText(text, displayText = text) {
       appendMessage('agent', result.reply.trim());
     }
     appendAgentAudit(result.runtime);
+    await refresh();
+  });
+}
+
+function renderDistillation(distillation, confirmed) {
+  state.lastDistillation = { distillation, confirmed };
+  const target = $('distillationState');
+  if (!target) return;
+  target.textContent = JSON.stringify({
+    observed: distillation?.observed ?? [],
+    inferred: distillation?.inferred ?? [],
+    confirmed: confirmed ?? {},
+  }, null, 2);
+}
+
+async function sendAgentExperienceText(text, displayText = text) {
+  const clean = String(text ?? '').trim();
+  if (!clean) return;
+
+  ensureConversationSession();
+
+  await withSubmission(async () => {
+    appendMessage('user', displayText);
+    const result = await post('/api/agent/experience/messages', {
+      conversationId: state.conversationId,
+      messageId: transportMessageId('a5'),
+      senderId: 'webchat-browser',
+      text: clean,
+    });
+
+    if (typeof result.reply === 'string' && result.reply.trim()) {
+      appendMessage('agent', result.reply.trim());
+    }
+    appendAgentAudit(result.runtime);
+    renderDistillation(result.distillation, result.confirmed);
     await refresh();
   });
 }
@@ -270,6 +321,21 @@ function managedEntityLabel(durable) {
 
 function renderInteraction() {
   clearChoices();
+
+  if (state.agentExperienceEnabled) {
+    const durable = state.snapshot?.state;
+    if (durable?.workflowStatus === 'FAILED') {
+      setInput(null, 'La conversación no puede continuar', false);
+      return;
+    }
+    if (durable?.phase === 'CREATED') {
+      setInput(null, 'Cita confirmada', false);
+      return;
+    }
+    setInput('agent-experience', 'Cuéntame qué necesitas…');
+    return;
+  }
+
   if (!state.conversationId || !state.snapshot?.state) {
     setInput(null, 'Start the Workflow first', false);
     return;
@@ -563,8 +629,15 @@ async function runAction(operation, data, label) {
 
 async function sendInput() {
   const value = $('messageInput').value.trim();
-  if (!value || !state.inputMode || !state.conversationId) return;
+  if (!value || !state.inputMode) return;
   $('messageInput').value = '';
+
+  if (state.inputMode === 'agent-experience') {
+    await sendAgentExperienceText(value);
+    return;
+  }
+
+  if (!state.conversationId) return;
 
   if (state.inputMode === 'agent') {
     await sendAgentText(value);
@@ -616,15 +689,29 @@ async function boot() {
   try {
     const health = await json('/health');
     state.agentEnabled = health.agent === true;
+    state.agentExperienceEnabled = health.agentExperience === true;
+    state.agentName = typeof health.agentName === 'string' ? health.agentName : '';
+    state.agentBusinessName = typeof health.agentBusinessName === 'string' ? health.agentBusinessName : '';
     $('connectionStatus').textContent = health.ok
-      ? (state.agentEnabled ? 'CTA + channel + Agent ready' : 'CTA + channel ready · Agent disabled')
+      ? (state.agentExperienceEnabled
+          ? 'Conversational Agent ready'
+          : state.agentEnabled ? 'CTA + channel + Agent ready' : 'CTA + channel ready · Agent disabled')
       : 'CTA unavailable';
     if (health.trustedBusinessSlug) $('businessSlug').value = health.trustedBusinessSlug;
   } catch {
     $('connectionStatus').textContent = 'CTA unavailable';
   }
 
-  if (state.conversationId) {
+  if (state.agentExperienceEnabled) {
+    $('startButton').style.display = 'none';
+    $('businessSlug').disabled = true;
+    if (state.conversationId) {
+      await refresh();
+    } else {
+      appendMessage('system', 'A5 conversational experience ready. Escribe con naturalidad para iniciar.');
+      renderInteraction();
+    }
+  } else if (state.conversationId) {
     $('startButton').disabled = true;
     $('businessSlug').disabled = true;
     await refresh();
