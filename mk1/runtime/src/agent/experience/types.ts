@@ -7,6 +7,7 @@ import type {
 
 export const A5_DISTILLATION_FIELDS = [
   'customer_name',
+  'customer_email',
   'problem_statement',
   'symptom',
   'vehicle_reference',
