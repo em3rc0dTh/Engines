@@ -21,7 +21,7 @@
     "test:scheduler:g2:s6": "tsx --test src/scheduler/services-demand-handoff.test.ts",
     "test:integration:g3:i0": "tsx --test src/contracts/integration-engine/*.test.ts",
     "test:channel:c0": "tsx --test src/cta/channel-core/*.test.ts",
-    "test:channel:c1b": "tsx --test src/cta/channel-core/c1b-*.test.ts src/cta/webchat/webchat.adapter.test.ts src/cta/webchat/webchat.session-recovery.test.ts src/cta/webchat/webchat.agent-ui-wiring.test.ts",
+    "test:channel:c1b": "tsx --test src/cta/channel-core/c1b-*.test.ts src/cta/webchat/webchat.adapter.test.ts src/cta/webchat/webchat.session-recovery.test.ts src/cta/webchat/webchat.agent-ui-wiring.test.ts src/cta/webchat/webchat.a5-conversation.test.ts",
     "test:telegram:bot-api": "tsx --test src/cta/telegram/telegram.bot-api.test.ts",
     "test:whatsapp:kapso": "tsx --test src/cta/whatsapp/whatsapp.kapso.test.ts",
     "test:cta:poc": "tsx --test src/cta/canonical/*.test.ts src/cta/meta/*.test.ts src/cta/tiktok/*.test.ts",
@@ -119,7 +119,9 @@
     "lab:agent:down": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent down --remove-orphans",
     "lab:agent:status": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent ps",
     "lab:agent:logs": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent logs -f agent-llama channel-core webchat",
-    "test:agent:docker": "tsx --test src/agent/runtime/agent-docker-compose.test.ts"
+    "test:agent:docker": "tsx --test src/agent/runtime/agent-docker-compose.test.ts",
+    "test:agent:a5": "tsx --test src/agent/experience/*.test.ts src/cta/webchat/webchat.a5-conversation.test.ts",
+    "probe:agent:a5:core-diff": "bash scripts/verify-agent-a5-core-diff.sh"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",

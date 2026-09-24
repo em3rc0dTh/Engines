@@ -134,7 +134,11 @@ async function conversationView(response: ServerResponse, externalConversationId
   sendBuffer(response, upstream.status, upstream.headers.get('content-type') ?? 'application/json; charset=utf-8', payload);
 }
 
-async function agentMessage(request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function proxyAgentMessage(
+  request: IncomingMessage,
+  response: ServerResponse,
+  upstreamPath: string,
+): Promise<void> {
   const raw = record(await readJson(request));
   if (!raw) {
     sendJson(response, 400, { ok: false, code: 'WEBCHAT_AGENT_MESSAGE_INVALID' });
@@ -149,7 +153,7 @@ async function agentMessage(request: IncomingMessage, response: ServerResponse):
     return;
   }
 
-  const upstream = await fetch(`${CHANNEL_BASE_URL}/channel/agent/messages`, {
+  const upstream = await fetch(`${CHANNEL_BASE_URL}${upstreamPath}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -163,6 +167,14 @@ async function agentMessage(request: IncomingMessage, response: ServerResponse):
   });
   const payload = Buffer.from(await upstream.arrayBuffer());
   sendBuffer(response, upstream.status, upstream.headers.get('content-type') ?? 'application/json; charset=utf-8', payload);
+}
+
+async function agentMessage(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  return proxyAgentMessage(request, response, '/channel/agent/messages');
+}
+
+async function agentExperienceMessage(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  return proxyAgentMessage(request, response, '/channel/agent/experience/messages');
 }
 
 async function channelEvent(request: IncomingMessage, response: ServerResponse, registry: ChannelAdapterRegistry): Promise<void> {
@@ -204,6 +216,9 @@ async function run(): Promise<void> {
           channelCore: channel.ok,
           trustedBusinessSlug: TRUSTED_BUSINESS_SLUG,
           agent: channelHealth.agent === true,
+          agentExperience: channelHealth.agentExperience === true,
+          agentName: typeof channelHealth.agentName === 'string' ? channelHealth.agentName : undefined,
+          agentBusinessName: typeof channelHealth.agentBusinessName === 'string' ? channelHealth.agentBusinessName : undefined,
           mcp: false,
         });
         return;
@@ -218,6 +233,11 @@ async function run(): Promise<void> {
 
       if (request.method === 'POST' && url.pathname === '/api/agent/messages') {
         await agentMessage(request, response);
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/agent/experience/messages') {
+        await agentExperienceMessage(request, response);
         return;
       }
 

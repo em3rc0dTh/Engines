@@ -2,6 +2,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createResilientPostgresPool } from '../../persistence/postgres/resilient-pool.js';
 import { resolveAgentProfile } from '../../contracts/agent-layer/index.js';
 import { LlamaCppAgentModelProvider } from '../../agent/index.js';
+import {
+  A5ConversationalAppointmentExperience,
+  LlamaCppA5ExperienceProvider,
+} from '../../agent/experience/index.js';
 import { AgentConversationRuntime } from '../../agent/runtime/index.js';
 import { loadRuntimeConfig } from '../../config/runtime-config.js';
 import type { AppointmentStateProjection } from '../../contracts/register-new-appointment/index.js';
@@ -111,28 +115,73 @@ async function run(): Promise<void> {
   const appointmentPort = await TemporalRegisterNewAppointmentPort.connect();
   const execution = new AppointmentChannelExecutionCore(repository, appointmentPort, servicesRepository);
   const agentEnabled = (process.env.ENGINES_AGENT_ENABLED ?? '').trim().toLowerCase() === 'true';
+  const agentExperienceEnabled = agentEnabled
+    && (process.env.ENGINES_AGENT_EXPERIENCE_ENABLED ?? '').trim().toLowerCase() === 'true';
+  const agentBaseUrl = process.env.AGENT_LLAMA_BASE_URL?.trim() || 'http://host.docker.internal:8080';
+  const agentModel = process.env.AGENT_LLAMA_MODEL?.trim() || 'engines-agent-local';
+  const agentTimeoutMs = Number.parseInt(process.env.AGENT_MODEL_TIMEOUT_MS ?? '30000', 10);
+  const agentName = process.env.ENGINES_AGENT_NAME?.trim() || 'Assistant';
+  const agentRole = process.env.ENGINES_AGENT_ROLE?.trim() || 'Customer Assistant';
+  const agentBusinessName = process.env.ENGINES_AGENT_BUSINESS_NAME?.trim() || 'Golden Business';
+  const agentProfile = resolveAgentProfile({
+    identity: {
+      name: agentName,
+      role: agentRole,
+    },
+  });
+
+  const readBoundConversation = async (input: Readonly<{
+    businessSlug: string;
+    channel: ChannelKind;
+    externalConversationId: string;
+  }>) => {
+    const binding = await repository.getConversationBinding(input);
+    if (!binding) return undefined;
+    const handle = appointmentPort.client.workflow.getHandle(binding.workflowId);
+    const state = await handle.query(getAppointmentStateQuery) as AppointmentStateProjection;
+    return { workflowId: binding.workflowId, state };
+  };
+
   const agentProvider = agentEnabled
     ? new LlamaCppAgentModelProvider({
-        baseUrl: process.env.AGENT_LLAMA_BASE_URL?.trim() || 'http://host.docker.internal:8080',
-        model: process.env.AGENT_LLAMA_MODEL?.trim() || 'engines-agent-local',
-        timeoutMs: Number.parseInt(process.env.AGENT_MODEL_TIMEOUT_MS ?? '30000', 10),
+        baseUrl: agentBaseUrl,
+        model: agentModel,
+        timeoutMs: agentTimeoutMs,
       })
     : undefined;
   const agentCore = agentProvider
     ? new AgentAppointmentChannelCore(
         {
           async read(input) {
-            const binding = await repository.getConversationBinding(input);
-            if (!binding) throw new Error('CHANNEL_CONVERSATION_NOT_BOUND');
-            const handle = appointmentPort.client.workflow.getHandle(binding.workflowId);
-            const state = await handle.query(getAppointmentStateQuery) as AppointmentStateProjection;
-            return { workflowId: binding.workflowId, state };
+            const current = await readBoundConversation(input);
+            if (!current) throw new Error('CHANNEL_CONVERSATION_NOT_BOUND');
+            return current;
           },
         },
         execution,
         agentProvider,
         agentRuntime,
-        resolveAgentProfile(),
+        agentProfile,
+      )
+    : undefined;
+
+  const a5Provider = agentExperienceEnabled
+    ? new LlamaCppA5ExperienceProvider({
+        baseUrl: agentBaseUrl,
+        model: agentModel,
+        timeoutMs: agentTimeoutMs,
+      })
+    : undefined;
+  const a5Experience = a5Provider
+    ? new A5ConversationalAppointmentExperience(
+        {
+          tryRead: readBoundConversation,
+        },
+        execution,
+        a5Provider,
+        agentRuntime,
+        agentProfile,
+        agentBusinessName,
       )
     : undefined;
   const ctaDispatcher = new CanonicalCTADispatcher(
@@ -156,6 +205,9 @@ async function run(): Promise<void> {
           agent: Boolean(agentCore),
           agentRuntime: Boolean(agentCore),
           agentContext: agentCore ? 'postgresql' : 'disabled',
+          agentExperience: Boolean(a5Experience),
+          agentName: agentProfile.identity.name,
+          agentBusinessName,
           mcp: false,
         });
         return;
@@ -191,6 +243,33 @@ async function run(): Promise<void> {
           accepted: events.length,
           results,
         });
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/channel/agent/experience/messages') {
+        if (!a5Experience) {
+          sendJson(response, 503, { ok: false, code: 'AGENT_EXPERIENCE_NOT_ENABLED' });
+          return;
+        }
+        const body = record(await readJson(request));
+        if (!body) {
+          sendJson(response, 400, { ok: false, code: 'AGENT_CHANNEL_MESSAGE_INVALID' });
+          return;
+        }
+        const channel = channelKind(typeof body.channel === 'string' ? body.channel : null);
+        if (!channel) {
+          sendJson(response, 400, { ok: false, code: 'AGENT_CHANNEL_MESSAGE_INVALID:channel' });
+          return;
+        }
+        const result = await a5Experience.handle({
+          businessSlug: requiredString(body, 'businessSlug'),
+          channel,
+          externalConversationId: requiredString(body, 'externalConversationId'),
+          externalMessageId: requiredString(body, 'externalMessageId'),
+          externalSenderId: requiredString(body, 'externalSenderId'),
+          text: requiredString(body, 'text'),
+        });
+        sendJson(response, 200, result);
         return;
       }
 
@@ -334,7 +413,12 @@ async function run(): Promise<void> {
         sendJson(response, 503, { ok: false, code: 'AGENT_MODEL_UNAVAILABLE', error: message });
         return;
       }
-      if (message.startsWith('AGENT_ACTION_') || message.startsWith('AGENT_ENGINE_EXECUTION_FAILED')) {
+      if (
+        message.startsWith('AGENT_ACTION_')
+        || message.startsWith('AGENT_ENGINE_EXECUTION_FAILED')
+        || message.startsWith('A5_ENGINE_EXECUTION_FAILED')
+        || message.startsWith('A5_CUSTOMER_IDENTITY_INVALID')
+      ) {
         sendJson(response, 422, { ok: false, code: message.split(':')[0], error: message });
         return;
       }
@@ -351,7 +435,7 @@ async function run(): Promise<void> {
     server.listen(PORT, HOST, () => resolve());
   });
 
-  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: Boolean(agentCore), agentRuntime: Boolean(agentCore), mcp: false })}`);
+  console.log(`ENGINES_CHANNEL_CORE_READY ${JSON.stringify({ host: HOST, port: PORT, agent: Boolean(agentCore), agentRuntime: Boolean(agentCore), agentExperience: Boolean(a5Experience), mcp: false })}`);
 
   const shutdown = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
