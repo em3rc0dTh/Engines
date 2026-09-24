@@ -177,6 +177,57 @@ function deterministicDistillation(
   return { observed: [], inferred: [] };
 }
 
+function normalizedEvidence(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¿?¡!.,;:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function userTexts(
+  recentTurns: readonly AgentConversationTurn[],
+  currentMessage: string,
+): readonly string[] {
+  return [
+    ...recentTurns.filter((turn) => turn.role === 'USER').map((turn) => turn.text),
+    currentMessage,
+  ];
+}
+
+function assertExplicitCustomerIdentity(
+  decision: AgentDecision,
+  recentTurns: readonly AgentConversationTurn[],
+  currentMessage: string,
+): void {
+  if (decision.kind !== 'PROPOSE_ACTION' || decision.proposedAction.action !== 'PROVIDE_CUSTOMER') return;
+
+  const texts = userTexts(recentTurns, currentMessage);
+  const rawName = decision.proposedAction.arguments.customerName;
+  const rawEmail = decision.proposedAction.arguments.customerEmail;
+
+  if (typeof rawName === 'string' && rawName.trim()) {
+    const name = normalizedEvidence(rawName);
+    const nameObserved = texts.some((raw) => {
+      const text = normalizedEvidence(raw);
+      return text === name
+        || text.includes('soy ' + name)
+        || text.includes('me llamo ' + name)
+        || text.includes('mi nombre es ' + name);
+    });
+    if (!nameObserved) throw new Error('A5_CUSTOMER_IDENTITY_NOT_OBSERVED:name');
+  }
+
+  if (typeof rawEmail === 'string' && rawEmail.trim()) {
+    const email = rawEmail.trim().toLowerCase();
+    const emailObserved = texts.some((raw) => raw.toLowerCase().includes(email));
+    if (!emailObserved) throw new Error('A5_CUSTOMER_IDENTITY_NOT_OBSERVED:email');
+  }
+}
+
 function customerDecisionEnvelope(
   decision: Extract<AgentDecision, Readonly<{ kind: 'PROPOSE_ACTION' }>>,
   input: AgentChannelMessageInput,
@@ -321,6 +372,7 @@ export class A5ConversationalAppointmentExperience {
         };
         const raw = await this.modelProvider.generateTurn(modelInput);
         const validated = validateA5ExperienceOutput(raw, modelInput);
+        assertExplicitCustomerIdentity(validated.decision, recentTurns, input.text);
         decision = validated.decision;
         distillation = validated.output.distillation;
       } catch {
