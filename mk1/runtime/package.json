@@ -121,7 +121,8 @@
     "lab:agent:logs": "docker compose -f docker-compose.yml -f docker-compose.agent.yml --profile webchat --profile agent logs -f agent-llama channel-core webchat",
     "test:agent:docker": "tsx --test src/agent/runtime/agent-docker-compose.test.ts",
     "test:agent:a5": "tsx --test src/agent/experience/*.test.ts src/cta/webchat/webchat.a5-conversation.test.ts",
-    "probe:agent:a5:core-diff": "bash scripts/verify-agent-a5-core-diff.sh"
+    "probe:agent:a5:core-diff": "bash scripts/verify-agent-a5-core-diff.sh",
+    "probe:agent:a5:real-first-turn": "tsx scripts/certify-agent-a5-real-first-turn.ts"
   },
   "dependencies": {
     "@temporalio/client": "1.22.0",
